@@ -201,7 +201,7 @@ function QuickAction({
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.quickIconBox}
         >
-          <Ionicons name={iconName as any} size={32} color="#fff" />
+          <Ionicons name={iconName as any} size={28} color="#fff" />
         </LinearGradient>
         <View style={{ flex: 1 }} />
         <Text style={styles.quickLabel}>{label}</Text>
@@ -321,13 +321,20 @@ export default function HomeScreen() {
     : '先完成今天的早间打卡，我再为你生成更贴合今天情况的建议 🌸';
 
   const quickActions = [
-    { iconName: 'medical',    label: '用药提醒', route: '/medication', gradientStart: '#F472B6', gradientEnd: '#EC4899', bgColor: '#FFF0F6' },
-    { iconName: 'journal',    label: '护理日记', route: '/diary',      gradientStart: '#60A5FA', gradientEnd: '#3B82F6', bgColor: '#EFF6FF' },
-    { iconName: 'people',     label: '家庭共享', route: '/family',     gradientStart: '#C084FC', gradientEnd: '#A855F7', bgColor: '#F5F0FF' },
-    { iconName: 'sparkles',   label: 'AI 助手',  route: '/assistant',  gradientStart: '#34D399', gradientEnd: '#10B981', bgColor: '#EFFDF5' },
+    { iconName: 'medkit',              label: '用药提醒', route: '/medication', gradientStart: '#F472B6', gradientEnd: '#EC4899', bgColor: '#FFF0F6' },
+    { iconName: 'journal',             label: '护理日记', route: '/diary',      gradientStart: '#60A5FA', gradientEnd: '#3B82F6', bgColor: '#EFF6FF' },
+    { iconName: 'people',              label: '家庭共享', route: '/family',     gradientStart: '#C084FC', gradientEnd: '#A855F7', bgColor: '#F5F0FF' },
+    { iconName: 'hardware-chip',       label: 'AI 助手',  route: '/assistant',  gradientStart: '#34D399', gradientEnd: '#10B981', bgColor: '#EFFDF5' },
   ];
 
   return (
+    <View style={styles.root}>
+      {/* Figma gradient background: linear-gradient(114.7°, #FFF7ED → #FDF2F8 → #FAF5FF) */}
+      <LinearGradient
+        colors={['#FFF7ED', '#FDF2F8', '#FAF5FF']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
     <ScrollView
       style={[styles.container, { paddingTop: insets.top }]}
       contentContainerStyle={styles.content}
@@ -639,11 +646,13 @@ export default function HomeScreen() {
 
       <View style={{ height: 32 }} />
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
+  root: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: 20, paddingBottom: 24 },
 
   // Background decoration layer
@@ -826,24 +835,26 @@ const styles = StyleSheet.create({
   sectionTitleEmoji: { fontSize: 18 },
   sectionTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text, letterSpacing: -0.3 },
 
-  // Quick grid — 2×2
+  // Quick grid — 2×2 (Figma matched)
   quickGrid: { gap: 0, marginTop: 4 },
   quickRow: { flexDirection: 'row', gap: 14, marginBottom: 14 },
   quickItem: { flex: 1 },
   quickCard: {
-    borderRadius: 28,
-    padding: 18,
-    height: 190,
+    borderRadius: 24,
+    padding: 16,
+    height: 160,
     flexDirection: 'column',
     alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
     ...SHADOWS.sm,
   },
   quickIconBox: {
-    width: 72, height: 72,
-    borderRadius: 22,
+    width: 64, height: 64,
+    borderRadius: 32,
     alignItems: 'center', justifyContent: 'center',
   },
-  quickLabel: { fontSize: 17, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.3, lineHeight: 22 },
+  quickLabel: { fontSize: 16, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.3, lineHeight: 22 },
 
   // Today's check-in summary card
   summaryCard: {
