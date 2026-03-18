@@ -1,0 +1,1485 @@
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, TextInput,
+  StyleSheet, Animated, Platform, Easing, Dimensions, Modal,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ScreenContainer } from '@/components/screen-container';
+import { upsertCheckIn, getTodayCheckIn, getAllCheckIns, getProfile, DailyCheckIn, SleepInput, todayStr } from '@/lib/storage';
+import { scoreSleepInput } from '@/lib/sleep-scoring';
+import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
+import * as Haptics from 'expo-haptics';
+import ConfettiCannon from 'react-native-confetti-cannon';
+
+const { width } = Dimensions.get('window');
+
+// ─── Scroll Picker ───────────────────────────────────────────────────────────
+function ScrollPicker({ items, selectedIndex, onSelect, itemHeight = 52 }: {
+  items: string[]; selectedIndex: number; onSelect: (i: number) => void; itemHeight?: number;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
+  const VISIBLE = 5;
+  const containerHeight = itemHeight * VISIBLE;
+  const paddingItems = Math.floor(VISIBLE / 2);
+  const paddedItems = [...Array(paddingItems).fill(''), ...items, ...Array(paddingItems).fill('')];
+  const didInitialScroll = useRef(false);
+
+  const handleScroll = (e: any) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const idx = Math.round(y / itemHeight);
+    if (idx >= 0 && idx < items.length) onSelect(idx);
+  };
+
+  React.useEffect(() => {
+    if (!didInitialScroll.current && scrollRef.current) {
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: selectedIndex * itemHeight, animated: false });
+      }, 50);
+      didInitialScroll.current = true;
+    }
+  }, [selectedIndex]);
+
+  return (
+    <View style={[styles.pickerWrap, { height: containerHeight }]}>
+      <View style={[styles.pickerHighlight, { top: itemHeight * paddingItems, height: itemHeight }]} />
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={itemHeight}
+        decelerationRate="fast"
+        onMomentumScrollEnd={handleScroll}
+        nestedScrollEnabled
+        contentOffset={{ x: 0, y: selectedIndex * itemHeight }}
+      >
+        {paddedItems.map((item, index) => {
+          const realIdx = index - paddingItems;
+          const isSelected = realIdx === selectedIndex;
+          return (
+            <View key={index} style={[styles.pickerItem, { height: itemHeight }]}>
+              <Text style={[styles.pickerText, isSelected && styles.pickerTextSelected]}>{item}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─── Animated Option Card ────────────────────────────────────────────────────
+function OptionCard({ label, icon, selected, onPress }: {
+  label: string; icon: string; selected: boolean; onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const bgAnim = useRef(new Animated.Value(selected ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.spring(bgAnim, { toValue: selected ? 1 : 0, speed: 14, bounciness: 4, useNativeDriver: false }).start();
+  }, [selected]);
+
+  const handlePress = () => {
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, speed: 20, bounciness: 10, useNativeDriver: true }),
+    ]).start();
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale }], flex: 1 }}>
+      <TouchableOpacity
+        style={[styles.optionCard, selected && styles.optionCardSelected]}
+        onPress={handlePress}
+        activeOpacity={0.9}
+      >
+        <Text style={styles.optionIcon}>{icon}</Text>
+        <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>{label}</Text>
+        {selected && (
+          <View style={styles.optionCheckCircle}>
+            <Text style={styles.optionCheck}>✓</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── Animated Mood Card ──────────────────────────────────────────────────────
+function MoodCard({ emoji, label, selected, onPress }: {
+  emoji: string; label: string; selected: boolean; onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const emojiScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (selected) {
+      Animated.sequence([
+        Animated.timing(emojiScale, { toValue: 1.3, duration: 150, useNativeDriver: true }),
+        Animated.spring(emojiScale, { toValue: 1.1, speed: 12, bounciness: 10, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.timing(emojiScale, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [selected]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale }], width: (width - 80) / 3 }}>
+      <TouchableOpacity
+        style={[styles.moodCard, selected && styles.moodCardSelected]}
+        onPress={() => pressAnimation(scale, onPress)}
+        activeOpacity={0.85}
+      >
+        <Animated.Text style={[styles.moodEmoji, { transform: [{ scale: emojiScale }] }]}>{emoji}</Animated.Text>
+        <Text style={[styles.moodLabel, selected && styles.moodLabelSelected]}>{label}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── Celebration Effect ─────────────────────────────────────────────────────
+function CelebrationEffect() {
+  const { width: W } = Dimensions.get('window');
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      <ConfettiCannon
+        count={200}
+        origin={{ x: W / 2, y: -20 }}
+        autoStart
+        fadeOut
+        explosionSpeed={400}
+        fallSpeed={3000}
+        colors={['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#FF922B', '#CC5DE8', '#F06595', '#74C0FC']}
+      />
+    </View>
+  );
+}
+
+// ─── Progress Bar ────────────────────────────────────────────────────────────
+function AnimatedProgress({ current, total }: { current: number; total: number }) {
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(-1)).current;
+
+  useEffect(() => {
+    Animated.spring(progressAnim, {
+      toValue: (current + 1) / total,
+      speed: 10,
+      bounciness: 4,
+      useNativeDriver: false,
+    }).start();
+  }, [current, total]);
+
+  useEffect(() => {
+    const shimmerLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 2,
+          duration: 1800,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.delay(600),
+      ])
+    );
+    shimmerLoop.start();
+    return () => shimmerLoop.stop();
+  }, []);
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [-1, 2],
+    outputRange: [-80, 200],
+  });
+
+  return (
+    <View style={styles.progressContainer}>
+      <View style={styles.progressBg}>
+        <Animated.View style={[styles.progressFill, { width: progressWidth }]}>
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              width: 40,
+              backgroundColor: 'rgba(255,255,255,0.45)',
+              borderRadius: 3,
+              transform: [{ translateX: shimmerTranslate }],
+            }}
+          />
+        </Animated.View>
+      </View>
+      <Text style={styles.progressText}>{current + 1} / {total}</Text>
+    </View>
+  );
+}
+
+// ─── Role Badge ──────────────────────────────────────────────────────────────
+function RoleBadge({ label, color, bgColor }: { label: string; color: string; bgColor: string }) {
+  return (
+    <View style={[styles.roleBadge, { backgroundColor: bgColor }]}>
+      <Text style={[styles.roleBadgeText, { color }]}>{label}</Text>
+    </View>
+  );
+}
+
+// ─── Moods ───────────────────────────────────────────────────────────────────
+const MOODS = [
+  { emoji: '😄', label: '很开心', score: 9 },
+  { emoji: '😊', label: '还不错', score: 7 },
+  { emoji: '😌', label: '平静', score: 5 },
+  { emoji: '😕', label: '有点累', score: 4 },
+  { emoji: '😢', label: '不太好', score: 2 },
+  { emoji: '😤', label: '烦躁', score: 3 },
+];
+
+// ─── Month Calendar ────────────────────────────────────────────────────────
+const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+const MONTH_NAMES = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+
+function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: DailyCheckIn[]; caregiverName?: string }) {
+  const today = new Date();
+  const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDay, setSelectedDay] = useState<DailyCheckIn | null>(null);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const checkInMap: Record<string, DailyCheckIn> = {};
+  checkIns.forEach(c => { checkInMap[c.date] = c; });
+
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const cells: Array<null | { day: number; dateStr: string; checkIn: DailyCheckIn | null }> = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    cells.push({ day: d, dateStr, checkIn: checkInMap[dateStr] ?? null });
+  }
+
+  const canGoNext = year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth());
+
+  return (
+    <View style={calStyles.wrapper}>
+      {/* Month nav */}
+      <View style={calStyles.monthRow}>
+        <TouchableOpacity onPress={() => setViewDate(new Date(year, month - 1, 1))} style={calStyles.navBtn}>
+          <Text style={calStyles.navBtnText}>‹</Text>
+        </TouchableOpacity>
+        <Text style={calStyles.monthTitle}>{year}年 {MONTH_NAMES[month]}</Text>
+        <TouchableOpacity
+          onPress={() => canGoNext && setViewDate(new Date(year, month + 1, 1))}
+          style={[calStyles.navBtn, !canGoNext && { opacity: 0.3 }]}
+        >
+          <Text style={calStyles.navBtnText}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Week labels */}
+      <View style={calStyles.weekRow}>
+        {WEEK_LABELS.map(l => <Text key={l} style={calStyles.weekLabel}>{l}</Text>)}
+      </View>
+
+      {/* Day grid */}
+      <View style={calStyles.grid}>
+        {cells.map((cell, idx) => {
+          if (!cell) return <View key={`p${idx}`} style={calStyles.cell} />;
+          const { day, dateStr, checkIn } = cell;
+          const isFuture = dateStr > todayDateStr;
+          const isToday = dateStr === todayDateStr;
+          const morningDone = checkIn?.morningDone ?? false;
+          const eveningDone = checkIn?.eveningDone ?? false;
+          const bothDone = morningDone && eveningDone;
+          const anyDone = morningDone || eveningDone;
+
+          return (
+            <TouchableOpacity
+              key={dateStr}
+              style={calStyles.cell}
+              onPress={() => { if (!isFuture && checkIn) setSelectedDay(checkIn); }}
+              activeOpacity={anyDone ? 0.7 : 1}
+            >
+              <View style={[
+                calStyles.dayCircle,
+                isToday && calStyles.dayCircleToday,
+                bothDone && calStyles.dayCircleDone,
+              ]}>
+                <Text style={[
+                  calStyles.dayNum,
+                  isFuture && calStyles.dayNumFuture,
+                  isToday && !bothDone && calStyles.dayNumToday,
+                  bothDone && calStyles.dayNumDone,
+                ]}>{day}</Text>
+              </View>
+              {anyDone && (
+                <View style={[
+                  calStyles.dot,
+                  bothDone ? calStyles.dotBoth : morningDone ? calStyles.dotMorning : calStyles.dotEvening,
+                ]} />
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Legend */}
+      <View style={calStyles.legendRow}>
+        <View style={calStyles.legendItem}><View style={[calStyles.legendDot, calStyles.dotBoth]} /><Text style={calStyles.legendText}>全天</Text></View>
+        <View style={calStyles.legendItem}><View style={[calStyles.legendDot, calStyles.dotMorning]} /><Text style={calStyles.legendText}>早间</Text></View>
+        <View style={calStyles.legendItem}><View style={[calStyles.legendDot, calStyles.dotEvening]} /><Text style={calStyles.legendText}>晚间</Text></View>
+      </View>
+
+      {/* Day detail modal */}
+      <Modal visible={!!selectedDay} transparent animationType="fade" onRequestClose={() => setSelectedDay(null)}>
+        <TouchableOpacity style={calStyles.overlay} activeOpacity={1} onPress={() => setSelectedDay(null)}>
+          <TouchableOpacity style={calStyles.popup} activeOpacity={1} onPress={() => {}}>
+            <Text style={calStyles.popupDate}>{selectedDay?.date}</Text>
+            <View style={calStyles.popupDivider} />
+            {selectedDay?.morningDone && (
+              <View style={calStyles.popupSection}>
+                <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
+                <Text style={calStyles.popupItem}>
+                  💤 睡眠：{selectedDay.sleepRange ?? `${selectedDay.sleepHours}小时`}
+                  {selectedDay.nightAwakenings ? ` · 夜醒${selectedDay.nightAwakenings}` : ` · ${selectedDay.sleepQuality === 'good' ? '良好' : selectedDay.sleepQuality === 'fair' ? '一般' : '较差'}`}
+                </Text>
+                {selectedDay.napDuration && selectedDay.napDuration !== '没有' && (
+                  <Text style={calStyles.popupItem}>☀️ 白天小睡：{selectedDay.napDuration}</Text>
+                )}
+                {selectedDay.caregiverMoodEmoji && (
+                  <Text style={calStyles.popupItem}>{selectedDay.caregiverMoodEmoji} {caregiverName}心情已记录</Text>
+                )}
+                {selectedDay.morningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.morningNotes}</Text> : null}
+              </View>
+            )}
+            {selectedDay?.eveningDone && (
+              <View style={calStyles.popupSection}>
+                <Text style={calStyles.popupSectionTitle}>🌙 晚间记录</Text>
+                <Text style={calStyles.popupItem}>{selectedDay.moodEmoji} 心情：{selectedDay.moodScore}/10</Text>
+                <Text style={calStyles.popupItem}>💊 用药：{selectedDay.medicationTaken ? '✅ 已按时服药' : '❌ 未服药'}</Text>
+                {selectedDay.mealNotes ? <Text style={calStyles.popupItem}>🍽️ {selectedDay.mealNotes}</Text> : null}
+                {selectedDay.eveningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.eveningNotes}</Text> : null}
+              </View>
+            )}
+            <TouchableOpacity style={calStyles.popupClose} onPress={() => setSelectedDay(null)}>
+              <Text style={calStyles.popupCloseText}>关闭</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+}
+
+// ─── CheckinLanding ───────────────────────────────────────────────────────────
+function CheckinLanding({
+  checkIn,
+  elderNickname,
+  caregiverName = '照顾者',
+  onStartMorning,
+  onStartEvening,
+  onViewMorning,
+}: {
+  checkIn: DailyCheckIn | null;
+  elderNickname: string;
+  caregiverName?: string;
+  onStartMorning: () => void;
+  onStartEvening: () => void;
+  onViewMorning: () => void;
+}) {
+  const morningDone = checkIn?.morningDone ?? false;
+  const eveningDone = checkIn?.eveningDone ?? false;
+  const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
+
+  useEffect(() => {
+    getAllCheckIns().then(setAllCheckIns);
+  }, [checkIn]);
+
+  const morningTime = morningDone && checkIn?.completedAt
+    ? new Date(checkIn.completedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <ScrollView contentContainerStyle={styles.landingContainer} showsVerticalScrollIndicator={false}>
+      {/* Header */}
+      <View style={styles.landingHeader}>
+        <Text style={styles.landingTitle}>每日打卡</Text>
+        <Text style={styles.landingDate}>
+          {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}
+        </Text>
+        {/* Progress indicator */}
+        <View style={styles.progressPill}>
+          <Text style={styles.progressPillText}>
+            今日记录 {(morningDone ? 1 : 0) + (eveningDone ? 1 : 0)}/2
+          </Text>
+        </View>
+      </View>
+
+      {/* Morning block */}
+      <View style={[styles.checkinBlock, morningDone && styles.checkinBlockDone]}>
+        <View style={styles.checkinBlockHeader}>
+          <View style={[styles.checkinBlockIcon, { backgroundColor: morningDone ? '#FFF3E0' : '#FFF8F0' }]}>
+            <Text style={styles.checkinBlockIconText}>🌅</Text>
+          </View>
+          <View style={styles.checkinBlockInfo}>
+            <Text style={styles.checkinBlockTitle}>早间打卡</Text>
+            {morningDone ? (
+              <Text style={styles.checkinBlockStatus}>
+                ✅ 已完成{morningTime ? ` · ${morningTime}` : ''}
+              </Text>
+            ) : (
+              <Text style={styles.checkinBlockStatusPending}>⏳ 待完成</Text>
+            )}
+          </View>
+          {morningDone && (
+            <View style={styles.doneCheckCircle}>
+              <Text style={styles.doneCheckText}>✓</Text>
+            </View>
+          )}
+        </View>
+
+        {morningDone && checkIn && (
+          <View style={styles.checkinSummary}>
+            <View style={styles.checkinSummaryRow}>
+              <Text style={styles.checkinSummaryItem}>
+                💤 {elderNickname}睡了 {checkIn.sleepHours}h
+              </Text>
+              {checkIn.caregiverMoodEmoji && (
+                <Text style={styles.checkinSummaryItem}>
+                  {checkIn.caregiverMoodEmoji} {caregiverName}的心情已记录
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.checkinBlockBtn, morningDone && styles.checkinBlockBtnSecondary]}
+          onPress={morningDone ? onViewMorning : onStartMorning}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.checkinBlockBtnText, morningDone && styles.checkinBlockBtnTextSecondary]}>
+            {morningDone ? '查看已记录内容' : '开始早间打卡 →'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Evening block */}
+      <View style={[styles.checkinBlock, eveningDone && styles.checkinBlockDone]}>
+        <View style={styles.checkinBlockHeader}>
+          <View style={[styles.checkinBlockIcon, { backgroundColor: eveningDone ? '#EDE9FE' : '#F5F0FF' }]}>
+            <Text style={styles.checkinBlockIconText}>🌙</Text>
+          </View>
+          <View style={styles.checkinBlockInfo}>
+            <Text style={styles.checkinBlockTitle}>晚间记录</Text>
+            {eveningDone ? (
+              <Text style={styles.checkinBlockStatus}>✅ 已完成</Text>
+            ) : morningDone ? (
+              <Text style={styles.checkinBlockStatusPending}>⏳ 今晚可以继续记录</Text>
+            ) : (
+              <Text style={styles.checkinBlockStatusLocked}>🔒 先完成早间打卡</Text>
+            )}
+          </View>
+          {eveningDone && (
+            <View style={[styles.doneCheckCircle, { backgroundColor: '#7C3AED' }]}>
+              <Text style={styles.doneCheckText}>✓</Text>
+            </View>
+          )}
+        </View>
+
+        {eveningDone && checkIn && (
+          <View style={styles.checkinSummary}>
+            <View style={styles.checkinSummaryRow}>
+              <Text style={styles.checkinSummaryItem}>
+                {checkIn.moodEmoji} 心情 {checkIn.moodScore}/10
+              </Text>
+              <Text style={styles.checkinSummaryItem}>
+                💊 {checkIn.medicationTaken ? '已服药' : '未服药'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.checkinBlockBtn,
+            styles.checkinBlockBtnEvening,
+            (!morningDone || eveningDone) && styles.checkinBlockBtnSecondary,
+          ]}
+          onPress={onStartEvening}
+          disabled={!morningDone && !eveningDone}
+          activeOpacity={0.85}
+        >
+          <Text style={[
+            styles.checkinBlockBtnText,
+            (!morningDone || eveningDone) && styles.checkinBlockBtnTextSecondary,
+          ]}>
+            {eveningDone ? '查看晚间记录' : morningDone ? '开始晚间记录 →' : '今晚再来记录'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Tip */}
+      <View style={styles.landingTip}>
+        <Text style={styles.landingTipText}>
+          💡 每天两次打卡，帮助 AI 更准确地了解{elderNickname}的状态，生成更贴心的护理建议。
+        </Text>
+      </View>
+
+      {/* History Calendar */}
+      <View style={calStyles.sectionHeader}>
+        <Text style={calStyles.sectionTitle}>📅 打卡历史</Text>
+        <Text style={calStyles.sectionSub}>点击有记录的日期查看详情</Text>
+      </View>
+      <MonthCalendar checkIns={allCheckIns} caregiverName={caregiverName} />
+    </ScrollView>
+  );
+}
+
+// ─── Sleep Data Constants (v4.0) ─────────────────────────────────────────────
+const SLEEP_RANGES = ['少于4小时', '4-6小时', '6-7小时', '7-9小时', '9小时以上'];
+const SLEEP_RANGE_HOURS = [3.5, 5.0, 6.5, 8.0, 9.5]; // 用于图表的近似值（向后兼容）
+const SLEEP_RANGE_ICONS = ['😴', '🌙', '💤', '✨', '🛌'];
+// ─── 枚举键 → index 映射（评分引擎使用）───────────────────────────────────────
+const SLEEP_RANGE_KEYS: SleepInput['nightSleepDuration'][] = ['lt4', '4to6', '6to7', '7to9', 'gt9'];
+const AWAKENINGS = ['没醒', '1-2次', '3-4次', '5次以上'];
+const AWAKENINGS_ICONS = ['😴', '🌛', '😵', '🚨'];
+const AWAKENINGS_KEYS: SleepInput['awakenCount'][] = ['0', '1to2', '3to4', '5plus'];
+const AWAKE_TIMES = ['几乎没有', '10-30分钟', '30-60分钟', '1小时以上'];
+const AWAKE_TIME_ICONS = ['✅', '😐', '😫', '😩'];
+const AWAKE_TIME_KEYS: SleepInput['awakeDuration'][] = ['none', '10to30', '30to60', 'gt60'];
+const NAP_DURATIONS = ['没有', '少于20分钟', '20-60分钟', '1小时以上'];
+const NAP_ICONS = ['☀️', '⏱️', '😪', '🛏️'];
+const NAP_KEYS: NonNullable<SleepInput['napDuration']>[] = ['none', 'lt20', '20to60', 'gt60'];
+const MEAL_OPTIONS = ['正常进食', '食量偏少', '几乎没吃', '吃了特别的东西'];
+const MEAL_ICONS = ['🍽️', '🥢', '🚫', '🍳'];
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
+export default function CheckinScreen() {
+  const router = useRouter();
+  const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
+  const [mode, setMode] = useState<'landing' | 'morning' | 'evening'>('landing');
+  const [step, setStep] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [elderNickname, setElderNickname] = useState('家人');
+  const [caregiverName, setCaregiverName] = useState('你');
+
+  // Morning fields — v4.0 睡眠范围（智能默认 = 最常见的好状态）
+  const [sleepRangeIdx, setSleepRangeIdx] = useState(3);  // "7-9小时"
+  const [awakeningsIdx, setAwakeningsIdx] = useState(0);  // "没醒"
+  const [awakeTimeIdx, setAwakeTimeIdx] = useState(0);    // "几乎没有"
+  const [napIdx, setNapIdx] = useState(0);                // "没有"
+  const [caregiverMoodIdx, setCaregiverMoodIdx] = useState(1);
+  const [morningNotes, setMorningNotes] = useState('');
+
+  // Evening fields
+  const [moodIdx, setMoodIdx] = useState(1);
+  const [medicationTaken, setMedicationTaken] = useState(true);
+  const [mealOptionIdx, setMealOptionIdx] = useState(0); // "正常进食"（智能默认）
+  const [mealNotes, setMealNotes] = useState('');
+  const [eveningNotes, setEveningNotes] = useState('');
+
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const headerFade = useRef(new Animated.Value(0)).current;
+  const headerSlide = useRef(new Animated.Value(-20)).current;
+  const doneFade = useRef(new Animated.Value(0)).current;
+  const doneScale = useRef(new Animated.Value(0.8)).current;
+  const saveBtnScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    fadeInUp(headerFade, headerSlide, { duration: 500 });
+  }, []);
+
+  // ── 从一条 check-in 记录恢复睡眠相关的 state ─────────────────────────────
+  function restoreSleepFields(c: DailyCheckIn) {
+    // 优先使用枚举键（v4.1），否则降级到显示字符串（v4.0）
+    if (c.sleepInput) {
+      const ri = SLEEP_RANGE_KEYS.indexOf(c.sleepInput.nightSleepDuration);
+      if (ri >= 0) setSleepRangeIdx(ri);
+      const ai = AWAKENINGS_KEYS.indexOf(c.sleepInput.awakenCount);
+      if (ai >= 0) setAwakeningsIdx(ai);
+      const wi = AWAKE_TIME_KEYS.indexOf(c.sleepInput.awakeDuration);
+      if (wi >= 0) setAwakeTimeIdx(wi);
+      const ni = NAP_KEYS.indexOf(c.sleepInput.napDuration ?? 'none');
+      if (ni >= 0) setNapIdx(ni);
+    } else {
+      // 降级：用显示字符串
+      if (c.sleepRange) {
+        const idx = SLEEP_RANGES.indexOf(c.sleepRange);
+        if (idx >= 0) setSleepRangeIdx(idx);
+      } else {
+        const h = c.sleepHours ?? 8;
+        if (h < 4) setSleepRangeIdx(0);
+        else if (h < 6) setSleepRangeIdx(1);
+        else if (h < 7) setSleepRangeIdx(2);
+        else if (h <= 9) setSleepRangeIdx(3);
+        else setSleepRangeIdx(4);
+      }
+      if (c.nightAwakenings) {
+        const idx = AWAKENINGS.indexOf(c.nightAwakenings);
+        if (idx >= 0) setAwakeningsIdx(idx);
+      }
+      if (c.nightAwakeTime) {
+        const idx = AWAKE_TIMES.indexOf(c.nightAwakeTime);
+        if (idx >= 0) setAwakeTimeIdx(idx);
+      }
+      if (c.napDuration) {
+        const idx = NAP_DURATIONS.indexOf(c.napDuration);
+        if (idx >= 0) setNapIdx(idx);
+      }
+    }
+  }
+
+  useFocusEffect(useCallback(() => {
+    // 加载姓名
+    getProfile().then(profile => {
+      if (profile) {
+        setElderNickname(profile.nickname || profile.name || '家人');
+        setCaregiverName(profile.caregiverName || '你');
+      }
+    });
+
+    // 加载今日打卡，或从最近历史预填
+    (async () => {
+      const today = await getTodayCheckIn();
+      setCheckIn(today);
+
+      if (today) {
+        // 今日已有数据 → 完整恢复
+        restoreSleepFields(today);
+        setMorningNotes(today.morningNotes ?? '');
+        if (today.caregiverMoodScore != null) {
+          const idx = MOODS.findIndex(m => m.score === today.caregiverMoodScore);
+          if (idx >= 0) setCaregiverMoodIdx(idx);
+        }
+        const mIdx = MOODS.findIndex(m => m.score === today.moodScore);
+        if (mIdx >= 0) setMoodIdx(mIdx);
+        setMedicationTaken(today.medicationTaken ?? true);
+        if (today.mealOption) {
+          const idx = MEAL_OPTIONS.indexOf(today.mealOption);
+          if (idx >= 0) setMealOptionIdx(idx);
+        }
+        setMealNotes(today.mealNotes ?? '');
+        setEveningNotes(today.eveningNotes ?? '');
+      } else {
+        // 今日没有数据 → 尝试用最近一次历史打卡预填睡眠字段
+        // 策略：取过去7天中最近一条有 morningDone 的记录
+        const recent = await getAllCheckIns();
+        const todayDate = todayStr();
+        const lastMorning = recent
+          .filter(r => r.date !== todayDate && r.morningDone)
+          .sort((a, b) => b.date.localeCompare(a.date))[0];
+        if (lastMorning) {
+          restoreSleepFields(lastMorning);
+          // 注意：只预填睡眠字段，不预填心情/用药（每天状态不同）
+          // caregiverMoodIdx 保持默认（正常）
+        }
+        // 无历史数据 → 保持 useState 初始值（7-9小时 / 没醒 / 几乎没有 / 没有）
+      }
+
+      setMode('landing');
+      setStep(0);
+      setDone(false);
+    })();
+  }, []));
+
+  const selectedCaregiverMood = MOODS[caregiverMoodIdx];
+  const selectedMood = MOODS[moodIdx];
+
+  function animateStep(next: () => void) {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: -20, duration: 120, useNativeDriver: true }),
+    ]).start(() => {
+      next();
+      slideAnim.setValue(20);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    });
+  }
+
+  function nextStep() {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const maxSteps = mode === 'morning' ? morningSteps.length : eveningSteps.length;
+    if (step < maxSteps - 1) {
+      animateStep(() => setStep(s => s + 1));
+    } else {
+      handleSave();
+    }
+  }
+
+  function prevStep() {
+    if (step > 0) {
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      animateStep(() => setStep(s => s - 1));
+    } else {
+      // Go back to landing
+      setMode('landing');
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const data: Partial<DailyCheckIn> & { date: string } = { date: todayStr() };
+    if (mode === 'morning') {
+      // ── 构建结构化 SleepInput（v4.1 评分引擎输入）────────────────────────
+      const sleepInput: SleepInput = {
+        nightSleepDuration: SLEEP_RANGE_KEYS[sleepRangeIdx],
+        awakenCount: AWAKENINGS_KEYS[awakeningsIdx],
+        awakeDuration: AWAKE_TIME_KEYS[awakeTimeIdx],
+        napDuration: NAP_KEYS[napIdx],
+        notes: morningNotes || undefined,
+      };
+      // 规则引擎打分（非AI）
+      const { score: sleepScore, problems: sleepProblems } = scoreSleepInput(sleepInput);
+
+      // 由夜醒次数推导睡眠质量（向后兼容图表）
+      const derivedQuality: 'good' | 'fair' | 'poor' =
+        awakeningsIdx === 0 ? 'good' : awakeningsIdx === 1 ? 'fair' : 'poor';
+      Object.assign(data, {
+        // v4.1 结构化字段（AI 管道使用）
+        sleepInput,
+        sleepScore,
+        sleepProblems,
+        // v4.0 向后兼容字段（图表/显示使用）
+        sleepHours: SLEEP_RANGE_HOURS[sleepRangeIdx],
+        sleepQuality: derivedQuality,
+        sleepRange: SLEEP_RANGES[sleepRangeIdx],
+        nightAwakenings: AWAKENINGS[awakeningsIdx],
+        nightAwakeTime: AWAKE_TIMES[awakeTimeIdx],
+        napDuration: NAP_DURATIONS[napIdx],
+        morningNotes,
+        caregiverMoodEmoji: selectedCaregiverMood.emoji,
+        caregiverMoodScore: selectedCaregiverMood.score,
+        morningDone: true,
+      });
+    } else {
+      Object.assign(data, {
+        moodEmoji: selectedMood.emoji,
+        moodScore: selectedMood.score,
+        medicationTaken,
+        mealOption: MEAL_OPTIONS[mealOptionIdx],
+        mealNotes: MEAL_OPTIONS[mealOptionIdx],  // 兼容旧字段
+        eveningNotes,
+        eveningDone: true,
+      });
+    }
+    await upsertCheckIn(data);
+    setSaving(false);
+    setShowCelebration(true);
+    doneFade.setValue(0);
+    doneScale.setValue(0.8);
+    setDone(true);
+    Animated.parallel([
+      Animated.timing(doneFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.spring(doneScale, { toValue: 1, speed: 8, bounciness: 10, useNativeDriver: true }),
+    ]).start();
+    setTimeout(() => setShowCelebration(false), 2500);
+  }
+
+  // ── Done State ──
+  if (done) {
+    const isMorning = mode === 'morning';
+    return (
+      <ScreenContainer>
+        <Animated.View style={[styles.doneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
+          {showCelebration && <CelebrationEffect />}
+          <View style={styles.doneEmojiCircle}>
+            <Text style={styles.doneEmoji}>{isMorning ? '🌅' : '🌙'}</Text>
+          </View>
+          <Text style={styles.doneTitle}>
+            {isMorning ? '早间打卡完成！' : '晚间记录完成！'}
+          </Text>
+          <Text style={styles.doneSub}>
+            {isMorning
+              ? `今天也辛苦了！\nAI 已根据${elderNickname}的状态和你的心情\n生成了今日个性化护理建议 🌿`
+              : `今天的记录都完成了！\n小马虎已安全保存了今天的记录 🌿`}
+          </Text>
+          {isMorning ? (
+            <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/index' as any)}>
+              <Text style={styles.doneBtnText}>查看今日 AI 护理建议 ✨</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/index' as any)}>
+              <Text style={styles.doneBtnText}>回到首页 🏠</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.doneBtnSecondary} onPress={() => {
+            setDone(false);
+            setMode('landing');
+          }}>
+            <Text style={styles.doneBtnSecondaryText}>查看今日打卡状态</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </ScreenContainer>
+    );
+  }
+
+  // ── Landing ──
+  if (mode === 'landing') {
+    return (
+      <ScreenContainer>
+        <CheckinLanding
+          checkIn={checkIn}
+          elderNickname={elderNickname}
+          caregiverName={caregiverName}
+          onStartMorning={() => { setStep(0); setMode('morning'); }}
+          onStartEvening={() => { setStep(0); setMode('evening'); }}
+          onViewMorning={() => { setStep(0); setMode('morning'); }}
+        />
+      </ScreenContainer>
+    );
+  }
+
+  // ── Morning Steps (v4.0 Typeform-style + 智能默认值) ──
+  const morningSteps = [
+    {
+      // Q1: 总睡眠时长（范围选择）
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: `${elderNickname}昨晚一共睡了多久？`,
+      emoji: '🌙',
+      hint: '已为你预选最常见的情况，如实际不同请修改 👆',
+      content: (
+        <View style={styles.pillList}>
+          {SLEEP_RANGES.map((label, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.pillItem, sleepRangeIdx === i && styles.pillItemSelected]}
+              onPress={() => {
+                setSleepRangeIdx(i);
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pillIcon}>{SLEEP_RANGE_ICONS[i]}</Text>
+              <Text style={[styles.pillLabel, sleepRangeIdx === i && styles.pillLabelSelected]}>{label}</Text>
+              {sleepRangeIdx === i && <Text style={styles.pillCheck}>✓</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+    {
+      // Q2: 夜间醒来次数
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: `夜里醒了几次？`,
+      emoji: '😴',
+      hint: '默认"没醒"——如果醒了请修改',
+      content: (
+        <View style={styles.optionGrid2}>
+          {AWAKENINGS.map((label, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.gridPill, awakeningsIdx === i && styles.gridPillSelected]}
+              onPress={() => {
+                setAwakeningsIdx(i);
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pillIcon}>{AWAKENINGS_ICONS[i]}</Text>
+              <Text style={[styles.gridPillLabel, awakeningsIdx === i && styles.gridPillLabelSelected]}>{label}</Text>
+              {awakeningsIdx === i && <Text style={styles.pillCheck}>✓</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+    {
+      // Q3: 夜间清醒时长
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: `夜里醒着加起来多久？`,
+      emoji: '⏰',
+      hint: '默认"几乎没有"——如果清醒较久请修改',
+      content: (
+        <View style={styles.optionGrid2}>
+          {AWAKE_TIMES.map((label, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.gridPill, awakeTimeIdx === i && styles.gridPillSelected]}
+              onPress={() => {
+                setAwakeTimeIdx(i);
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pillIcon}>{AWAKE_TIME_ICONS[i]}</Text>
+              <Text style={[styles.gridPillLabel, awakeTimeIdx === i && styles.gridPillLabelSelected]}>{label}</Text>
+              {awakeTimeIdx === i && <Text style={styles.pillCheck}>✓</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+    {
+      // Q4: 白天小睡
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: `昨天白天有小睡吗？`,
+      emoji: '☀️',
+      hint: '默认"没有"——如有小睡请修改',
+      content: (
+        <View style={styles.optionGrid2}>
+          {NAP_DURATIONS.map((label, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.gridPill, napIdx === i && styles.gridPillSelected]}
+              onPress={() => {
+                setNapIdx(i);
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pillIcon}>{NAP_ICONS[i]}</Text>
+              <Text style={[styles.gridPillLabel, napIdx === i && styles.gridPillLabelSelected]}>{label}</Text>
+              {napIdx === i && <Text style={styles.pillCheck}>✓</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+    {
+      // Q5: Caregiver's own mood
+      role: 'caregiver' as const,
+      roleLabel: `【${caregiverName}】你的状态`,
+      q: `${caregiverName}，你今天心情怎么样？`,
+      emoji: '💛',
+      hint: '照顾好自己也很重要，别忘了关心一下自己 💜',
+      content: (
+        <View>
+          <View style={styles.moodGrid}>
+            {MOODS.map((m, i) => (
+              <MoodCard
+                key={i}
+                emoji={m.emoji}
+                label={m.label}
+                selected={caregiverMoodIdx === i}
+                onPress={() => {
+                  setCaregiverMoodIdx(i);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              />
+            ))}
+          </View>
+          {caregiverMoodIdx >= 0 && (
+            <View style={styles.moodScoreContainer}>
+              <Text style={styles.moodScoreEmoji}>{selectedCaregiverMood.emoji}</Text>
+              <Text style={styles.moodScore}>你的心情：{selectedCaregiverMood.label}</Text>
+            </View>
+          )}
+          <View style={styles.caregiverSupportNote}>
+            <Text style={styles.caregiverSupportText}>
+              在照顾家人的同时，也别忘了给自己一点温柔 🌸
+            </Text>
+          </View>
+        </View>
+      ),
+    },
+    {
+      // Q6: Optional notes
+      role: 'notes' as const,
+      roleLabel: '补充备注（可选）',
+      q: '还有什么要补充的吗？',
+      emoji: '📝',
+      hint: '如昨晚有特殊情况，可以简单记录一下（可选）',
+      content: (
+        <View>
+          <TextInput
+            style={styles.noteInput}
+            placeholder={`例如：${elderNickname}夜间醒来找水、情绪有些不稳、拒绝吃药...`}
+            value={morningNotes}
+            onChangeText={setMorningNotes}
+            multiline numberOfLines={4}
+            placeholderTextColor="#B8BCC0"
+            returnKeyType="done"
+          />
+          <Text style={styles.noteHint}>💡 这里的信息会帮助 AI 给出更准确的护理建议</Text>
+        </View>
+      ),
+    },
+  ];
+
+  // ── Evening Steps ──
+  const eveningSteps = [
+    {
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: `${elderNickname}今天心情怎么样？`,
+      emoji: '💛',
+      hint: '选择最接近的情绪',
+      content: (
+        <View>
+          <View style={styles.moodGrid}>
+            {MOODS.map((m, i) => (
+              <MoodCard
+                key={i}
+                emoji={m.emoji}
+                label={m.label}
+                selected={moodIdx === i}
+                onPress={() => {
+                  setMoodIdx(i);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              />
+            ))}
+          </View>
+          {moodIdx >= 0 && (
+            <View style={styles.moodScoreContainer}>
+              <Text style={styles.moodScoreEmoji}>{selectedMood.emoji}</Text>
+              <Text style={styles.moodScore}>心情分数：{selectedMood.score}/10</Text>
+            </View>
+          )}
+        </View>
+      ),
+    },
+    {
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: '今天按时吃药了吗？',
+      emoji: '💊',
+      hint: '记录用药情况',
+      content: (
+        <View style={styles.optionRow}>
+          <OptionCard icon="✅" label="按时吃了" selected={medicationTaken} onPress={() => setMedicationTaken(true)} />
+          <OptionCard icon="❌" label="没有吃" selected={!medicationTaken} onPress={() => setMedicationTaken(false)} />
+        </View>
+      ),
+    },
+    {
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: `${elderNickname}今天饮食情况怎么样？`,
+      emoji: '🍽️',
+      hint: '默认"正常进食"——直接点下一步即可',
+      content: (
+        <View style={styles.pillList}>
+          {MEAL_OPTIONS.map((label, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.pillItem, mealOptionIdx === i && styles.pillItemSelected]}
+              onPress={() => {
+                setMealOptionIdx(i);
+                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pillIcon}>{MEAL_ICONS[i]}</Text>
+              <Text style={[styles.pillLabel, mealOptionIdx === i && styles.pillLabelSelected]}>{label}</Text>
+              {mealOptionIdx === i && <Text style={styles.pillCheck}>✓</Text>}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ),
+    },
+    {
+      role: 'notes' as const,
+      roleLabel: '补充备注（可选）',
+      q: '今天有什么要补充的吗？',
+      emoji: '📝',
+      hint: '如有特殊情况可以记录（可选）',
+      content: (
+        <TextInput
+          style={styles.noteInput}
+          placeholder="例如：今天情绪有些波动、需要多安抚..."
+          value={eveningNotes}
+          onChangeText={setEveningNotes}
+          multiline numberOfLines={4}
+          placeholderTextColor="#B8BCC0"
+          returnKeyType="done"
+        />
+      ),
+    },
+  ];
+
+  const currentSteps = mode === 'morning' ? morningSteps : eveningSteps;
+  const currentStep = currentSteps[step];
+  const isLast = step === currentSteps.length - 1;
+
+  // Role badge colors
+  const roleBadgeProps = currentStep.role === 'elder'
+    ? { label: currentStep.roleLabel, color: '#2563EB', bgColor: '#EFF6FF' }
+    : currentStep.role === 'caregiver'
+    ? { label: currentStep.roleLabel, color: '#7C3AED', bgColor: '#F5F0FF' }
+    : { label: currentStep.roleLabel, color: '#059669', bgColor: '#ECFDF5' };
+
+  return (
+    <ScreenContainer>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
+          <View>
+            <Text style={styles.appName}>{mode === 'morning' ? '早间打卡' : '晚间记录'}</Text>
+            <Text style={styles.date}>{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</Text>
+          </View>
+          <TouchableOpacity style={styles.backToLanding} onPress={() => setMode('landing')}>
+            <Text style={styles.backToLandingText}>← 返回</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Animated Progress Bar */}
+        <AnimatedProgress current={step} total={currentSteps.length} />
+
+        {/* Question Card */}
+        <Animated.View style={[styles.questionCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          {/* Role badge */}
+          <RoleBadge {...roleBadgeProps} />
+
+          <View style={styles.questionHeader}>
+            <View style={styles.questionEmojiCircle}>
+              <Text style={styles.questionEmojiText}>{(currentStep as any).emoji || '📋'}</Text>
+            </View>
+            <Text style={styles.questionNum}>第 {step + 1} / {currentSteps.length} 题</Text>
+          </View>
+          <Text style={styles.question}>{currentStep.q}</Text>
+          <Text style={styles.hint}>{currentStep.hint}</Text>
+          <View style={styles.answerArea}>
+            {currentStep.content}
+          </View>
+        </Animated.View>
+
+        {/* Nav buttons */}
+        <View style={styles.navRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={prevStep} activeOpacity={0.8}>
+            <Text style={styles.backBtnText}>← {step > 0 ? '上一题' : '返回'}</Text>
+          </TouchableOpacity>
+          <Animated.View style={[{ flex: 2, transform: [{ scale: saveBtnScale }] }]}>
+            <TouchableOpacity
+              style={[styles.nextBtn, saving && styles.nextBtnDisabled, isLast && styles.nextBtnFinish]}
+              onPress={() => pressAnimation(saveBtnScale, nextStep)}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.nextBtnText}>
+                {saving ? '保存中...' : isLast
+                  ? (mode === 'morning' ? '完成早间打卡 🌅' : '完成晚间记录 🌙')
+                  : '下一题 →'}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      </ScrollView>
+    </ScreenContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { padding: 20, paddingBottom: 40 },
+
+  // Landing
+  landingContainer: { padding: 20, paddingBottom: 40 },
+  landingHeader: { marginBottom: 24 },
+  landingTitle: { fontSize: 26, fontWeight: '900', color: COLORS.text, letterSpacing: -0.5 },
+  landingDate: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
+  progressPill: {
+    marginTop: 10, alignSelf: 'flex-start',
+    backgroundColor: COLORS.primaryBg, borderRadius: RADIUS.pill,
+    paddingHorizontal: 12, paddingVertical: 5,
+  },
+  progressPillText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  checkinBlock: {
+    backgroundColor: '#fff', borderRadius: RADIUS.xxl, padding: 20, marginBottom: 16,
+    borderWidth: 1.5, borderColor: '#F0F0F0',
+    ...SHADOWS.md,
+  },
+  checkinBlockDone: { borderColor: '#D1FAE5' },
+  checkinBlockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  checkinBlockIcon: {
+    width: 44, height: 44, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkinBlockIconText: { fontSize: 22 },
+  checkinBlockInfo: { flex: 1 },
+  checkinBlockTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  checkinBlockStatus: { fontSize: 12, color: '#059669', fontWeight: '600', marginTop: 2 },
+  checkinBlockStatusPending: { fontSize: 12, color: '#F59E0B', fontWeight: '600', marginTop: 2 },
+  checkinBlockStatusLocked: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600', marginTop: 2 },
+  doneCheckCircle: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center',
+  },
+  doneCheckText: { fontSize: 14, color: '#fff', fontWeight: '700' },
+  checkinSummary: { marginBottom: 12 },
+  checkinSummaryRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+  checkinSummaryItem: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '500' },
+  checkinBlockBtn: {
+    backgroundColor: COLORS.primary, borderRadius: RADIUS.xl,
+    paddingVertical: 13, alignItems: 'center',
+    ...SHADOWS.glow(COLORS.primary),
+  },
+  checkinBlockBtnEvening: { backgroundColor: '#7C3AED', ...SHADOWS.glow('#7C3AED') },
+  checkinBlockBtnSecondary: {
+    backgroundColor: '#F8F9FA', borderWidth: 1, borderColor: '#EBEBEB',
+    shadowOpacity: 0,
+  },
+  checkinBlockBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  checkinBlockBtnTextSecondary: { color: COLORS.textSecondary },
+  landingTip: {
+    backgroundColor: '#FFF8F0', borderRadius: RADIUS.lg, padding: 14,
+    borderWidth: 1, borderColor: '#FFE4C4',
+  },
+  landingTipText: { fontSize: 13, color: '#92400E', lineHeight: 20 },
+
+  // Header
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 20,
+  },
+  appName: { fontSize: 22, fontWeight: '800', color: COLORS.text, letterSpacing: -0.3 },
+  date: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
+  backToLanding: {
+    backgroundColor: '#F8F9FA', borderRadius: RADIUS.pill,
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderWidth: 1, borderColor: '#EBEBEB',
+  },
+  backToLandingText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+
+  // Role badge
+  roleBadge: {
+    alignSelf: 'flex-start', borderRadius: RADIUS.pill,
+    paddingHorizontal: 10, paddingVertical: 4, marginBottom: 12,
+  },
+  roleBadgeText: { fontSize: 12, fontWeight: '700' },
+
+  // Progress
+  progressContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20,
+  },
+  progressBg: {
+    flex: 1, height: 6, backgroundColor: '#F0F0F0', borderRadius: 3, overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%', backgroundColor: COLORS.primary, borderRadius: 3,
+  },
+  progressText: { fontSize: 12, fontWeight: '700', color: COLORS.textMuted },
+
+  // Question card
+  questionCard: {
+    backgroundColor: '#fff', borderRadius: RADIUS.xxl, padding: 24, marginBottom: 20,
+    borderWidth: 1, borderColor: '#F0F0F0',
+    ...SHADOWS.lg,
+  },
+  questionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  questionEmojiCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: COLORS.primaryBg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  questionEmojiText: { fontSize: 18 },
+  questionNum: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
+  question: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginBottom: 6, lineHeight: 30 },
+  hint: { fontSize: 13, color: COLORS.textMuted, marginBottom: 20 },
+  answerArea: { minHeight: 120 },
+
+  // Picker
+  pickerWrap: { backgroundColor: '#F8F9FA', borderRadius: RADIUS.lg, overflow: 'hidden', position: 'relative' },
+  pickerHighlight: {
+    position: 'absolute', left: 0, right: 0,
+    backgroundColor: 'rgba(255,107,107,0.1)', borderRadius: RADIUS.sm, zIndex: 1, pointerEvents: 'none',
+  },
+  pickerItem: { justifyContent: 'center', alignItems: 'center' },
+  pickerText: { fontSize: 16, color: COLORS.textMuted },
+  pickerTextSelected: { fontSize: 20, fontWeight: '800', color: COLORS.text },
+  selectedDisplay: { textAlign: 'center', fontSize: 14, color: COLORS.primary, fontWeight: '700', marginTop: 12 },
+  stepContent: { alignItems: 'center', width: '100%' },
+
+  // Pill list (v4.0 — 全宽列选项)
+  pillList: { gap: 10 },
+  pillItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 18, paddingVertical: 16,
+    borderRadius: RADIUS.lg, backgroundColor: '#F8F9FA',
+    borderWidth: 1.5, borderColor: '#EBEBEB',
+  },
+  pillItemSelected: {
+    backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary,
+  },
+  pillIcon: { fontSize: 22, width: 28, textAlign: 'center' },
+  pillLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#374151' },
+  pillLabelSelected: { color: COLORS.primary },
+  pillCheck: { fontSize: 16, color: COLORS.primary, fontWeight: '700' },
+
+  // 2-column grid pills (for 4 options)
+  optionGrid2: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  gridPill: {
+    width: '48%', flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 14,
+    borderRadius: RADIUS.lg, backgroundColor: '#F8F9FA',
+    borderWidth: 1.5, borderColor: '#EBEBEB',
+  },
+  gridPillSelected: {
+    backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary,
+  },
+  gridPillLabel: { flex: 1, fontSize: 13, fontWeight: '600', color: '#374151', flexWrap: 'wrap' },
+  gridPillLabelSelected: { color: COLORS.primary },
+
+  // Options
+  optionRow: { flexDirection: 'row', gap: 10 },
+  optionCard: {
+    alignItems: 'center', padding: 18, borderRadius: RADIUS.lg,
+    backgroundColor: '#F8F9FA', borderWidth: 1.5, borderColor: '#EBEBEB', gap: 8,
+  },
+  optionCardSelected: { backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary },
+  optionIcon: { fontSize: 32 },
+  optionLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary, textAlign: 'center' },
+  optionLabelSelected: { color: COLORS.primary },
+  optionCheckCircle: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center',
+  },
+  optionCheck: { fontSize: 12, color: '#fff', fontWeight: '700' },
+
+  // Mood
+  moodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+  moodCard: {
+    alignItems: 'center', padding: 14, borderRadius: RADIUS.lg,
+    backgroundColor: '#F8F9FA', borderWidth: 1.5, borderColor: '#EBEBEB', gap: 6,
+  },
+  moodCardSelected: { backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary },
+  moodEmoji: { fontSize: 32 },
+  moodLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary },
+  moodLabelSelected: { color: COLORS.primary, fontWeight: '700' },
+  moodScoreContainer: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, marginTop: 16, backgroundColor: COLORS.primaryBg,
+    borderRadius: RADIUS.pill, paddingHorizontal: 16, paddingVertical: 8, alignSelf: 'center',
+  },
+  moodScoreEmoji: { fontSize: 18 },
+  moodScore: { fontSize: 14, color: COLORS.primary, fontWeight: '700' },
+
+  // Caregiver support note
+  caregiverSupportNote: {
+    marginTop: 14, backgroundColor: '#FDF4FF', borderRadius: RADIUS.lg,
+    padding: 12, borderWidth: 1, borderColor: '#E9D5FF',
+  },
+  caregiverSupportText: {
+    fontSize: 13, color: '#7C3AED', textAlign: 'center', lineHeight: 20, fontWeight: '500',
+  },
+
+  // Notes
+  noteInput: {
+    backgroundColor: '#F8F9FA', borderRadius: RADIUS.lg, padding: 16,
+    fontSize: 15, color: COLORS.text, borderWidth: 1.5, borderColor: '#EBEBEB',
+    minHeight: 110, textAlignVertical: 'top', lineHeight: 22,
+  },
+  noteHint: {
+    fontSize: 12, color: COLORS.textMuted, marginTop: 8, lineHeight: 18,
+  },
+
+  // Nav
+  navRow: { flexDirection: 'row', gap: 12 },
+  backBtn: {
+    flex: 1, padding: 16, borderRadius: RADIUS.xl,
+    backgroundColor: '#F8F9FA', alignItems: 'center',
+    borderWidth: 1, borderColor: '#EBEBEB',
+  },
+  backBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.textSecondary },
+  nextBtn: {
+    padding: 16, borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.primary, alignItems: 'center',
+    ...SHADOWS.glow(COLORS.primary),
+  },
+  nextBtnFinish: { backgroundColor: COLORS.secondary, ...SHADOWS.glow(COLORS.secondary) },
+  nextBtnDisabled: { backgroundColor: '#E5E7EB' },
+  nextBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  // Done
+  doneContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  doneEmojiCircle: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: COLORS.primaryBg,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+    ...SHADOWS.glow(COLORS.primary),
+  },
+  doneEmoji: { fontSize: 52 },
+  doneTitle: { fontSize: 28, fontWeight: '800', color: COLORS.text, marginBottom: 8 },
+  doneSub: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 24, marginBottom: 32 },
+  doneBtn: {
+    backgroundColor: COLORS.primary, borderRadius: RADIUS.xl,
+    paddingHorizontal: 32, paddingVertical: 14,
+    ...SHADOWS.glow(COLORS.primary),
+    marginBottom: 12,
+  },
+  doneBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  doneBtnSecondary: {
+    paddingHorizontal: 24, paddingVertical: 10,
+  },
+  doneBtnSecondaryText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '600' },
+});
+
+// ─── Calendar Styles ──────────────────────────────────────────────────────────
+const CELL_SIZE = Math.floor((width - 48) / 7);
+const calStyles = StyleSheet.create({
+  sectionHeader: { marginTop: 20, marginBottom: 10, flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
+  sectionSub: { fontSize: 12, color: COLORS.textMuted },
+
+  wrapper: {
+    backgroundColor: '#fff',
+    borderRadius: RADIUS.xxl,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    ...SHADOWS.md,
+  },
+  monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  navBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  navBtnText: { fontSize: 22, color: COLORS.primary, fontWeight: '700' },
+  monthTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+
+  weekRow: { flexDirection: 'row', marginBottom: 6 },
+  weekLabel: { width: CELL_SIZE, textAlign: 'center', fontSize: 11, color: COLORS.textMuted, fontWeight: '600' },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: { width: CELL_SIZE, height: CELL_SIZE + 6, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
+  dayCircle: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dayCircleToday: { borderWidth: 2, borderColor: COLORS.primary },
+  dayCircleDone: { backgroundColor: '#059669' },
+  dayNum: { fontSize: 13, fontWeight: '600', color: COLORS.text },
+  dayNumFuture: { color: '#D1D5DB' },
+  dayNumToday: { color: COLORS.primary, fontWeight: '800' },
+  dayNumDone: { color: '#fff', fontWeight: '700' },
+  dot: { width: 5, height: 5, borderRadius: 3, marginTop: 1 },
+  dotBoth: { backgroundColor: '#059669' },
+  dotMorning: { backgroundColor: '#F59E0B' },
+  dotEvening: { backgroundColor: '#7C3AED' },
+
+  legendRow: { flexDirection: 'row', gap: 16, marginTop: 12, justifyContent: 'center' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 11, color: COLORS.textMuted },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  popup: {
+    backgroundColor: '#fff', borderRadius: RADIUS.xxl, padding: 20,
+    width: '100%', maxWidth: 340,
+    ...SHADOWS.lg,
+  },
+  popupDate: { fontSize: 16, fontWeight: '800', color: COLORS.text, marginBottom: 10 },
+  popupDivider: { height: 1, backgroundColor: '#F0F0F0', marginBottom: 12 },
+  popupSection: { marginBottom: 12 },
+  popupSectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  popupItem: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 3 },
+  popupNote: { fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic', marginTop: 4 },
+  popupClose: {
+    marginTop: 8, paddingVertical: 10, borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.primaryBg, alignItems: 'center',
+  },
+  popupCloseText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+});
