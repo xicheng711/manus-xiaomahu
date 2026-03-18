@@ -4,15 +4,18 @@ import { HapticTab } from "@/components/haptic-tab";
 import { Platform, View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-const ACTIVE_COLOR = "#5D8A5D";
 const INACTIVE_COLOR = "#B0B7C3";
 
-const TAB_ICONS: Record<string, { outline: keyof typeof Ionicons.glyphMap; filled: keyof typeof Ionicons.glyphMap }> = {
-  index:      { outline: "home-outline",     filled: "home" },
-  checkin:    { outline: "sparkles-outline", filled: "sparkles" },
-  medication: { outline: "medkit-outline",   filled: "medkit" },
-  diary:      { outline: "book-outline",     filled: "book" },
-  family:     { outline: "people-outline",   filled: "people" },
+const TAB_ICONS: Record<string, {
+  outline: keyof typeof Ionicons.glyphMap;
+  filled: keyof typeof Ionicons.glyphMap;
+  activeColor: string;
+}> = {
+  index:      { outline: "home-outline",     filled: "home",     activeColor: "#FB923C" },
+  checkin:    { outline: "sparkles-outline", filled: "sparkles", activeColor: "#34D399" },
+  medication: { outline: "medkit-outline",   filled: "medkit",   activeColor: "#F43F5E" },
+  diary:      { outline: "book-outline",     filled: "book",     activeColor: "#38BDF8" },
+  family:     { outline: "people-outline",   filled: "people",   activeColor: "#A855F7" },
 };
 
 function TabIcon({
@@ -24,15 +27,16 @@ function TabIcon({
   label: string;
   focused: boolean;
 }) {
-  const icons = TAB_ICONS[route] ?? { outline: "ellipse-outline", filled: "ellipse" };
+  const icons = TAB_ICONS[route] ?? { outline: "ellipse-outline", filled: "ellipse", activeColor: "#6B7280" };
+  const activeColor = icons.activeColor;
   return (
     <View style={styles.tabItem}>
       <Ionicons
         name={focused ? icons.filled : icons.outline}
         size={23}
-        color={focused ? ACTIVE_COLOR : INACTIVE_COLOR}
+        color={focused ? activeColor : INACTIVE_COLOR}
       />
-      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
+      <Text style={[styles.tabLabel, focused && { color: activeColor, fontWeight: "700" }]}>
         {label}
       </Text>
     </View>
@@ -69,7 +73,7 @@ export default function TabLayout() {
           paddingVertical: 0,
           height: "100%",
         },
-        tabBarActiveTintColor: ACTIVE_COLOR,
+        tabBarActiveTintColor: "#FB923C",
         tabBarInactiveTintColor: INACTIVE_COLOR,
       }}
     >
@@ -134,9 +138,5 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: INACTIVE_COLOR,
     letterSpacing: 0.2,
-  },
-  tabLabelActive: {
-    color: ACTIVE_COLOR,
-    fontWeight: "700",
   },
 });
