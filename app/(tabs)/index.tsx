@@ -201,7 +201,7 @@ function QuickAction({
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.quickIconBox}
         >
-          <Ionicons name={iconName} size={26} color="#fff" />
+          <Ionicons name={iconName} size={30} color="#fff" />
         </LinearGradient>
         <View style={{ flex: 1 }} />
         <Text style={styles.quickLabel}>{label}</Text>
@@ -838,19 +838,19 @@ const styles = StyleSheet.create({
   quickRow: { flexDirection: 'row', gap: 14, marginBottom: 14 },
   quickItem: { flex: 1 },
   quickCard: {
-    borderRadius: 24,
-    padding: 20,
-    height: 180,
+    borderRadius: 28,
+    padding: 18,
+    height: 190,
     flexDirection: 'column',
     alignItems: 'flex-start',
     ...SHADOWS.sm,
   },
   quickIconBox: {
-    width: 66, height: 66,
-    borderRadius: 20,
+    width: 72, height: 72,
+    borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
   },
-  quickLabel: { fontSize: 18, fontWeight: '800', color: '#1A1A1A', letterSpacing: -0.4, lineHeight: 22 },
+  quickLabel: { fontSize: 17, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.3, lineHeight: 22 },
 
   // Today's check-in summary card
   summaryCard: {
