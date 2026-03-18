@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import MaterialCommunityIconsFont from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getRandomTip, getEncouragement } from '@/lib/care-knowledge';
 import { getWeatherByGPS, buildGreetingWithWeather, GpsWeatherInfo } from '@/lib/weather';
@@ -172,7 +174,7 @@ function AnimatedCard({ children, style, onPress, delay = 0 }: {
   );
 }// ─── Quick Action Card ──────────────────────────────────────────────────────────────────────────────
 function QuickAction({
-  iconName, label, gradientStart, gradientEnd, bgColor, onPress, delay,
+  iconName, label, gradientStart, gradientEnd, bgColor, onPress, delay, fontsLoaded,
 }: {
   iconName: string;
   label: string;
@@ -181,6 +183,7 @@ function QuickAction({
   bgColor: string;
   onPress: () => void;
   delay: number;
+  fontsLoaded?: boolean;
 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -202,7 +205,9 @@ function QuickAction({
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.quickIconBox}
         >
-          <MaterialCommunityIcons name={iconName as any} size={32} color="#fff" />
+          {fontsLoaded !== false && (
+            <MaterialCommunityIcons name={iconName as any} size={32} color="#fff" />
+          )}
         </LinearGradient>
         <View style={{ flex: 1 }} />
         <Text style={styles.quickLabel}>{label}</Text>
@@ -244,6 +249,7 @@ function getPersonalizedAISuggestion(checkIn: DailyCheckIn): string {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [mciFontsLoaded] = useFonts(MaterialCommunityIconsFont.font);
   const [greeting, setGreeting] = useState('');
   const [tip, setTip] = useState<{ category: string; icon: string; tip: string } | null>(null);
   const [todayDone, setTodayDone] = useState(false);
@@ -570,6 +576,7 @@ export default function HomeScreen() {
               bgColor={item.bgColor}
               onPress={() => router.push(item.route as any)}
               delay={550 + i * 80}
+              fontsLoaded={mciFontsLoaded ?? false}
             />
           ))}
         </View>
@@ -584,6 +591,7 @@ export default function HomeScreen() {
               bgColor={item.bgColor}
               onPress={() => router.push(item.route as any)}
               delay={710 + i * 80}
+              fontsLoaded={mciFontsLoaded ?? false}
             />
           ))}
         </View>

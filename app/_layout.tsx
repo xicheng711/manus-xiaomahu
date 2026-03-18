@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { Platform } from "react-native";
+import { useFonts } from "expo-font";
+import MaterialCommunityIconsFont from "@expo/vector-icons/MaterialCommunityIcons";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
@@ -32,6 +34,8 @@ export default function RootLayout() {
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
+
+  useFonts(MaterialCommunityIconsFont.font);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
