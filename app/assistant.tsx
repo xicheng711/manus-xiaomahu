@@ -180,7 +180,7 @@ const ldStyles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF', borderRadius: 28, padding: 28,
     shadowColor: '#A855F7', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 10,
-    width: 180, height: 140, justifyContent: 'flex-end',
+    width: 180, height: 180, justifyContent: 'flex-end',
   },
   gridBg: {
     ...StyleSheet.absoluteFillObject, borderRadius: 28, opacity: 0.06,
