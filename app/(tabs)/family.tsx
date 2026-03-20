@@ -9,8 +9,9 @@ import * as Haptics from 'expo-haptics';
 import {
   getFamilyRoom, getFamilyAnnouncements, saveFamilyAnnouncement,
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
-  joinFamilyRoom, setCurrentMember, getTodayCheckIn, getDiaryEntries,
-  getProfile, FamilyAnnouncement, FamilyMember, FamilyRoom,
+  joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
+  getAllCheckIns, getDiaryEntries,
+  getProfile, FamilyAnnouncement, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto,
 } from '@/lib/storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -231,7 +232,9 @@ export default function FamilyScreen() {
   // Briefing state
   const [briefingData, setBriefingData] = useState<any>(null);
   const [selectedBriefingDate, setSelectedBriefingDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [briefingHistory, setBriefingHistory] = useState<{ date: string; label: string; checkIn: any; diary: any; announcements: any[] }[]>([]);
+  const [briefingHistory, setBriefingHistory] = useState<{ date: string; label: string; checkIn: DailyCheckIn | null; diary: any; announcements: any[] }[]>([]);
+  const [elderNickname, setElderNickname] = useState('家人');
+  const [elderEmoji, setElderEmoji] = useState('🐯');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<any>(null);
@@ -257,33 +260,39 @@ export default function FamilyScreen() {
     setAnnouncements(a);
 
     // Load briefing data
-    const [checkIn, diaryEntries, profile] = await Promise.all([
+    const [todayCheckIn, allCheckIns, diaryEntries, profile] = await Promise.all([
       getTodayCheckIn(),
+      getAllCheckIns(),
       getDiaryEntries(),
       getProfile(),
     ]);
-    const yesterdayDiary = diaryEntries.find(e => {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      return e.date === yesterday.toISOString().split('T')[0];
-    });
     const todayStr = new Date().toISOString().split('T')[0];
-    setBriefingData({ checkIn, yesterdayDiary, profile, todayAnnouncements: a.filter(ann => ann.date === todayStr) });
+    setBriefingData({ checkIn: todayCheckIn, profile, todayAnnouncements: a.filter(ann => ann.date === todayStr) });
+    setElderNickname(profile?.nickname || profile?.name || '家人');
+    setElderEmoji(profile?.zodiacEmoji || '🐯');
 
-    // Build briefing history (today + past 6 days)
-    const history: { date: string; label: string; checkIn: any; diary: any; announcements: any[] }[] = [];
+    // Build briefing history (today + past 6 days) — use actual check-in data for each day
+    const checkInMap = new Map<string, DailyCheckIn>();
+    for (const ci of allCheckIns) { checkInMap.set(ci.date, ci); }
+
+    const history: { date: string; label: string; checkIn: DailyCheckIn | null; diary: any; announcements: any[] }[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateKey = d.toISOString().split('T')[0];
       const label = i === 0 ? '今日' : i === 1 ? '昨日' : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+      const dayCheckIn = checkInMap.get(dateKey) || null;
       const dayDiary = diaryEntries.find(e => e.date === dateKey);
       const dayAnnouncements = a.filter(ann => ann.date === dateKey);
-      if (dayDiary || dayAnnouncements.length > 0 || i === 0) {
-        history.push({ date: dateKey, label, checkIn: i === 0 ? checkIn : null, diary: dayDiary, announcements: dayAnnouncements });
+      if (dayCheckIn || dayDiary || dayAnnouncements.length > 0 || i === 0) {
+        history.push({ date: dateKey, label, checkIn: dayCheckIn, diary: dayDiary, announcements: dayAnnouncements });
       }
     }
     setBriefingHistory(history);
+
+    // Auto-select the most recent day with data
+    const latestWithData = history.find(item => item.checkIn);
+    if (latestWithData) setSelectedBriefingDate(latestWithData.date);
 
     setLoading(false);
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -587,89 +596,125 @@ export default function FamilyScreen() {
             </ScrollView>
 
             {/* Selected date briefing card */}
-            {briefingHistory.filter(item => item.date === selectedBriefingDate).map(item => (
+            {briefingHistory.filter(item => item.date === selectedBriefingDate).map(item => {
+              const todayStr = new Date().toISOString().split('T')[0];
+              const isToday = item.date === todayStr;
+              const score = item.checkIn?.careScore ?? 0;
+              const scoreColor = score >= 80 ? '#16A34A' : score >= 60 ? '#3B82F6' : score >= 40 ? '#F59E0B' : '#EF4444';
+              const scoreBg = score >= 80 ? '#F0FDF4' : score >= 60 ? '#EFF6FF' : score >= 40 ? '#FFFBEB' : '#FEF2F2';
+              const scoreLabel = score >= 80 ? '状态极佳' : score >= 60 ? '状态良好' : score >= 40 ? '需要关注' : '需要照顾';
+              return (
               <View key={item.date} style={styles.briefingCard}>
-                <Text style={styles.briefingTitle}>📋 {item.label}护理简报</Text>
-                <Text style={styles.briefingSubtitle}>
-                  {item.date === new Date().toISOString().split('T')[0]
-                    ? '包含今日打卡、日记、家庭公告'
-                    : `${item.date} 的护理记录`
-                  }
-                </Text>
+                {/* ── Card Header ── */}
+                <View style={styles.briefingCardHeader}>
+                  <View>
+                    <Text style={styles.briefingAppName}>🐴🐯 小马虎 · 护理简报</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <Text style={styles.briefingCardDate}>
+                        {isToday
+                          ? new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
+                          : item.date}
+                      </Text>
+                      {!isToday && (
+                        <View style={styles.latestBadge}>
+                          <Text style={styles.latestBadgeText}>最新记录</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <Text style={{ fontSize: 32 }}>{elderEmoji}</Text>
+                </View>
 
                 {item.checkIn ? (
-                  <View style={styles.briefingPreview}>
-                    <View style={styles.briefingRow}>
-                      <Text style={styles.briefingLabel}>💤 睡眠</Text>
-                      <Text style={styles.briefingValue}>{item.checkIn.sleepHours}小时</Text>
+                  <>
+                    {/* ── Elder + Score ── */}
+                    <View style={styles.briefingElderRow}>
+                      <View>
+                        <Text style={styles.briefingElderName}>{elderNickname}</Text>
+                        <Text style={styles.briefingElderSub}>{item.label}护理记录</Text>
+                      </View>
+                      <View style={[styles.scoreCircle, { borderColor: scoreColor, backgroundColor: scoreBg }]}>
+                        <Text style={[styles.scoreNum, { color: scoreColor }]}>{score}</Text>
+                        <Text style={[styles.scoreUnit, { color: scoreColor }]}>分</Text>
+                        <Text style={[styles.scoreLabel, { color: scoreColor }]}>{scoreLabel}</Text>
+                      </View>
                     </View>
-                    <View style={styles.briefingRow}>
-                      <Text style={styles.briefingLabel}>{item.checkIn.moodEmoji} 心情</Text>
-                      <Text style={styles.briefingValue}>{item.checkIn.moodScore}/10</Text>
+
+                    {/* ── Data Grid ── */}
+                    <View style={styles.briefingDataGrid}>
+                      <View style={styles.briefingDataBadge}>
+                        <Text style={styles.briefingDataEmoji}>😴</Text>
+                        <Text style={styles.briefingDataValue}>{item.checkIn.sleepHours}h</Text>
+                        <Text style={styles.briefingDataLabel}>睡眠</Text>
+                      </View>
+                      <View style={styles.briefingDataBadge}>
+                        <Text style={styles.briefingDataEmoji}>{item.checkIn.moodEmoji || '😊'}</Text>
+                        <Text style={styles.briefingDataValue}>{item.checkIn.moodScore}/10</Text>
+                        <Text style={styles.briefingDataLabel}>心情</Text>
+                      </View>
+                      <View style={styles.briefingDataBadge}>
+                        <Text style={styles.briefingDataEmoji}>💊</Text>
+                        <Text style={styles.briefingDataValue}>{item.checkIn.medicationTaken ? '✅' : '❌'}</Text>
+                        <Text style={styles.briefingDataLabel}>用药</Text>
+                      </View>
+                      <View style={styles.briefingDataBadge}>
+                        <Text style={styles.briefingDataEmoji}>🍽️</Text>
+                        <Text style={styles.briefingDataValue} numberOfLines={1}>{item.checkIn.mealNotes ? item.checkIn.mealNotes.slice(0,4) : '已记'}</Text>
+                        <Text style={styles.briefingDataLabel}>饮食</Text>
+                      </View>
                     </View>
-                    <View style={styles.briefingRow}>
-                      <Text style={styles.briefingLabel}>💊 用药</Text>
-                      <Text style={styles.briefingValue}>
-                        {item.checkIn.medicationTaken ? '✅ 按时' : '⚠️ 未服'}
-                      </Text>
-                    </View>
-                    <View style={styles.briefingRow}>
-                      <Text style={styles.briefingLabel}>⭐ 护理指数</Text>
-                      <Text style={[styles.briefingValue, { color: '#FF6B6B', fontWeight: '700' }]}>
-                        {item.checkIn.careScore}分
-                      </Text>
-                    </View>
-                  </View>
+                  </>
                 ) : (
-                  item.date === new Date().toISOString().split('T')[0] ? (
-                    <View style={styles.briefingEmpty}>
-                      <Text style={styles.emptyEmoji}>📝</Text>
-                      <Text style={styles.emptyText}>今日尚未打卡</Text>
-                      <Text style={styles.emptySubText}>完成今日打卡后，简报将自动生成</Text>
-                      <TouchableOpacity style={styles.goCheckinBtn} onPress={() => router.push('/(tabs)/checkin')}>
-                        <Text style={styles.goCheckinBtnText}>去打卡 →</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.briefingEmpty}>
-                      <Text style={styles.emptyEmoji}>📅</Text>
-                      <Text style={styles.emptyText}>该日无打卡记录</Text>
-                    </View>
-                  )
+                  <View style={styles.briefingEmpty}>
+                    <Text style={styles.emptyEmoji}>📝</Text>
+                    <Text style={styles.emptyText}>{isToday ? '今日尚未打卡' : '该日无打卡记录'}</Text>
+                    {isToday && (
+                      <>
+                        <Text style={styles.emptySubText}>完成今日打卡后，简报将自动生成</Text>
+                        <TouchableOpacity style={styles.goCheckinBtn} onPress={() => router.push('/(tabs)/checkin')}>
+                          <Text style={styles.goCheckinBtnText}>去打卡 →</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
                 )}
 
+                {/* ── Diary & Announcements ── */}
                 {item.diary && (
-                  <View style={[styles.briefingPreview, { marginTop: 8 }]}>
-                    <View style={styles.briefingDiaryRow}>
-                      <Text style={styles.briefingLabel}>📔 日记</Text>
-                      <Text style={styles.briefingDiaryText} numberOfLines={3}>
-                        {item.diary.moodEmoji} {item.diary.content || '无详细内容'}
-                      </Text>
-                    </View>
+                  <View style={styles.briefingExtraRow}>
+                    <Text style={styles.briefingExtraIcon}>📔</Text>
+                    <Text style={styles.briefingExtraText} numberOfLines={2}>
+                      {item.diary.moodEmoji} {item.diary.content || '无详细内容'}
+                    </Text>
                   </View>
                 )}
-
                 {item.announcements.length > 0 && (
-                  <View style={[styles.briefingPreview, { marginTop: 8 }]}>
-                    <View style={styles.briefingDiaryRow}>
-                      <Text style={styles.briefingLabel}>📢 家庭公告</Text>
-                      <Text style={styles.briefingDiaryText} numberOfLines={3}>
-                        {item.announcements.map((ann: any) => `${ann.authorEmoji} ${ann.content}`).join('\n')}
-                      </Text>
-                    </View>
+                  <View style={styles.briefingExtraRow}>
+                    <Text style={styles.briefingExtraIcon}>📢</Text>
+                    <Text style={styles.briefingExtraText} numberOfLines={2}>
+                      {item.announcements.map((ann: any) => `${ann.authorEmoji} ${ann.content}`).join('  ')}
+                    </Text>
                   </View>
                 )}
 
+                {/* ── Footer ── */}
+                <View style={styles.briefingCardFooter}>
+                  <Text style={styles.briefingFooterLeft}>由 {briefingData?.profile?.caregiverName || '照顾者'} 用心记录</Text>
+                  <Text style={styles.briefingFooterRight}>✨ 小马虎</Text>
+                </View>
+
+                {/* ── Actions ── */}
                 <View style={styles.briefingActions}>
-                  <TouchableOpacity style={styles.exportBtn} onPress={() => router.push('/export-image')}>
-                    <Text style={styles.exportBtnText}>📸 查看简报</Text>
+                  <TouchableOpacity style={styles.exportBtn} onPress={() => router.push('/share' as any)}>
+                    <Text style={styles.exportBtnText}>📋 查看简报</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.shareBtn, isGeneratingShare && { opacity: 0.6 }]} onPress={handleShareBriefing} disabled={isGeneratingShare}>
                     <Text style={styles.shareBtnText}>{isGeneratingShare ? '⏳ 生成中...' : '📤 一键分享'}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -944,7 +989,37 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, fontWeight: '700', color: '#11181C' },
   emptySubText: { fontSize: 13, color: '#687076', textAlign: 'center' },
   // Briefing
-  briefingCard: { backgroundColor: '#fff', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3 },
+  briefingCard: {
+    backgroundColor: '#fff', borderRadius: 24, padding: 20, marginBottom: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 5,
+    borderWidth: 1, borderColor: '#F0F0EE',
+  },
+  briefingCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  briefingAppName: { fontSize: 13, fontWeight: '800', color: '#6C9E6C', letterSpacing: -0.2 },
+  briefingCardDate: { fontSize: 12, color: '#9B9B9B', marginTop: 2 },
+  latestBadge: { backgroundColor: '#FEF3C7', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  latestBadgeText: { fontSize: 10, fontWeight: '700', color: '#92400E' },
+  briefingElderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  briefingElderName: { fontSize: 18, fontWeight: '800', color: '#1A1A1A' },
+  briefingElderSub: { fontSize: 12, color: '#9B9B9B', marginTop: 2 },
+  scoreCircle: {
+    width: 68, height: 68, borderRadius: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 3,
+  },
+  scoreNum: { fontSize: 22, fontWeight: '900' },
+  scoreUnit: { fontSize: 10, fontWeight: '700', marginTop: -2 },
+  scoreLabel: { fontSize: 9, fontWeight: '600', marginTop: 1 },
+  briefingDataGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  briefingDataBadge: { flex: 1, backgroundColor: '#F8F9FA', borderRadius: 14, padding: 10, alignItems: 'center', gap: 3 },
+  briefingDataEmoji: { fontSize: 18 },
+  briefingDataValue: { fontSize: 12, fontWeight: '800', color: '#1A1A1A' },
+  briefingDataLabel: { fontSize: 10, color: '#9B9B9B', fontWeight: '500' },
+  briefingExtraRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#F5F5F3' },
+  briefingExtraIcon: { fontSize: 14, marginTop: 1 },
+  briefingExtraText: { flex: 1, fontSize: 13, color: '#4B5563', lineHeight: 20 },
+  briefingCardFooter: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12, marginTop: 12, marginBottom: 14 },
+  briefingFooterLeft: { fontSize: 11, color: '#BBBBB8' },
+  briefingFooterRight: { fontSize: 11, color: '#6C9E6C', fontWeight: '600' },
+  // legacy styles kept for ref:
   briefingTitle: { fontSize: 18, fontWeight: '800', color: '#11181C', marginBottom: 4 },
   briefingSubtitle: { fontSize: 13, color: '#687076', lineHeight: 20, marginBottom: 16 },
   briefingPreview: { backgroundColor: '#FFFCF8', borderRadius: 16, padding: 16, gap: 10, marginBottom: 16 },
