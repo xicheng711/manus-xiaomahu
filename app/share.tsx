@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Animated, ActivityIndicator, Share, Dimensions, Platform, Easing,
+  Animated, ActivityIndicator, Share, Dimensions, Platform, Easing, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -361,6 +361,8 @@ export default function ShareScreen() {
   const [caregiverName, setCaregiverName] = useState('照顾者');
   const [shareText, setShareText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [sharingImage, setSharingImage] = useState(false);
+  const cardRef = useRef<View>(null);
 
   const generateBriefingMutation = trpc.ai.generateBriefing.useMutation();
 
@@ -470,6 +472,39 @@ export default function ShareScreen() {
     try { await Share.share({ message: text, title: `${elderNickname}今日护理日报` }); } catch {}
   }
 
+  async function handleShareAsImage() {
+    if (Platform.OS === 'web') {
+      // Web fallback: just share text
+      await handleShare();
+      return;
+    }
+    if (!cardRef.current) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSharingImage(true);
+    try {
+      const ViewShot = require('react-native-view-shot');
+      const uri = await ViewShot.captureRef(cardRef, {
+        format: 'png',
+        quality: 1,
+        result: 'tmpfile',
+      });
+      const Sharing = require('expo-sharing');
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: '分享到微信',
+          UTI: 'public.png',
+        });
+      } else {
+        Alert.alert('无法分享', '当前设备不支持分享功能');
+      }
+    } catch (e) {
+      Alert.alert('截图失败', '请稍后重试');
+    } finally {
+      setSharingImage(false);
+    }
+  }
+
   function buildFallbackShareText(): string {
     if (!checkIn) return `【小马虎护理日报】${elderNickname}今日护理指数：${careScore}/100`;
     const sleepLabel = checkIn.sleepQuality === 'good' ? '良好' : checkIn.sleepQuality === 'fair' ? '一般' : '较差';
@@ -528,37 +563,31 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
           </View>
         ) : briefing && checkIn ? (
           <>
-            <BriefingCard
-              briefing={briefing}
-              checkIn={checkIn}
-              careScore={careScore}
-              elderNickname={elderNickname}
-              caregiverName={caregiverName}
-              elderEmoji={elderEmoji}
-            />
-
-            {/* ── Share Text Preview ── */}
-            {shareText ? (
-              <View style={styles.shareTextBox}>
-                <Text style={styles.shareTextLabel}>📝 分享文字预览</Text>
-                <Text style={styles.shareTextContent}>{shareText}</Text>
-              </View>
-            ) : null}
-
-            {/* ── Export Long Image Button ── */}
-            <TouchableOpacity
-              style={styles.exportImageBtn}
-              onPress={() => router.push('/export-image' as any)}
-            >
-              <Text style={styles.exportImageIcon}>🖼️</Text>
-              <Text style={styles.exportImageText}>导出精美长图</Text>
-              <Text style={styles.exportImageSub}>保存到相册 / 分享到微信</Text>
-            </TouchableOpacity>
+            <View ref={cardRef} collapsable={false}>
+              <BriefingCard
+                briefing={briefing}
+                checkIn={checkIn}
+                careScore={careScore}
+                elderNickname={elderNickname}
+                caregiverName={caregiverName}
+                elderEmoji={elderEmoji}
+              />
+            </View>
 
             {/* ── WeChat Share Button ── */}
-            <TouchableOpacity style={styles.shareWechatBtn} onPress={handleShare}>
-              <Text style={styles.shareWechatIcon}>💬</Text>
-              <Text style={styles.shareWechatText}>一键分享文字到微信</Text>
+            <TouchableOpacity
+              style={[styles.shareWechatBtn, sharingImage && { opacity: 0.7 }]}
+              onPress={handleShareAsImage}
+              disabled={sharingImage}
+            >
+              {sharingImage ? (
+                <ActivityIndicator color="#fff" style={{ marginRight: 6 }} />
+              ) : (
+                <Text style={styles.shareWechatIcon}>💬</Text>
+              )}
+              <Text style={styles.shareWechatText}>
+                {sharingImage ? '生成图片中...' : '一键分享到微信'}
+              </Text>
             </TouchableOpacity>
 
             {/* ── Action Row ── */}
@@ -612,19 +641,6 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 15, color: '#DC2626', textAlign: 'center', marginBottom: 16 },
   checkinBtn: { backgroundColor: '#6C9E6C', borderRadius: 14, paddingHorizontal: 24, paddingVertical: 12 },
   checkinBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  shareTextBox: {
-    backgroundColor: '#FAFAF8', borderRadius: 16, padding: 16, marginBottom: 16,
-    borderWidth: 1, borderColor: '#EBEBEB',
-  },
-  shareTextLabel: { fontSize: 13, fontWeight: '700', color: '#9B9B9B', marginBottom: 10 },
-  shareTextContent: { fontSize: 14, color: '#374151', lineHeight: 22 },
-  exportImageBtn: {
-    alignItems: 'center', justifyContent: 'center', gap: 4,
-    backgroundColor: '#3B82F6', borderRadius: 20, padding: 18, marginBottom: 12,
-  },
-  exportImageIcon: { fontSize: 28 },
-  exportImageText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  exportImageSub: { fontSize: 12, color: '#FFFFFFBB' },
   shareWechatBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
     backgroundColor: '#07C160', borderRadius: 20, padding: 16, marginBottom: 12,
