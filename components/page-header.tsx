@@ -75,13 +75,14 @@ export function PageHeader({ theme, subtitle, right, style }: PageHeaderProps) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 20,
+    paddingTop: 10,
+    marginBottom: 28,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 14,
   },
   left: {
     flexDirection: 'row',
