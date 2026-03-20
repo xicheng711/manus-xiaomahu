@@ -544,7 +544,7 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
           <BackButton />
           <Text style={styles.title}>📋 今日简报</Text>
           <TouchableOpacity style={styles.homeBtn} onPress={() => router.push('/(tabs)' as any)}>
-            <Text style={styles.homeBtnText}>🏠 主页</Text>
+            <Text style={styles.homeBtnText}>🏠 回到主页</Text>
           </TouchableOpacity>
         </View>
 
