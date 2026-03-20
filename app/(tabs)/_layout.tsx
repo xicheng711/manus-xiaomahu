@@ -6,38 +6,42 @@ import { Ionicons } from "@expo/vector-icons";
 
 const INACTIVE_COLOR = "#B0B7C3";
 
-const TAB_ICONS: Record<string, {
+const TAB_CONFIG: Record<string, {
   outline: keyof typeof Ionicons.glyphMap;
   filled: keyof typeof Ionicons.glyphMap;
   activeColor: string;
+  label: string;
 }> = {
-  index:      { outline: "home-outline",     filled: "home",     activeColor: "#FB923C" },
-  checkin:    { outline: "sparkles-outline", filled: "sparkles", activeColor: "#34D399" },
-  medication: { outline: "medkit-outline",   filled: "medkit",   activeColor: "#F43F5E" },
-  diary:      { outline: "book-outline",     filled: "book",     activeColor: "#38BDF8" },
-  family:     { outline: "people-outline",   filled: "people",   activeColor: "#A855F7" },
+  index:      { outline: "home-outline",     filled: "home",         activeColor: "#FB7560", label: "首页" },
+  checkin:    { outline: "sparkles-outline", filled: "sparkles",     activeColor: "#34D399", label: "每日打卡" },
+  medication: { outline: "medical-outline",  filled: "medical",      activeColor: "#F43F5E", label: "用药记录" },
+  diary:      { outline: "book-outline",     filled: "book",         activeColor: "#38BDF8", label: "日记" },
+  family:     { outline: "people-outline",   filled: "people",       activeColor: "#A855F7", label: "家人共享" },
 };
 
-function TabIcon({
-  route,
-  label,
-  focused,
-}: {
-  route: string;
-  label: string;
-  focused: boolean;
-}) {
-  const icons = TAB_ICONS[route] ?? { outline: "ellipse-outline", filled: "ellipse", activeColor: "#6B7280" };
-  const activeColor = icons.activeColor;
+function TabIcon({ route, focused }: { route: string; focused: boolean }) {
+  const cfg = TAB_CONFIG[route] ?? {
+    outline: "ellipse-outline", filled: "ellipse", activeColor: "#6B7280", label: "",
+  };
+
   return (
     <View style={styles.tabItem}>
-      <Ionicons
-        name={focused ? icons.filled : icons.outline}
-        size={23}
-        color={focused ? activeColor : INACTIVE_COLOR}
-      />
-      <Text style={[styles.tabLabel, focused && { color: activeColor, fontWeight: "700" }]}>
-        {label}
+      {focused ? (
+        <View style={[styles.activePill, { backgroundColor: cfg.activeColor }]}>
+          <Ionicons name={cfg.filled} size={22} color="#fff" />
+        </View>
+      ) : (
+        <View style={styles.inactiveIconWrap}>
+          <Ionicons name={cfg.outline} size={22} color={INACTIVE_COLOR} />
+        </View>
+      )}
+      <Text
+        style={[
+          styles.tabLabel,
+          focused && { color: cfg.activeColor, fontWeight: "700" },
+        ]}
+      >
+        {cfg.label}
       </Text>
     </View>
   );
@@ -46,7 +50,7 @@ function TabIcon({
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const safeBottom = Platform.OS === "web" ? 0 : insets.bottom;
-  const tabBarHeight = 58 + safeBottom;
+  const tabBarHeight = 64 + safeBottom;
 
   return (
     <Tabs
@@ -57,14 +61,14 @@ export default function TabLayout() {
         tabBarStyle: {
           height: tabBarHeight,
           paddingBottom: safeBottom,
-          paddingTop: 6,
+          paddingTop: 4,
           backgroundColor: "#FFFFFF",
           borderTopWidth: 0,
           borderTopLeftRadius: 22,
           borderTopRightRadius: 22,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -6 },
-          shadowOpacity: 0.09,
+          shadowOpacity: 0.08,
           shadowRadius: 18,
           elevation: 24,
           overflow: Platform.OS === "android" ? "hidden" : undefined,
@@ -73,53 +77,41 @@ export default function TabLayout() {
           paddingVertical: 0,
           height: "100%",
         },
-        tabBarActiveTintColor: "#FB923C",
-        tabBarInactiveTintColor: INACTIVE_COLOR,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: "首页",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon route="index" label="首页" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <TabIcon route="index" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="checkin"
         options={{
           title: "每日打卡",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon route="checkin" label="打卡" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <TabIcon route="checkin" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="medication"
         options={{
           title: "用药记录",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon route="medication" label="用药" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <TabIcon route="medication" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="diary"
         options={{
           title: "日记",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon route="diary" label="日记" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <TabIcon route="diary" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="family"
         options={{
           title: "家人共享",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon route="family" label="家庭" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <TabIcon route="family" focused={focused} />,
         }}
       />
     </Tabs>
@@ -131,7 +123,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
-    paddingTop: 4,
+    paddingTop: 2,
+  },
+  activePill: {
+    width: 52,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inactiveIconWrap: {
+    width: 52,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tabLabel: {
     fontSize: 10,
