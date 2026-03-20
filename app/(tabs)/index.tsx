@@ -151,7 +151,7 @@ function EnhancedCheckinBanner({
         <TouchableOpacity onPress={handlePress} activeOpacity={0.88}>
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <LinearGradient
-              colors={['#4ADE80', '#22C55E', '#10B981']}
+              colors={['#FFB347', '#FF8E7F', '#FF6B9D']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.checkinBanner}
             >
@@ -321,7 +321,7 @@ function EnhancedAICard({
           </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={onCheckinPress} style={styles.aiDetailLink}>
-            <Text style={[styles.aiDetailLinkText, { color: '#10B981' }]}>开始早间打卡 →</Text>
+            <Text style={[styles.aiDetailLinkText, { color: '#FF8E7F' }]}>开始早间打卡 →</Text>
           </TouchableOpacity>
         )}
       </Animated.View>
