@@ -543,7 +543,9 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
         <View style={styles.header}>
           <BackButton />
           <Text style={styles.title}>📋 今日简报</Text>
-          <View style={{ width: 36 }} />
+          <TouchableOpacity style={styles.homeBtn} onPress={() => router.push('/(tabs)' as any)}>
+            <Text style={styles.homeBtnText}>🏠 主页</Text>
+          </TouchableOpacity>
         </View>
 
         {error ? (
@@ -614,9 +616,11 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
 
 const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 48 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  homeBtn: { backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  homeBtnText: { fontSize: 13, fontWeight: '600', color: '#374151' },
 
-  title: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
+  title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' },
   refreshBtn: { padding: 8 },
   refreshBtnText: { fontSize: 20 },
   generatingBox: {
