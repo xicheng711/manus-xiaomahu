@@ -543,8 +543,14 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
         <View style={styles.header}>
           <BackButton />
           <Text style={styles.title}>📋 今日简报</Text>
-          <TouchableOpacity style={styles.homeBtn} onPress={() => router.push('/(tabs)' as any)}>
-            <Text style={styles.homeBtnText}>🏠 回到主页</Text>
+          <TouchableOpacity onPress={() => router.push('/(tabs)' as any)}>
+            <LinearGradient
+              colors={['#FF6B6B', '#B45AED']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.homeBtn}
+            >
+              <Text style={styles.homeBtnText}>🏠 回到主页</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
 
@@ -608,7 +614,7 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
 const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 48 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  homeBtn: { backgroundColor: '#6C9E6C', borderRadius: 22, paddingHorizontal: 16, paddingVertical: 9 },
+  homeBtn: { borderRadius: 22, paddingHorizontal: 16, paddingVertical: 9 },
   homeBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
   title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' },
