@@ -399,15 +399,23 @@ export default function AssistantScreen() {
 
   if (error || !aiAdvice) {
     return (
-      <ScreenContainer containerClassName="bg-[#FFF8F0]">
-        <View style={styles.errorContainer}>
+      <ScreenContainer containerClassName="bg-[#FFF0F5]">
+        <View style={styles.chatHeader}>
+          <BackButton onPress={() => router.replace('/(tabs)' as any)} />
+          <View style={styles.chatHeaderCenter}>
+            <View style={styles.chatHeaderDot} />
+            <Text style={styles.chatHeaderTitle}>今日数据分析</Text>
+          </View>
+          <View style={{ width: 80 }} />
+        </View>
+        <View style={[styles.errorContainer, { flex: 1 }]}>
           <Text style={styles.errorEmoji}>😅</Text>
-          <Text style={styles.errorTitle}>暂时无法生成建议</Text>
-          <Text style={styles.errorText}>{error ?? '请稍后重试'}</Text>
+          <Text style={styles.errorTitle}>暂时无法生成分析</Text>
+          <Text style={styles.errorText}>{error ?? '请先完成今日打卡再查看'}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={loadData}>
             <Text style={styles.retryBtnText}>🔄 重新生成</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.backBtn2} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn2} onPress={() => router.replace('/(tabs)' as any)}>
             <Text style={styles.backBtn2Text}>← 返回首页</Text>
           </TouchableOpacity>
         </View>
@@ -435,7 +443,7 @@ export default function AssistantScreen() {
       </View>
 
       {/* ── Scrollable chat ── */}
-      <ScrollView contentContainerStyle={styles.chatScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.chatScroll} showsVerticalScrollIndicator={false}>
 
         {/* Date divider */}
         <View style={styles.chatDateRow}>
