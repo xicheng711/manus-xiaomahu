@@ -276,6 +276,14 @@ function AdviceCard({ card, index }: { card: any; index: number }) {
   );
 }
 
+// ─── 当日分析缓存（模块级，避免重复生成）────────────────────────────────────
+let _adviceCache: { date: string; advice: any; weather: any } | null = null;
+
+function getTodayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function AssistantScreen() {
   const [aiAdvice, setAiAdvice] = useState<any>(null);
@@ -304,6 +312,16 @@ export default function AssistantScreen() {
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setCity(cityName);
+
+      // ── 命中当日缓存，直接使用 ──
+      const todayKey = getTodayKey();
+      if (_adviceCache && _adviceCache.date === todayKey) {
+        setAiAdvice(_adviceCache.advice);
+        setWeatherData(_adviceCache.weather);
+        setLoading(false);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+        return;
+      }
 
       const yesterday = await getYesterdayCheckIn();
       const today = await getTodayCheckIn();
@@ -344,6 +362,8 @@ export default function AssistantScreen() {
       if (result.success && result.advice) {
         setAiAdvice(result.advice);
         setWeatherData(result.weather);
+        // 写入当日缓存
+        _adviceCache = { date: getTodayKey(), advice: result.advice, weather: result.weather };
       } else {
         setError(result.error ?? '小马虎分析失败，请稍后重试');
       }
