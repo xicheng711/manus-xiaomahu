@@ -1,0 +1,196 @@
+/src/App.tsx - 主要代码
+
+import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
+import { BarChart3, Sparkles, TrendingUp, Database } from 'lucide-react';
+
+export default function App() {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) return 0;
+        return prev + 1;
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="size-full flex items-center justify-center bg-gradient-to-br from-orange-50 via-pink-50 to-purple-50">
+      <div className="max-w-md w-full px-8">
+        {/* 图表图标区域 */}
+        <div className="relative mb-12 flex justify-center">
+          {/* 背景光晕效果 */}
+          <motion.div
+            className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400/20 via-purple-400/20 to-pink-400/20 blur-3xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.5, 0.8, 0.5],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+          
+          {/* 图表容器 */}
+          <motion.div
+            className="relative bg-white rounded-3xl p-8 shadow-2xl shadow-purple-200/50"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="grid grid-cols-3 gap-3 w-40 h-32 items-end">
+              {/* 绿色柱子 */}
+              <motion.div
+                className="rounded-t-lg bg-gradient-to-t from-green-500 to-green-400"
+                initial={{ height: 0 }}
+                animate={{ height: '60%' }}
+                transition={{ delay: 0.2, duration: 0.6, ease: "easeOut" }}
+              />
+              {/* 红色柱子 */}
+              <motion.div
+                className="rounded-t-lg bg-gradient-to-t from-red-500 to-red-400"
+                initial={{ height: 0 }}
+                animate={{ height: '45%' }}
+                transition={{ delay: 0.4, duration: 0.6, ease: "easeOut" }}
+              />
+              {/* 蓝色柱子 */}
+              <motion.div
+                className="rounded-t-lg bg-gradient-to-t from-blue-500 to-blue-400"
+                initial={{ height: 0 }}
+                animate={{ height: '85%' }}
+                transition={{ delay: 0.6, duration: 0.6, ease: "easeOut" }}
+              />
+            </div>
+
+            {/* 网格背景 */}
+            <div className="absolute inset-0 opacity-10 pointer-events-none">
+              <svg className="w-full h-full">
+                <defs>
+                  <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                    <path d="M 10 0 L 0 0 0 10" fill="none" stroke="currentColor" strokeWidth="0.5"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+              </svg>
+            </div>
+          </motion.div>
+
+          {/* 浮动图标 */}
+          <motion.div
+            className="absolute -top-4 -right-4 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl p-3 shadow-lg"
+            animate={{
+              y: [0, -10, 0],
+              rotate: [0, 5, 0],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          >
+            <Sparkles className="w-6 h-6 text-white" />
+          </motion.div>
+        </div>
+
+        {/* 文字内容 */}
+        <div className="text-center space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+          >
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 bg-clip-text text-transparent mb-3">
+              小马虎正在分析记录...
+            </h1>
+            <p className="text-gray-600 text-lg">
+              正在整理近期数据，生成个性化摘要
+            </p>
+          </motion.div>
+
+          {/* 进度条 */}
+          <motion.div
+            className="relative h-2 bg-gray-200 rounded-full overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            <motion.div
+              className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-full"
+              initial={{ width: '0%' }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.3 }}
+            />
+            {/* 光晕效果 */}
+            <motion.div
+              className="absolute top-0 left-0 h-full w-20 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+              animate={{
+                left: ['0%', '100%'],
+              }}
+              transition={{
+                duration: 1.5,
+                repeat: Infinity,
+                ease: "linear",
+              }}
+            />
+          </motion.div>
+
+          {/* 状态指示器 */}
+          <motion.div
+            className="flex justify-center gap-8 pt-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+          >
+            <motion.div
+              className="flex flex-col items-center gap-2"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity, delay: 0 }}
+            >
+              <div className="p-3 bg-blue-100 rounded-xl">
+                <Database className="w-5 h-5 text-blue-600" />
+              </div>
+              <span className="text-xs text-gray-500">数据收集</span>
+            </motion.div>
+            
+            <motion.div
+              className="flex flex-col items-center gap-2"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+            >
+              <div className="p-3 bg-purple-100 rounded-xl">
+                <BarChart3 className="w-5 h-5 text-purple-600" />
+              </div>
+              <span className="text-xs text-gray-500">智能分析</span>
+            </motion.div>
+            
+            <motion.div
+              className="flex flex-col items-center gap-2"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity, delay: 1 }}
+            >
+              <div className="p-3 bg-pink-100 rounded-xl">
+                <TrendingUp className="w-5 h-5 text-pink-600" />
+              </div>
+              <span className="text-xs text-gray-500">生成报告</span>
+            </motion.div>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+}
+3. 安装依赖
+在 Replit 的 Shell 中运行：
+
+npm install motion lucide-react
+或者修改 package.json，在 dependencies 中添加：
+
+"motion": "^12.23.24",
+"lucide-react": "^0.487.0"
+4. 配置 Tailwind CSS (如果需要)
+确保项目中有 Tailwind CSS 配置。Replit 的 

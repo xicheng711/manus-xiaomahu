@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, ActivityIndicator, Platform,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Easing, Platform, Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
@@ -10,6 +11,199 @@ import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { trpc } from '@/lib/trpc';
 import { BackButton } from '@/components/back-button';
 import { COLORS, RADIUS, SHADOWS } from '@/lib/animations';
+
+const { width: SW } = Dimensions.get('window');
+
+// ─── AI 分析加载屏 ────────────────────────────────────────────────────────────
+function AILoadingScreen() {
+  // Bar heights (0→1)
+  const bar1 = useRef(new Animated.Value(0)).current;
+  const bar2 = useRef(new Animated.Value(0)).current;
+  const bar3 = useRef(new Animated.Value(0)).current;
+  // Card scale-in
+  const cardScale = useRef(new Animated.Value(0.85)).current;
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  // Floating badge
+  const badgeY = useRef(new Animated.Value(0)).current;
+  const badgeRot = useRef(new Animated.Value(0)).current;
+  // Progress bar 0→100 looping
+  const progressVal = useRef(new Animated.Value(0)).current;
+  // Shimmer
+  const shimmerX = useRef(new Animated.Value(-1)).current;
+  // Status pulse (3 phases)
+  const pulse1 = useRef(new Animated.Value(0.4)).current;
+  const pulse2 = useRef(new Animated.Value(0.4)).current;
+  const pulse3 = useRef(new Animated.Value(0.4)).current;
+  // Title fade
+  const titleOpacity = useRef(new Animated.Value(0)).current;
+  const titleY = useRef(new Animated.Value(18)).current;
+
+  useEffect(() => {
+    // Card entrance
+    Animated.parallel([
+      Animated.timing(cardScale, { toValue: 1, duration: 450, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+
+    // Bars staggered
+    Animated.stagger(180, [
+      Animated.timing(bar1, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+      Animated.timing(bar2, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+      Animated.timing(bar3, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+    ]).start();
+
+    // Floating badge
+    Animated.loop(Animated.sequence([
+      Animated.parallel([
+        Animated.timing(badgeY, { toValue: -10, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(badgeRot, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(badgeY, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(badgeRot, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    ])).start();
+
+    // Progress loop
+    const runProgress = () => {
+      progressVal.setValue(0);
+      Animated.timing(progressVal, { toValue: 1, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: false }).start(({ finished }) => {
+        if (finished) runProgress();
+      });
+    };
+    runProgress();
+
+    // Shimmer loop
+    Animated.loop(Animated.timing(shimmerX, { toValue: 2, duration: 1500, easing: Easing.linear, useNativeDriver: false })).start();
+
+    // Status pulse staggered
+    const makePulse = (anim: Animated.Value, delay: number) =>
+      Animated.loop(Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(anim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
+      ]));
+    makePulse(pulse1, 0).start();
+    makePulse(pulse2, 500).start();
+    makePulse(pulse3, 1000).start();
+
+    // Title
+    Animated.parallel([
+      Animated.timing(titleOpacity, { toValue: 1, duration: 600, delay: 300, useNativeDriver: true }),
+      Animated.timing(titleY, { toValue: 0, duration: 600, delay: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const badgeSpin = badgeRot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '5deg'] });
+  const bar1H = bar1.interpolate({ inputRange: [0, 1], outputRange: ['0%', '60%'] });
+  const bar2H = bar2.interpolate({ inputRange: [0, 1], outputRange: ['0%', '45%'] });
+  const bar3H = bar3.interpolate({ inputRange: [0, 1], outputRange: ['0%', '85%'] });
+  const progressW = progressVal.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  const shimmerLeft = shimmerX.interpolate({ inputRange: [-1, 2], outputRange: ['-30%', '130%'] });
+
+  const STATUS = [
+    { emoji: '💾', label: '数据收集', bg: '#DBEAFE', pulse: pulse1 },
+    { emoji: '📊', label: '智能分析', bg: '#EDE9FE', pulse: pulse2 },
+    { emoji: '📈', label: '生成报告', bg: '#FCE7F3', pulse: pulse3 },
+  ];
+
+  return (
+    <LinearGradient
+      colors={['#FFF7ED', '#FDF2F8', '#FAF5FF']}
+      style={ldStyles.root}
+    >
+      <View style={ldStyles.center}>
+        {/* ── 白卡图表区 ── */}
+        <View style={ldStyles.cardWrap}>
+          <Animated.View style={[ldStyles.card, { transform: [{ scale: cardScale }], opacity: cardOpacity }]}>
+            {/* 网格背景 */}
+            <View style={ldStyles.gridBg} />
+            {/* 柱状图 */}
+            <View style={ldStyles.bars}>
+              <View style={ldStyles.barTrack}>
+                <Animated.View style={[ldStyles.barFill, { height: bar1H, backgroundColor: '#4ADE80' }]} />
+              </View>
+              <View style={ldStyles.barTrack}>
+                <Animated.View style={[ldStyles.barFill, { height: bar2H, backgroundColor: '#F87171' }]} />
+              </View>
+              <View style={ldStyles.barTrack}>
+                <Animated.View style={[ldStyles.barFill, { height: bar3H, backgroundColor: '#60A5FA' }]} />
+              </View>
+            </View>
+          </Animated.View>
+
+          {/* 浮动徽章 */}
+          <Animated.View style={[ldStyles.badge, { transform: [{ translateY: badgeY }, { rotate: badgeSpin }] }]}>
+            <LinearGradient colors={['#A855F7', '#EC4899']} style={ldStyles.badgeGrad}>
+              <Text style={ldStyles.badgeEmoji}>✨</Text>
+            </LinearGradient>
+          </Animated.View>
+        </View>
+
+        {/* ── 文字区 ── */}
+        <Animated.View style={[ldStyles.textBlock, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
+          <Text style={ldStyles.title}>小马虎正在分析记录...</Text>
+          <Text style={ldStyles.subtitle}>正在整理近期数据，生成个性化摘要</Text>
+        </Animated.View>
+
+        {/* ── 进度条 ── */}
+        <Animated.View style={[ldStyles.progressWrap, { opacity: titleOpacity }]}>
+          <View style={ldStyles.progressTrack}>
+            <Animated.View style={[ldStyles.progressFill, { width: progressW }]}>
+              <LinearGradient colors={['#A855F7', '#EC4899', '#F97316']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+            </Animated.View>
+            {/* Shimmer */}
+            <Animated.View style={[ldStyles.shimmer, { left: shimmerLeft }]} />
+          </View>
+        </Animated.View>
+
+        {/* ── 状态指示器 ── */}
+        <Animated.View style={[ldStyles.statusRow, { opacity: titleOpacity }]}>
+          {STATUS.map((s, i) => (
+            <Animated.View key={i} style={[ldStyles.statusItem, { opacity: s.pulse }]}>
+              <View style={[ldStyles.statusIcon, { backgroundColor: s.bg }]}>
+                <Text style={{ fontSize: 18 }}>{s.emoji}</Text>
+              </View>
+              <Text style={ldStyles.statusLabel}>{s.label}</Text>
+            </Animated.View>
+          ))}
+        </Animated.View>
+      </View>
+    </LinearGradient>
+  );
+}
+
+const ldStyles = StyleSheet.create({
+  root: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  cardWrap: { position: 'relative', marginBottom: 40 },
+  card: {
+    backgroundColor: '#FFFFFF', borderRadius: 28, padding: 28,
+    shadowColor: '#A855F7', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 10,
+    width: 180, height: 140, justifyContent: 'flex-end',
+  },
+  gridBg: {
+    ...StyleSheet.absoluteFillObject, borderRadius: 28, opacity: 0.06,
+    borderWidth: 0.5, borderColor: '#000',
+  },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', height: '100%' },
+  barTrack: { width: 36, height: '100%', justifyContent: 'flex-end' },
+  barFill: { width: '100%', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
+  badge: { position: 'absolute', top: -18, right: -18 },
+  badgeGrad: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#A855F7', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6 },
+  badgeEmoji: { fontSize: 22 },
+  textBlock: { alignItems: 'center', marginBottom: 28 },
+  title: { fontSize: 22, fontWeight: '800', color: '#7C3AED', textAlign: 'center', marginBottom: 8 },
+  subtitle: { fontSize: 15, color: '#6B7280', textAlign: 'center' },
+  progressWrap: { width: '100%', marginBottom: 32 },
+  progressTrack: { height: 8, backgroundColor: '#E5E7EB', borderRadius: 8, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 8, overflow: 'hidden' },
+  shimmer: { position: 'absolute', top: 0, width: '25%', height: '100%', backgroundColor: 'rgba(255,255,255,0.4)' },
+  statusRow: { flexDirection: 'row', gap: 24 },
+  statusItem: { alignItems: 'center', gap: 8 },
+  statusIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  statusLabel: { fontSize: 12, color: '#9CA3AF' },
+});
 
 // ─── Score display helpers ───────────────────────────────────────────────────
 function getScoreDisplay(score: number) {
@@ -162,18 +356,7 @@ export default function AssistantScreen() {
   }
 
   if (loading) {
-    return (
-      <ScreenContainer containerClassName="bg-[#FFF8F0]">
-        <View style={styles.loadingContainer}>
-          <Animated.Text style={[styles.loadingEmoji, {
-            transform: [{ scale: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.1] }) }]
-          }]}>📊</Animated.Text>
-          <Text style={styles.loadingTitle}>小马虎正在分析记录...</Text>
-          <Text style={styles.loadingSubtitle}>正在整理近期数据，生成个性化摘要</Text>
-          <ActivityIndicator color="#FF6B6B" size="large" style={{ marginTop: 20 }} />
-        </View>
-      </ScreenContainer>
-    );
+    return <AILoadingScreen />;
   }
 
   if (error || !aiAdvice) {
