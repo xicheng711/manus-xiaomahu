@@ -272,7 +272,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "qwen3.5-plus",
+    model: "qwen-plus",
     messages: messages.map(normalizeMessage),
   };
 
