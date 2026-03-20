@@ -174,9 +174,7 @@ export default function DiaryScreen() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <LinearGradient colors={['#FFF7ED', '#FDF2F8', '#FAF5FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <ScreenContainer containerClassName="bg-transparent">
+    <ScreenContainer containerClassName="bg-[#FFF7ED]">
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
@@ -228,8 +226,7 @@ export default function DiaryScreen() {
           </TouchableOpacity>
         </Animated.View>
       )}
-      </ScreenContainer>
-    </View>
+    </ScreenContainer>
   );
 }
 
