@@ -399,7 +399,7 @@ export default function DiaryEditScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={styles.homeBtn} onPress={() => router.replace('/(tabs)' as any)} activeOpacity={0.7}>
-              <Text style={styles.homeBtnText}>🏠 首页</Text>
+              <Text style={styles.homeBtnText}>🏠 回到首页</Text>
             </TouchableOpacity>
           )}
         </View>
