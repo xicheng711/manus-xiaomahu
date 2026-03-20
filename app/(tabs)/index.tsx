@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getRandomTip } from '@/lib/care-knowledge';
 import { getWeatherByGPS, buildGreetingWithWeather, fetchWeather, GpsWeatherInfo, WeatherData } from '@/lib/weather';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getProfile, getAllCheckIns, DailyCheckIn } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn } from '@/lib/storage';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
 import * as Haptics from 'expo-haptics';
@@ -432,6 +432,7 @@ export default function HomeScreen() {
   const [zodiacEmoji, setZodiacEmoji] = useState('🐎');
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [cityName, setCityName] = useState('');
+  const [latestCheckIn, setLatestCheckIn] = useState<DailyCheckIn | null>(null);
   const lunarDate = getLunarDate();
   const todayLabel = getFormattedDate();
 
@@ -470,6 +471,8 @@ export default function HomeScreen() {
     }
     const today = await getTodayCheckIn();
     setTodayCheckIn(today);
+    const yesterday = await getYesterdayCheckIn();
+    setLatestCheckIn(today ?? yesterday);
     const all = await getAllCheckIns();
     setAllCheckIns(all);
   }, []);
@@ -630,39 +633,41 @@ export default function HomeScreen() {
         </View>
 
         {/* ── 今日数据摘要 ── */}
-        {todayDone && todayCheckIn && (
+        {latestCheckIn && (
           <View style={styles.summaryCard}>
             <View style={styles.summaryCardHeader}>
-              <Text style={styles.summaryCardTitle}>✨ 今日数据摘要</Text>
-              <TouchableOpacity onPress={() => router.push('/checkin' as any)}>
-                <Text style={styles.summaryCardEdit}>查看详情</Text>
+              <Text style={styles.summaryCardTitle}>
+                ✨ {todayCheckIn ? '今日' : '昨日'}数据摘要
+              </Text>
+              <TouchableOpacity onPress={() => router.push('/assistant' as any)}>
+                <Text style={styles.summaryCardEdit}>查看分析 →</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.summaryCardRow}>
               <View style={styles.summaryCardItem}>
-                <Text style={styles.summaryCardEmoji}>{todayCheckIn.moodEmoji || '😊'}</Text>
+                <Text style={styles.summaryCardEmoji}>{latestCheckIn.moodEmoji || '😊'}</Text>
                 <Text style={styles.summaryCardLabel}>心情</Text>
-                <Text style={styles.summaryCardValue}>{getMoodLabel(todayCheckIn.moodScore)}</Text>
+                <Text style={styles.summaryCardValue}>{getMoodLabel(latestCheckIn.moodScore)}</Text>
               </View>
               <View style={styles.summaryCardDivider} />
               <View style={styles.summaryCardItem}>
                 <Text style={styles.summaryCardEmoji}>💤</Text>
                 <Text style={styles.summaryCardLabel}>睡眠</Text>
-                <Text style={styles.summaryCardValue}>{todayCheckIn.sleepHours}h</Text>
+                <Text style={styles.summaryCardValue}>{latestCheckIn.sleepHours}h</Text>
               </View>
               <View style={styles.summaryCardDivider} />
               <View style={styles.summaryCardItem}>
                 <Text style={styles.summaryCardEmoji}>💊</Text>
                 <Text style={styles.summaryCardLabel}>用药</Text>
-                <Text style={styles.summaryCardValue}>{todayCheckIn.medicationTaken ? '已服用' : '未记录'}</Text>
+                <Text style={styles.summaryCardValue}>{latestCheckIn.medicationTaken ? '已服用' : '未记录'}</Text>
               </View>
-              {todayCheckIn.careScore != null && (
+              {latestCheckIn.careScore != null && (
                 <>
                   <View style={styles.summaryCardDivider} />
                   <View style={styles.summaryCardItem}>
                     <Text style={styles.summaryCardEmoji}>⭐</Text>
                     <Text style={styles.summaryCardLabel}>护理指数</Text>
-                    <Text style={[styles.summaryCardValue, { color: '#F59E0B' }]}>{todayCheckIn.careScore}分</Text>
+                    <Text style={[styles.summaryCardValue, { color: '#F59E0B' }]}>{latestCheckIn.careScore}分</Text>
                   </View>
                 </>
               )}
