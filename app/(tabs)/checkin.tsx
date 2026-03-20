@@ -836,12 +836,9 @@ export default function CheckinScreen() {
           </View>
 
           <Animated.View style={[styles.doneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
-            {/* Moon with glow rings */}
-            <View style={styles.nightMoonOuter}>
-              <View style={styles.nightMoonInner}>
-                <Text style={{ fontSize: 72, lineHeight: 80 }}>🌙</Text>
-              </View>
-              {/* Green check badge */}
+            {/* Moon icon + check badge */}
+            <View style={{ position: 'relative', marginBottom: 28 }}>
+              <Text style={{ fontSize: 90, lineHeight: 100 }}>🌙</Text>
               <View style={styles.nightCheckBadge}>
                 <Text style={{ fontSize: 20, color: '#fff', fontWeight: '900' }}>✓</Text>
               </View>
