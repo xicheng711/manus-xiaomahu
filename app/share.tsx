@@ -176,19 +176,21 @@ function ScoreRing({ score, size = 100 }: { score: number; size?: number }) {
   const label = score >= 80 ? '状态极佳' : score >= 60 ? '状态良好' : score >= 40 ? '需要关注' : '需要照顾';
   const emoji = score >= 80 ? '🌟' : score >= 60 ? '😊' : score >= 40 ? '🤗' : '💕';
   return (
-    <View style={[ringStyles.container, { width: size, height: size, borderRadius: size / 2, backgroundColor: bgColor }]}>
-      <View style={[ringStyles.ring, { width: size - 12, height: size - 12, borderRadius: (size - 12) / 2, borderColor: color }]}>
-        <Text style={[ringStyles.score, { color, fontSize: size * 0.32 }]}>{score}</Text>
-        <Text style={[ringStyles.label, { color }]}>{emoji} {label}</Text>
+    <View style={ringStyles.wrapper}>
+      <View style={[ringStyles.container, { width: size, height: size, borderRadius: size / 2, backgroundColor: bgColor, borderWidth: 4, borderColor: color }]}>
+        <Text style={[ringStyles.score, { color, fontSize: size * 0.36 }]}>{score}</Text>
+        <Text style={[ringStyles.scoreUnit, { color }]}>分</Text>
       </View>
+      <Text style={[ringStyles.label, { color }]}>{emoji} {label}</Text>
     </View>
   );
 }
 const ringStyles = StyleSheet.create({
+  wrapper: { alignItems: 'center', gap: 6 },
   container: { alignItems: 'center', justifyContent: 'center' },
-  ring: { alignItems: 'center', justifyContent: 'center', borderWidth: 4 },
-  score: { fontWeight: '900', lineHeight: 42 },
-  label: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  score: { fontWeight: '900', lineHeight: undefined },
+  scoreUnit: { fontSize: 11, fontWeight: '700', marginTop: -2 },
+  label: { fontSize: 11, fontWeight: '700' },
 });
 
 // ─── Data Badge ──────────────────────────────────────────────────────────────
@@ -262,7 +264,11 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
       <View style={cardStyles.summaryBox}>
         <Text style={cardStyles.summaryIcon}>📋</Text>
         <Text style={cardStyles.summaryTitle}>今日状态总结</Text>
-        <Text style={cardStyles.summaryText}>{briefing.summary}</Text>
+        <Text style={cardStyles.summaryText}>
+          {briefing.summary && briefing.summary.trim().length > 0
+            ? briefing.summary
+            : `${elderNickname}今日整体状态${careScore >= 80 ? '很好' : careScore >= 60 ? '良好' : careScore >= 40 ? '一般，需要多关注' : '欠佳，需要重点照护'}。睡眠${checkIn.sleepHours}小时，心情评分${checkIn.moodScore}/10，用药${checkIn.medicationTaken ? '按时完成' : '有漏服情况'}。${caregiverName}今天辛苦了！`}
+        </Text>
       </View>
 
       {/* ── Highlights ── */}
@@ -280,7 +286,11 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
       {/* ── Caregiver Note ── */}
       <View style={cardStyles.caregiverBox}>
         <Text style={cardStyles.caregiverIcon}>💕</Text>
-        <Text style={cardStyles.caregiverText}>{briefing.caregiverNote}</Text>
+        <Text style={cardStyles.caregiverText}>
+          {briefing.caregiverNote && briefing.caregiverNote.trim().length > 0
+            ? briefing.caregiverNote
+            : `${caregiverName}，每一天的坚持都是对${elderNickname}最深的爱。感谢你的付出，好好休息！`}
+        </Text>
       </View>
 
       {/* ── Footer ── */}

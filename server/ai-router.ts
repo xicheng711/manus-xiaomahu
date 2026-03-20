@@ -51,13 +51,14 @@ function extractJSON(raw: string): string {
   throw new Error('Failed to parse LLM JSON response');
 }
 
-async function callQwen(prompt: string, systemPrompt: string, retries = 1): Promise<string> {
+async function callQwen(prompt: string, systemPrompt: string, retries = 1, maxTokens = 2000): Promise<string> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const result = await invokeLLM({
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt },
       ],
+      maxTokens,
     });
     const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
     try {
@@ -319,7 +320,7 @@ ${checkIn.notes ? `- 备注：${checkIn.notes}` : ""}
 }`;
 
       try {
-        const raw = await callQwen(prompt, SYSTEM_PROMPT);
+        const raw = await callQwen(prompt, SYSTEM_PROMPT, 1, 4000);
         const briefing = JSON.parse(raw);
         return { success: true, briefing };
       } catch (e) {
