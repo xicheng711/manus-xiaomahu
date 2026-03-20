@@ -250,7 +250,7 @@ ${JSON.stringify(structuredInput, null, 2)}
     "hydration": "<饮水提醒>"
   },
   "outdoorAdvice": "<结合天气的户外活动建议>",
-  "encouragement": "<给${caregiverName}的鼓励，温暖有力>",
+  "encouragement": "<给照顾者加油打气，必须20字以内，只说一句温暖正能量的话，不加任何修饰>",
   "watchOut": "<今日最需要特别注意的一件事>"
 }
 
@@ -259,6 +259,11 @@ adviceCards必须包含3-5张，第一张必须关于睡眠（直接引用sleep_
       try {
         const raw = await callQwen(prompt, SYSTEM_PROMPT);
         const advice = JSON.parse(raw);
+        // 截断 encouragement，最多保留第一句话，不超过 20 字
+        if (advice.encouragement && advice.encouragement.length > 20) {
+          const first = advice.encouragement.split(/[。！？!?]/)[0];
+          advice.encouragement = first.slice(0, 20);
+        }
         return { success: true, advice, weather: weatherData };
       } catch (e) {
         console.error("Qwen parse error:", e);
