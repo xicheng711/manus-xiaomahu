@@ -362,7 +362,7 @@ export default function DiaryEditScreen() {
       await updateDiaryEntry(entryId, { conversationFinished: true });
     }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.back();
+    router.replace('/(tabs)/diary' as any);
   }
 
   // ─── Loading state ───────────────────────────────────────────────────────
@@ -387,7 +387,7 @@ export default function DiaryEditScreen() {
       >
         {/* Nav bar */}
         <View style={styles.navBar}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(tabs)/diary' as any)} activeOpacity={0.7}>
             <Text style={styles.backArrow}>‹</Text>
             <Text style={styles.backText}>日记列表</Text>
           </TouchableOpacity>
