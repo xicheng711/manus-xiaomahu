@@ -872,7 +872,7 @@ export default function CheckinScreen() {
               {/* Main diary button — pink/rose gradient */}
               <TouchableOpacity
                 style={styles.nightDiaryBtn}
-                onPress={() => router.push('/(tabs)/diary' as any)}
+                onPress={() => router.push('/diary-edit' as any)}
                 activeOpacity={0.85}
               >
                 <LinearGradient
