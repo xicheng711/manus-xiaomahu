@@ -1,13 +1,13 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Animated, Easing,
+  StyleSheet, Animated, Easing, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
-import { getDiaryEntries, DiaryEntry } from '@/lib/storage';
+import { getDiaryEntries, deleteDiaryEntry, DiaryEntry } from '@/lib/storage';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
@@ -22,7 +22,13 @@ const MOOD_OPTIONS = [
 ];
 
 // ─── Diary Card ───────────────────────────────────────────────────────────────
-function DiaryCard({ entry, onPress, index }: { entry: DiaryEntry; onPress: () => void; index: number }) {
+function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
+  entry: DiaryEntry;
+  onPress: () => void;
+  onDelete: () => void;
+  index: number;
+  editMode: boolean;
+}) {
   const mood = MOOD_OPTIONS.find(m => m.emoji === entry.moodEmoji) || MOOD_OPTIONS[2];
   const hasAiReply = !!entry.aiReply;
   const aiPreview = entry.aiReply
@@ -35,6 +41,7 @@ function DiaryCard({ entry, onPress, index }: { entry: DiaryEntry; onPress: () =
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const deleteShake = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -43,21 +50,43 @@ function DiaryCard({ entry, onPress, index }: { entry: DiaryEntry; onPress: () =
     ]).start();
   }, []);
 
+  useEffect(() => {
+    if (editMode) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(deleteShake, { toValue: 1.5, duration: 80, useNativeDriver: true }),
+          Animated.timing(deleteShake, { toValue: -1.5, duration: 80, useNativeDriver: true }),
+          Animated.timing(deleteShake, { toValue: 0, duration: 80, useNativeDriver: true }),
+        ]),
+        { iterations: 3 }
+      ).start();
+    }
+  }, [editMode]);
+
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={styles.diaryCard}
-        onPress={() => pressAnimation(scaleAnim, onPress)}
-        activeOpacity={0.9}
+        style={[styles.diaryCard, editMode && styles.diaryCardEditMode]}
+        onPress={() => !editMode && pressAnimation(scaleAnim, onPress)}
+        activeOpacity={editMode ? 1 : 0.9}
       >
         <View style={styles.diaryCardHeader}>
           <View style={styles.diaryDateRow}>
             <Text style={styles.diaryDate}>{entry.date}</Text>
             {timeStr ? <Text style={styles.diaryTime}>{timeStr}</Text> : null}
           </View>
-          <View style={[styles.moodBadge, { backgroundColor: mood.color + '18' }]}>
-            <Text style={styles.moodBadgeEmoji}>{entry.moodEmoji}</Text>
-            <Text style={[styles.moodBadgeLabel, { color: mood.color }]}>{mood.label}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={[styles.moodBadge, { backgroundColor: mood.color + '18' }]}>
+              <Text style={styles.moodBadgeEmoji}>{entry.moodEmoji}</Text>
+              <Text style={[styles.moodBadgeLabel, { color: mood.color }]}>{mood.label}</Text>
+            </View>
+            {editMode && (
+              <Animated.View style={{ transform: [{ translateX: deleteShake }] }}>
+                <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} activeOpacity={0.8}>
+                  <Text style={styles.deleteBtnText}>🗑️</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
           </View>
         </View>
 
@@ -82,15 +111,17 @@ function DiaryCard({ entry, onPress, index }: { entry: DiaryEntry; onPress: () =
           <View style={styles.aiPreviewBox}>
             <View style={styles.aiPreviewHeader}>
               <Text style={styles.aiPreviewIcon}>🩺</Text>
-              <Text style={styles.aiPreviewLabel}>AI 护理顾问回复</Text>
+              <Text style={styles.aiPreviewLabel}>小马虎护理回复</Text>
             </View>
             <Text style={styles.aiPreviewText} numberOfLines={2}>{aiPreview}</Text>
           </View>
         ) : null}
 
-        <View style={styles.tapHint}>
-          <Text style={styles.tapHintText}>点击查看详情 →</Text>
-        </View>
+        {!editMode && (
+          <View style={styles.tapHint}>
+            <Text style={styles.tapHintText}>点击查看详情 →</Text>
+          </View>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
@@ -137,6 +168,7 @@ function EmptyState({ onStart }: { onStart: () => void }) {
 export default function DiaryScreen() {
   const router = useRouter();
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [editMode, setEditMode] = useState(false);
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -144,7 +176,6 @@ export default function DiaryScreen() {
 
   useEffect(() => {
     fadeInUp(headerFade, headerSlide, { duration: 500 });
-    // Breathing animation for FAB
     Animated.loop(
       Animated.sequence([
         Animated.timing(fabBreath, { toValue: 1.08, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -155,6 +186,7 @@ export default function DiaryScreen() {
 
   useFocusEffect(useCallback(() => {
     loadEntries();
+    setEditMode(false);
   }, []));
 
   async function loadEntries() {
@@ -164,13 +196,32 @@ export default function DiaryScreen() {
 
   function openDetail(entryId: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Open unified diary session page (restores full conversation history)
     router.push({ pathname: '/diary-edit', params: { id: entryId } } as any);
   }
 
   function openNewEntry() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({ pathname: '/diary-edit' } as any);
+  }
+
+  function confirmDelete(entryId: string, entryDate: string) {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      '删除日记',
+      `确定要删除 ${entryDate} 的日记吗？\n删除后无法恢复。`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除', style: 'destructive',
+          onPress: async () => {
+            await deleteDiaryEntry(entryId);
+            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await loadEntries();
+            if (entries.length <= 1) setEditMode(false);
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -187,16 +238,38 @@ export default function DiaryScreen() {
               {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}
             </Text>
           </View>
-          <Animated.View style={{ transform: [{ scale: fabScale }] }}>
-            <TouchableOpacity
-              style={styles.writeBtn}
-              onPress={() => pressAnimation(fabScale, openNewEntry)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.writeBtnText}>✏️ 写日记</Text>
-            </TouchableOpacity>
-          </Animated.View>
+          <View style={styles.headerBtns}>
+            {entries.length > 0 && (
+              <TouchableOpacity
+                style={[styles.manageBtn, editMode && styles.manageBtnActive]}
+                onPress={() => setEditMode(v => !v)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.manageBtnText, editMode && styles.manageBtnTextActive]}>
+                  {editMode ? '✓ 完成' : '管理'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!editMode && (
+              <Animated.View style={{ transform: [{ scale: fabScale }] }}>
+                <TouchableOpacity
+                  style={styles.writeBtn}
+                  onPress={() => pressAnimation(fabScale, openNewEntry)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.writeBtnText}>✏️ 写日记</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </View>
         </Animated.View>
+
+        {/* Edit mode hint */}
+        {editMode && (
+          <View style={styles.editHintRow}>
+            <Text style={styles.editHintText}>🗑️ 点击日记右侧的删除按钮来删除日记</Text>
+          </View>
+        )}
 
         {/* Entry list or empty state */}
         {entries.length === 0 ? (
@@ -208,14 +281,21 @@ export default function DiaryScreen() {
               <Text style={styles.listCount}>{entries.length} 篇</Text>
             </View>
             {entries.map((entry, i) => (
-              <DiaryCard key={entry.id} entry={entry} onPress={() => openDetail(entry.id)} index={i} />
+              <DiaryCard
+                key={entry.id}
+                entry={entry}
+                onPress={() => openDetail(entry.id)}
+                onDelete={() => confirmDelete(entry.id, entry.date)}
+                index={i}
+                editMode={editMode}
+              />
             ))}
           </View>
         )}
       </ScrollView>
 
-      {/* FAB -- floating action button */}
-      {entries.length > 0 && (
+      {/* FAB */}
+      {entries.length > 0 && !editMode && (
         <Animated.View style={[styles.fab, { transform: [{ scale: fabBreath }] }]}>
           <TouchableOpacity
             style={styles.fabBtn}
@@ -239,12 +319,28 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: '800', color: COLORS.text, letterSpacing: -0.3 },
   subtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
+  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  manageBtn: {
+    borderRadius: RADIUS.pill, paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1.5, borderColor: '#D1D5DB', backgroundColor: '#F9FAFB',
+  },
+  manageBtnActive: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
+  manageBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+  manageBtnTextActive: { color: '#DC2626' },
   writeBtn: {
     backgroundColor: COLORS.primary, borderRadius: RADIUS.pill,
     paddingHorizontal: 18, paddingVertical: 10,
     ...SHADOWS.glow(COLORS.primary),
   },
   writeBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  // Edit mode hint
+  editHintRow: {
+    backgroundColor: '#FEF2F2', borderRadius: RADIUS.md,
+    padding: 10, marginBottom: 12,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  editHintText: { fontSize: 13, color: '#B91C1C', textAlign: 'center', fontWeight: '500' },
 
   // Entry list
   entriesList: { gap: 12 },
@@ -260,6 +356,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF', borderRadius: RADIUS.lg,
     padding: 16, ...SHADOWS.md,
   },
+  diaryCardEditMode: {
+    borderWidth: 1.5, borderColor: '#FECACA',
+    backgroundColor: '#FFFAFA',
+  },
+  deleteBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  deleteBtnText: { fontSize: 16 },
   diaryCardHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 8,
