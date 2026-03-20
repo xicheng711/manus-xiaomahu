@@ -570,6 +570,7 @@ export default function CheckinScreen() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('你');
+  const [streak, setStreak] = useState(1);
 
   // Morning fields — v4.0 睡眠范围（智能默认 = 最常见的好状态）
   const [sleepRangeIdx, setSleepRangeIdx] = useState(3);  // "7-9小时"
@@ -685,6 +686,18 @@ export default function CheckinScreen() {
         // 无历史数据 → 保持 useState 初始值（7-9小时 / 没醒 / 几乎没有 / 没有）
       }
 
+      // 计算连续打卡天数
+      getAllCheckIns().then(all => {
+        const sorted = [...new Set(all.map(c => c.date))].sort().reverse();
+        let count = 0;
+        let prev = todayStr();
+        for (const d of sorted) {
+          const diff = (new Date(prev).getTime() - new Date(d).getTime()) / 86400000;
+          if (diff <= 1) { count++; prev = d; } else break;
+        }
+        setStreak(Math.max(count, 1));
+      });
+
       setMode('landing');
       setStep(0);
       setDone(false);
@@ -777,6 +790,12 @@ export default function CheckinScreen() {
     }
     await upsertCheckIn(data);
     setSaving(false);
+    // 打卡完成震动反馈
+    if (Platform.OS !== 'web') {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 400);
+    }
     setShowCelebration(true);
     doneFade.setValue(0);
     doneScale.setValue(0.8);
@@ -793,61 +812,86 @@ export default function CheckinScreen() {
     const isMorning = mode === 'morning';
 
     if (!isMorning) {
+      const streakDots = Math.min(streak, 7);
       return (
-        <LinearGradient
-          colors={['#1A1040', '#2D1B69', '#4A2080', '#6B3FA0']}
-          style={{ flex: 1 }}
-        >
+        <LinearGradient colors={['#0F0A2E', '#1A1040', '#2D1B69', '#4A1F8C']} style={{ flex: 1 }}>
           {showCelebration && <CelebrationEffect />}
-          {/* Stars decoration */}
-          <View style={styles.nightStars}>
-            {['✦','✧','✦','✧','✦','✧','✦','✧'].map((s, i) => (
-              <Text key={i} style={[styles.starDot, {
-                top: `${8 + (i * 11) % 35}%` as any,
-                left: `${5 + (i * 23) % 90}%` as any,
-                opacity: 0.4 + (i % 3) * 0.2,
-                fontSize: i % 3 === 0 ? 10 : 7,
-              }]}>{s}</Text>
+          {/* Star field */}
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+            {[
+              { top: '6%', left: '12%' }, { top: '11%', left: '78%' }, { top: '18%', left: '45%' },
+              { top: '8%', left: '60%' }, { top: '25%', left: '88%' }, { top: '32%', left: '5%' },
+              { top: '15%', left: '28%' }, { top: '4%', left: '92%' }, { top: '22%', left: '70%' },
+              { top: '38%', left: '55%' }, { top: '12%', left: '38%' }, { top: '30%', left: '20%' },
+              { top: '42%', left: '80%' }, { top: '48%', left: '10%' }, { top: '35%', left: '65%' },
+              { top: '50%', left: '40%' }, { top: '55%', left: '90%' }, { top: '60%', left: '25%' },
+              { top: '65%', left: '70%' }, { top: '70%', left: '50%' },
+            ].map((pos, i) => (
+              <Text key={i} style={{
+                position: 'absolute', top: pos.top as any, left: pos.left as any,
+                color: '#fff', opacity: 0.3 + (i % 4) * 0.15,
+                fontSize: i % 4 === 0 ? 5 : i % 3 === 0 ? 4 : 3,
+              }}>●</Text>
             ))}
           </View>
 
           <Animated.View style={[styles.doneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
-            {/* Moon circle */}
-            <View style={styles.nightMoonCircle}>
-              <Text style={{ fontSize: 64 }}>🌙</Text>
+            {/* Moon with glow rings */}
+            <View style={styles.nightMoonOuter}>
+              <View style={styles.nightMoonInner}>
+                <Text style={{ fontSize: 72, lineHeight: 80 }}>🌙</Text>
+              </View>
+              {/* Green check badge */}
+              <View style={styles.nightCheckBadge}>
+                <Text style={{ fontSize: 14, color: '#fff', fontWeight: '900' }}>✓</Text>
+              </View>
             </View>
 
             {/* White card */}
             <View style={styles.nightCard}>
               <Text style={styles.nightTitle}>晚间记录完成！</Text>
+
+              <View style={styles.nightSparkleRow}>
+                <Text style={styles.nightSparkle}>✨ 今天辛苦啦 💛</Text>
+              </View>
+
               <Text style={styles.nightSub}>
-                {'今天辛苦啦 💛\n晚上是记录美好时光的好时机\n把今天的点滴写进日记吧'}
+                {'晚上是记录美好时光的好时机\n把今天的点滴写进日记吧 📔'}
               </Text>
 
-              {/* Big diary button */}
+              {/* Streak badge */}
+              <View style={styles.nightStreakBadge}>
+                <View style={styles.nightStreakDots}>
+                  {Array.from({ length: streakDots }).map((_, i) => (
+                    <View key={i} style={styles.nightStreakDot} />
+                  ))}
+                </View>
+                <Text style={styles.nightStreakText}>已连续打卡 {streak} 天</Text>
+              </View>
+
+              {/* Main diary button — pink/rose gradient */}
               <TouchableOpacity
                 style={styles.nightDiaryBtn}
                 onPress={() => router.push('/(tabs)/diary' as any)}
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={['#7C3AED', '#A855F7', '#C084FC']}
+                  colors={['#EC4899', '#F43F5E', '#F97316']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={styles.nightDiaryBtnInner}
                 >
-                  <Text style={styles.nightDiaryIcon}>📔</Text>
-                  <View>
-                    <Text style={styles.nightDiaryBtnText}>去写今天的日记</Text>
-                    <Text style={styles.nightDiaryBtnSub}>记录今天的温暖瞬间</Text>
-                  </View>
-                  <Text style={styles.nightDiaryArrow}>›</Text>
+                  <Text style={styles.nightDiaryIcon}>📖</Text>
+                  <Text style={styles.nightDiaryBtnText}>去写今天的日记 ✍️</Text>
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.nightHomeBtn} onPress={() => router.replace('/(tabs)' as any)}>
-                <Text style={styles.nightHomeBtnText}>回到首页 🏠</Text>
+              {/* Secondary home button */}
+              <TouchableOpacity style={styles.nightHomeBtn} onPress={() => router.replace('/(tabs)' as any)} activeOpacity={0.7}>
+                <Text style={styles.nightHomeBtnText}>🏠 回到首页</Text>
               </TouchableOpacity>
             </View>
+
+            <Text style={styles.nightFooter}>每一天的记录都是珍贵的回忆 ✨</Text>
           </Animated.View>
         </LinearGradient>
       );
@@ -1472,34 +1516,58 @@ const styles = StyleSheet.create({
   doneBtnSecondaryText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '600' },
 
   // ── Night / Evening done screen ──
-  nightStars: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  starDot: { position: 'absolute', color: '#fff' },
-  nightMoonCircle: {
-    width: 140, height: 140, borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)',
+  nightMoonOuter: {
+    width: 180, height: 180, borderRadius: 90,
+    backgroundColor: 'rgba(167,139,250,0.25)',
+    borderWidth: 3, borderColor: 'rgba(196,132,252,0.7)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 28,
-    shadowColor: '#C084FC', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 30, elevation: 20,
+    shadowColor: '#A855F7', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 40, elevation: 30,
+  },
+  nightMoonInner: {
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: 'rgba(233,213,255,0.2)',
+    borderWidth: 2, borderColor: 'rgba(216,180,254,0.5)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  nightCheckBadge: {
+    position: 'absolute', bottom: 10, right: 10,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#22C55E',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 8,
   },
   nightCard: {
     width: '100%', backgroundColor: '#FFFFFF',
     borderRadius: 32, padding: 28,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 24, elevation: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.3, shadowRadius: 32, elevation: 20,
   },
-  nightTitle: { fontSize: 26, fontWeight: '800', color: '#1A1040', textAlign: 'center', marginBottom: 10 },
-  nightSub: { fontSize: 15, color: '#6B7280', textAlign: 'center', lineHeight: 24, marginBottom: 24 },
-  nightDiaryBtn: { borderRadius: 20, overflow: 'hidden', marginBottom: 14 },
+  nightTitle: { fontSize: 28, fontWeight: '800', color: '#1A1040', textAlign: 'center', marginBottom: 10 },
+  nightSparkleRow: { alignItems: 'center', marginBottom: 8 },
+  nightSparkle: { fontSize: 17, color: '#F59E0B', fontWeight: '700' },
+  nightSub: { fontSize: 15, color: '#6B7280', textAlign: 'center', lineHeight: 24, marginBottom: 20 },
+  nightStreakBadge: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, backgroundColor: 'rgba(15,10,46,0.07)',
+    borderRadius: 24, paddingVertical: 10, paddingHorizontal: 16, marginBottom: 22,
+  },
+  nightStreakDots: { flexDirection: 'row', gap: 5 },
+  nightStreakDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4ADE80' },
+  nightStreakText: { fontSize: 14, color: '#374151', fontWeight: '600' },
+  nightDiaryBtn: { borderRadius: 18, overflow: 'hidden', marginBottom: 14,
+    shadowColor: '#EC4899', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 12 },
   nightDiaryBtnInner: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 20, paddingHorizontal: 22, gap: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 18, paddingHorizontal: 24, gap: 10,
   },
-  nightDiaryIcon: { fontSize: 32 },
+  nightDiaryIcon: { fontSize: 22 },
   nightDiaryBtnText: { fontSize: 18, fontWeight: '800', color: '#fff' },
-  nightDiaryBtnSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-  nightDiaryArrow: { fontSize: 28, color: 'rgba(255,255,255,0.7)', marginLeft: 'auto' as any, fontWeight: '300' },
-  nightHomeBtn: { alignItems: 'center', paddingVertical: 12 },
-  nightHomeBtnText: { fontSize: 15, color: '#9CA3AF', fontWeight: '600' },
+  nightHomeBtn: {
+    alignItems: 'center', paddingVertical: 14,
+    backgroundColor: 'rgba(15,10,46,0.06)', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  nightHomeBtnText: { fontSize: 15, color: '#6B7280', fontWeight: '600' },
+  nightFooter: { marginTop: 20, fontSize: 13, color: 'rgba(255,255,255,0.45)', textAlign: 'center' },
 });
 
 // ─── Calendar Styles ──────────────────────────────────────────────────────────
