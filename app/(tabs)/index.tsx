@@ -171,9 +171,9 @@ function AnimatedCard({ children, style, onPress, delay = 0 }: {
   );
 }// ─── Quick Action Card ──────────────────────────────────────────────────────────────────────────────
 function QuickAction({
-  iconName, label, gradientStart, gradientEnd, bgColor, onPress, delay,
+  emoji, label, gradientStart, gradientEnd, bgColor, onPress, delay,
 }: {
-  iconName: string;
+  emoji: string;
   label: string;
   gradientStart: string;
   gradientEnd: string;
@@ -201,7 +201,7 @@ function QuickAction({
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.quickIconBox}
         >
-          <Ionicons name={iconName as any} size={28} color="#fff" />
+          <Text style={styles.quickEmoji}>{emoji}</Text>
         </LinearGradient>
         <View style={{ flex: 1 }} />
         <Text style={styles.quickLabel}>{label}</Text>
@@ -321,10 +321,10 @@ export default function HomeScreen() {
     : '先完成今天的早间打卡，我再为你生成更贴合今天情况的建议 🌸';
 
   const quickActions = [
-    { iconName: 'medkit',              label: '用药提醒', route: '/medication', gradientStart: '#F472B6', gradientEnd: '#EC4899', bgColor: '#FFF0F6' },
-    { iconName: 'journal',             label: '护理日记', route: '/diary',      gradientStart: '#60A5FA', gradientEnd: '#3B82F6', bgColor: '#EFF6FF' },
-    { iconName: 'people',              label: '家庭共享', route: '/family',     gradientStart: '#C084FC', gradientEnd: '#A855F7', bgColor: '#F5F0FF' },
-    { iconName: 'hardware-chip',       label: 'AI 助手',  route: '/assistant',  gradientStart: '#34D399', gradientEnd: '#10B981', bgColor: '#EFFDF5' },
+    { emoji: '💊', label: '用药提醒', route: '/medication', gradientStart: '#F472B6', gradientEnd: '#EC4899', bgColor: '#FFF0F6' },
+    { emoji: '📔', label: '护理日记', route: '/diary',      gradientStart: '#60A5FA', gradientEnd: '#3B82F6', bgColor: '#EFF6FF' },
+    { emoji: '👥', label: '家庭共享', route: '/family',     gradientStart: '#C084FC', gradientEnd: '#A855F7', bgColor: '#F5F0FF' },
+    { emoji: '🤖', label: 'AI 助手',  route: '/assistant',  gradientStart: '#34D399', gradientEnd: '#10B981', bgColor: '#EFFDF5' },
   ];
 
   return (
@@ -569,7 +569,7 @@ export default function HomeScreen() {
           {quickActions.slice(0, 2).map((item, i) => (
             <QuickAction
               key={item.route}
-              iconName={item.iconName}
+              emoji={item.emoji}
               label={item.label}
               gradientStart={item.gradientStart}
               gradientEnd={item.gradientEnd}
@@ -583,7 +583,7 @@ export default function HomeScreen() {
           {quickActions.slice(2, 4).map((item, i) => (
             <QuickAction
               key={item.route}
-              iconName={item.iconName}
+              emoji={item.emoji}
               label={item.label}
               gradientStart={item.gradientStart}
               gradientEnd={item.gradientEnd}
@@ -854,6 +854,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: 'center', justifyContent: 'center',
   },
+  quickEmoji: { fontSize: 28, lineHeight: 34 },
   quickLabel: { fontSize: 16, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.3, lineHeight: 22 },
 
   // Today's check-in summary card
