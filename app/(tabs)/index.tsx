@@ -498,7 +498,7 @@ export default function HomeScreen() {
     { emoji: '💊', decorEmoji: '✨', label: '用药提醒', route: '/medication', gradientStart: '#F472B6', gradientEnd: '#EC4899', bgColor: '#FFF0F6' },
     { emoji: '📔', decorEmoji: '🌸', label: '护理日记', route: '/diary',      gradientStart: '#60A5FA', gradientEnd: '#3B82F6', bgColor: '#EFF6FF' },
     { emoji: '👥', decorEmoji: '💜', label: '家庭共享', route: '/family',     gradientStart: '#C084FC', gradientEnd: '#A855F7', bgColor: '#F5F0FF' },
-    { emoji: '🤖', decorEmoji: '🧠', label: '小马虎',  route: '/assistant',  gradientStart: '#34D399', gradientEnd: '#10B981', bgColor: '#EFFDF5' },
+    { emoji: '🤖', decorEmoji: '🧠', label: '小马虎分析',  route: '/assistant',  gradientStart: '#34D399', gradientEnd: '#10B981', bgColor: '#EFFDF5' },
   ];
 
   return (
