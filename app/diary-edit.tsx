@@ -380,7 +380,7 @@ export default function DiaryEditScreen() {
   }
 
   return (
-    <ScreenContainer>
+    <ScreenContainer containerClassName="bg-[#FFF7ED]">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -584,9 +584,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.06)',
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, width: 80 },
-  backArrow: { fontSize: 22, color: COLORS.text, lineHeight: 26, fontWeight: '400' },
-  backText: { fontSize: 15, color: COLORS.text, fontWeight: '500' },
+  backBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: RADIUS.pill,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  backArrow: { fontSize: 16, color: COLORS.text, lineHeight: 20, fontWeight: '600' },
+  backText: { fontSize: 13, color: COLORS.text, fontWeight: '600' },
   navTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
   endBtn: {
     backgroundColor: COLORS.primary + '18', borderRadius: RADIUS.pill,
@@ -594,10 +598,11 @@ const styles = StyleSheet.create({
   },
   endBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
   homeBtn: {
-    width: 80, alignItems: 'flex-end',
-    paddingVertical: 4,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FEE2E2', borderRadius: RADIUS.pill,
+    paddingHorizontal: 10, paddingVertical: 6,
   },
-  homeBtnText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
+  homeBtnText: { fontSize: 13, color: '#B45309', fontWeight: '600' },
 
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { fontSize: 15, color: COLORS.textSecondary },
