@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getRandomTip } from '@/lib/care-knowledge';
 import { getWeatherByGPS, buildGreetingWithWeather, GpsWeatherInfo } from '@/lib/weather';
@@ -35,35 +34,6 @@ function getDailyMotivation(): string {
   return DAILY_MOTIVATIONS[dayOfYear % DAILY_MOTIVATIONS.length];
 }
 
-// ─── 背景装饰：浮动爱心 ─────────────────────────────────────────────
-function FloatingHeart({ delay = 0, x = 0 }: { delay?: number; x?: number }) {
-  const translateY = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateX = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const run = () => {
-      translateY.setValue(0); opacity.setValue(0); translateX.setValue(0);
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(opacity, { toValue: 0.45, duration: 600, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.45, duration: 2800, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0, duration: 600, useNativeDriver: true }),
-        ]),
-        Animated.timing(translateY, { toValue: -80, duration: 4000, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.sequence([
-          Animated.timing(translateX, { toValue: 10, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(translateX, { toValue: -10, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ]),
-      ]).start(() => setTimeout(run, 1000 + Math.random() * 2000));
-    };
-    setTimeout(run, delay);
-  }, []);
-  return (
-    <Animated.Text style={{ position: 'absolute', bottom: 0, left: x, fontSize: 16, transform: [{ translateY }, { translateX }], opacity }}>
-      🩷
-    </Animated.Text>
-  );
-}
 
 // ─── 背景装饰：浮动云朵 ─────────────────────────────────────────────
 function FloatingCloud({ top = 0, left = 0, delay = 0 }: { top?: number; left?: number; delay?: number }) {
@@ -85,97 +55,10 @@ function FloatingCloud({ top = 0, left = 0, delay = 0 }: { top?: number; left?: 
   );
 }
 
-// ─── 背景装饰：飘落小花 ─────────────────────────────────────────────
-function FallingFlower({ delay = 0, x = 0 }: { delay?: number; x?: number }) {
-  const translateY = useRef(new Animated.Value(-20)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const rotate = useRef(new Animated.Value(0)).current;
-  const spin = rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  useEffect(() => {
-    const run = () => {
-      translateY.setValue(-20); opacity.setValue(0); rotate.setValue(0);
-      Animated.sequence([
-        Animated.delay(delay + Math.random() * 1000),
-        Animated.parallel([
-          Animated.sequence([
-            Animated.timing(opacity, { toValue: 0.7, duration: 500, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0.7, duration: 4000, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0, duration: 1500, useNativeDriver: true }),
-          ]),
-          Animated.timing(translateY, { toValue: 200, duration: 6000, easing: Easing.linear, useNativeDriver: true }),
-          Animated.timing(rotate, { toValue: 1, duration: 6000, easing: Easing.linear, useNativeDriver: true }),
-        ]),
-      ]).start(() => setTimeout(run, 3000 + Math.random() * 4000));
-    };
-    setTimeout(run, delay);
-  }, []);
-  return (
-    <Animated.Text style={{ position: 'absolute', top: 0, left: x, fontSize: 18, transform: [{ translateY }, { rotate: spin }], opacity }}>
-      🌸
-    </Animated.Text>
-  );
-}
 
 // ─── 背景装饰：闪烁星星 ─────────────────────────────────────────────
-function TwinkleStar({ delay = 0, top = 0, left = 0 }: { delay?: number; top?: number; left?: number }) {
-  const scale = useRef(new Animated.Value(0.5)).current;
-  const opacity = useRef(new Animated.Value(0.3)).current;
-  const rotate = useRef(new Animated.Value(0)).current;
-  const spin = rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  useEffect(() => {
-    setTimeout(() => {
-      Animated.loop(Animated.sequence([
-        Animated.parallel([
-          Animated.timing(scale, { toValue: 1.3, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.9, duration: 1500, useNativeDriver: true }),
-          Animated.timing(rotate, { toValue: 1, duration: 3000, easing: Easing.linear, useNativeDriver: true }),
-        ]),
-        Animated.parallel([
-          Animated.timing(scale, { toValue: 0.5, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.3, duration: 1500, useNativeDriver: true }),
-        ]),
-      ])).start();
-    }, delay);
-  }, []);
-  return (
-    <Animated.Text style={{ position: 'absolute', top, left, fontSize: 14, transform: [{ scale }, { rotate: spin }], opacity }}>
-      ✨
-    </Animated.Text>
-  );
-}
 
 // ─── 背景装饰：上升气球 ─────────────────────────────────────────────
-function RisingBalloon({ delay = 0, x = 0 }: { delay?: number; x?: number }) {
-  const translateY = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const sway = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const run = () => {
-      translateY.setValue(0); opacity.setValue(0); sway.setValue(0);
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.parallel([
-          Animated.sequence([
-            Animated.timing(opacity, { toValue: 0.8, duration: 800, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0.8, duration: 7400, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0, duration: 1800, useNativeDriver: true }),
-          ]),
-          Animated.timing(translateY, { toValue: -280, duration: 10000, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          Animated.loop(Animated.sequence([
-            Animated.timing(sway, { toValue: 12, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            Animated.timing(sway, { toValue: -12, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          ])),
-        ]),
-      ]).start(() => setTimeout(run, 5000 + Math.random() * 5000));
-    };
-    setTimeout(run, delay);
-  }, []);
-  return (
-    <Animated.Text style={{ position: 'absolute', bottom: 20, left: x, fontSize: 22, transform: [{ translateY }, { translateX: sway }], opacity }}>
-      🎈
-    </Animated.Text>
-  );
-}
 
 // ─── 打卡横幅：增强版 ─────────────────────────────────────────────────
 function EnhancedCheckinBanner({
@@ -279,14 +162,14 @@ function EnhancedCheckinBanner({
                 const starRot = star.rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
                 return (
                   <Animated.View key={i} style={[styles.starDecor, starPositions[i], { opacity: star.opacity, transform: [{ scale: star.scale }, { rotate: starRot }] }]}>
-                    <Ionicons name="sparkles" size={14} color="white" />
+                    <Text style={{ fontSize: 12, color: 'white' }}>✨</Text>
                   </Animated.View>
                 );
               })}
 
               <View style={styles.checkinLeft}>
                 <View style={styles.checkinIconBox}>
-                  <Ionicons name="clipboard-outline" size={28} color="#fff" />
+                  <Text style={{ fontSize: 26 }}>📋</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.checkinTitle}>开始今日打卡</Text>
@@ -294,7 +177,7 @@ function EnhancedCheckinBanner({
                 </View>
               </View>
               <View style={styles.chevronCircle}>
-                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.9)" />
+                <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.9)', fontWeight: '600' }}>›</Text>
               </View>
             </LinearGradient>
           </Animated.View>
@@ -307,7 +190,7 @@ function EnhancedCheckinBanner({
     <TouchableOpacity style={styles.checkinDone} onPress={handlePress} activeOpacity={0.88}>
       <View style={styles.checkinLeft}>
         <View style={styles.checkinIconBoxDone}>
-          <Ionicons name="checkmark-circle" size={28} color="#16A34A" />
+          <Text style={{ fontSize: 26 }}>✅</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.checkinTitleDone}>今日记录 {checkinProgress}/2 ✅</Text>
@@ -323,7 +206,7 @@ function EnhancedCheckinBanner({
         </View>
       </View>
       <View style={styles.chevronCircleDone}>
-        <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+        <Text style={{ fontSize: 16, color: COLORS.textMuted, fontWeight: '600' }}>›</Text>
       </View>
     </TouchableOpacity>
   );
@@ -387,7 +270,7 @@ function EnhancedAICard({
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.aiIconBox}
             >
-              <Ionicons name="sparkles" size={22} color="#FFFFFF" />
+              <Text style={{ fontSize: 20, lineHeight: 24 }}>✨</Text>
             </LinearGradient>
           </Animated.View>
           <View style={{ flex: 1 }}>
@@ -410,7 +293,7 @@ function EnhancedAICard({
               </View>
               <View style={styles.aiSkeletonOverlay}>
                 <View style={styles.aiSkeletonLockBox}>
-                  <Ionicons name="lock-closed" size={20} color="#7C3AED" />
+                  <Text style={{ fontSize: 20 }}>🔒</Text>
                   <Text style={styles.aiSkeletonLockText}>完成早间打卡后解锁</Text>
                   <Text style={styles.aiSkeletonLockSub}>打卡后即可查看今日护理建议 ✨</Text>
                 </View>
@@ -434,8 +317,7 @@ function EnhancedAICard({
 
         {morningDone ? (
           <TouchableOpacity onPress={onPress} style={styles.aiDetailLink}>
-            <Text style={styles.aiDetailLinkText}>查看详细建议</Text>
-            <Ionicons name="chevron-forward" size={14} color="#7C3AED" />
+            <Text style={styles.aiDetailLinkText}>查看详细建议 ›</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={onCheckinPress} style={styles.aiDetailLink}>
@@ -622,31 +504,6 @@ export default function HomeScreen() {
         <FloatingCloud top={40} left={width * 0.38} delay={600} />
         <FloatingCloud top={80} left={width * 0.68} delay={1200} />
 
-        {/* 4颗星星 */}
-        <TwinkleStar delay={200} top={20} left={width * 0.18} />
-        <TwinkleStar delay={700} top={110} left={width * 0.75} />
-        <TwinkleStar delay={400} top={55} left={width * 0.52} />
-        <TwinkleStar delay={1100} top={90} left={width * 0.28} />
-
-        {/* 5朵飘落小花 */}
-        <FallingFlower delay={0} x={width * 0.08} />
-        <FallingFlower delay={1200} x={width * 0.28} />
-        <FallingFlower delay={500} x={width * 0.55} />
-        <FallingFlower delay={1800} x={width * 0.72} />
-        <FallingFlower delay={900} x={width * 0.90} />
-
-        {/* 3个气球 */}
-        <RisingBalloon delay={0} x={width * 0.10} />
-        <RisingBalloon delay={3500} x={width * 0.50} />
-        <RisingBalloon delay={6000} x={width * 0.82} />
-
-        {/* 6颗爱心 */}
-        <FloatingHeart delay={500} x={width * 0.15} />
-        <FloatingHeart delay={1200} x={width * 0.35} />
-        <FloatingHeart delay={2000} x={width * 0.55} />
-        <FloatingHeart delay={800} x={width * 0.72} />
-        <FloatingHeart delay={1600} x={width * 0.88} />
-        <FloatingHeart delay={300} x={width * 0.05} />
       </View>
 
       <ScrollView
@@ -675,7 +532,7 @@ export default function HomeScreen() {
                 <Image source={{ uri: memberPhotoUri }} style={styles.profilePhoto} />
               ) : (
                 <LinearGradient colors={['#FFAB9B', '#FF8C7A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileGradient}>
-                  <Ionicons name="person-outline" size={22} color="#fff" />
+                  <Text style={{ fontSize: 22 }}>👤</Text>
                 </LinearGradient>
               )}
             </TouchableOpacity>
@@ -709,7 +566,7 @@ export default function HomeScreen() {
           <View style={styles.tipCard}>
             <View style={styles.tipHeader}>
               <View style={styles.tipIconCircle}>
-                <Ionicons name="heart" size={16} color="#D4883E" />
+                <Text style={{ fontSize: 14 }}>💡</Text>
               </View>
               <Text style={styles.tipCategory}>{tip.category}</Text>
             </View>

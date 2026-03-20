@@ -2,37 +2,30 @@ import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
 import { Platform, View, Text, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
-const INACTIVE_ICON_COLOR = "#6B7280";
 const INACTIVE_BG = "#F3F4F6";
-const INACTIVE_LABEL = "#6B7280";
+const INACTIVE_LABEL = "#9CA3AF";
 
-// 每个 tab 的激活渐变色（参考 Figma）
 const TAB_CONFIG: Record<string, {
-  outline: keyof typeof Ionicons.glyphMap;
-  filled: keyof typeof Ionicons.glyphMap;
+  emoji: string;
   gradient: [string, string, string];
   label: string;
 }> = {
-  index:      { outline: "home-outline",    filled: "home",    gradient: ["#FF8904", "#FF637E", "#F6339A"], label: "首页" },
-  checkin:    { outline: "sparkles-outline",filled: "sparkles",gradient: ["#34D399", "#10B981", "#059669"], label: "每日打卡" },
-  medication: { outline: "medical-outline", filled: "medical", gradient: ["#FDA4AF", "#F43F5E", "#E11D48"], label: "用药记录" },
-  diary:      { outline: "book-outline",    filled: "book",    gradient: ["#7DD3FC", "#38BDF8", "#0EA5E9"], label: "日记" },
-  family:     { outline: "people-outline",  filled: "people",  gradient: ["#D8B4FE", "#A855F7", "#9333EA"], label: "家人共享" },
+  index:      { emoji: "🏠", gradient: ["#FF8904", "#FF637E", "#F6339A"], label: "首页" },
+  checkin:    { emoji: "✨", gradient: ["#34D399", "#10B981", "#059669"], label: "每日打卡" },
+  medication: { emoji: "💊", gradient: ["#FDA4AF", "#F43F5E", "#E11D48"], label: "用药记录" },
+  diary:      { emoji: "📔", gradient: ["#7DD3FC", "#38BDF8", "#0EA5E9"], label: "日记" },
+  family:     { emoji: "👥", gradient: ["#D8B4FE", "#A855F7", "#9333EA"], label: "家人共享" },
 };
 
 function TabIcon({ route, focused }: { route: string; focused: boolean }) {
   const cfg = TAB_CONFIG[route] ?? {
-    outline: "ellipse-outline", filled: "ellipse",
-    gradient: ["#ccc", "#aaa", "#888"] as [string, string, string],
-    label: "",
+    emoji: "⭕", gradient: ["#ccc", "#aaa", "#888"] as [string, string, string], label: "",
   };
 
   return (
     <View style={styles.tabItem}>
-      {/* 图标圆形 */}
       {focused ? (
         <LinearGradient
           colors={cfg.gradient}
@@ -40,19 +33,14 @@ function TabIcon({ route, focused }: { route: string; focused: boolean }) {
           end={{ x: 1, y: 1 }}
           style={styles.iconCircle}
         >
-          <Ionicons name={cfg.filled} size={22} color="#fff" />
+          <Text style={styles.activeEmoji}>{cfg.emoji}</Text>
         </LinearGradient>
       ) : (
         <View style={[styles.iconCircle, { backgroundColor: INACTIVE_BG }]}>
-          <Ionicons name={cfg.outline} size={22} color={INACTIVE_ICON_COLOR} />
+          <Text style={styles.inactiveEmoji}>{cfg.emoji}</Text>
         </View>
       )}
-
-      {/* 文字标签 */}
-      <Text style={[
-        styles.tabLabel,
-        focused && { color: cfg.gradient[1], fontWeight: "700" },
-      ]}>
+      <Text style={[styles.tabLabel, focused && { color: cfg.gradient[1], fontWeight: "700" }]}>
         {cfg.label}
       </Text>
     </View>
@@ -100,7 +88,7 @@ export default function TabLayout() {
   );
 }
 
-const CIRCLE_SIZE = 48;
+const CIRCLE = 48;
 
 const styles = StyleSheet.create({
   tabItem: {
@@ -110,11 +98,20 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   iconCircle: {
-    width: CIRCLE_SIZE,
-    height: CIRCLE_SIZE,
-    borderRadius: CIRCLE_SIZE / 2,
+    width: CIRCLE,
+    height: CIRCLE,
+    borderRadius: CIRCLE / 2,
     alignItems: "center",
     justifyContent: "center",
+  },
+  activeEmoji: {
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  inactiveEmoji: {
+    fontSize: 20,
+    lineHeight: 24,
+    opacity: 0.7,
   },
   tabLabel: {
     fontSize: 10,
