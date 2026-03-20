@@ -6,7 +6,7 @@ import { DailyCheckIn } from '@/lib/storage';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_W = SCREEN_WIDTH - 80;
 
-type Period = '7d' | '30d';
+type Period = '7d' | 'year';
 
 interface TrendChartProps {
   checkIns: DailyCheckIn[];
@@ -391,7 +391,7 @@ function SleepChart({ data }: { data: { label: string; value: number; hasData: b
           ))}
           {data.map((d, i) => {
             const h = d.hasData ? Math.max(4, (d.value / maxVal) * chartH) : 0;
-            const color = d.value >= 7 ? '#6C9E6C' : d.value >= 5 ? '#F0A500' : '#EF4444';
+            const color = d.value >= 7 ? '#6EE7B7' : d.value >= 5 ? '#FCD34D' : '#FCA5A5';
             return (
               <View key={i} style={sleepStyles.barCol}>
                 <View style={sleepStyles.barWrapper}>
@@ -506,75 +506,95 @@ export function TrendChart({ checkIns, patientNickname = '家人', caregiverName
   const [period, setPeriod] = useState<Period>('7d');
   const [offset, setOffset] = useState(0);
 
-  // Build date range based on period and offset
-  const range = period === '7d' ? getWeekRange(offset) : getMonthRange(offset);
-  const dateRange = buildDateRange(range.start, range.end);
-  const periodLabel = period === '7d'
-    ? (offset === 0 ? '本周' : offset === -1 ? '上周' : `${Math.abs(offset)}周前`)
-    : (offset === 0 ? '本月' : offset === -1 ? '上月' : `${Math.abs(offset)}月前`);
-
   const checkInMap = new Map(checkIns.map(c => [c.date, c]));
+
+  // ── Year mode: 12 monthly buckets for current year ──────────────────────────
+  const currentYear = new Date().getFullYear();
+  const yearLabel = `${currentYear}年`;
+
+  const yearSleepData = Array.from({ length: 12 }, (_, m) => {
+    const label = `${m + 1}月`;
+    const monthCheckIns = checkIns.filter(c => {
+      const d = new Date(c.date);
+      return d.getFullYear() === currentYear && d.getMonth() === m;
+    });
+    const withSleep = monthCheckIns.filter(c => c.sleepHours > 0);
+    const avg = withSleep.length > 0
+      ? withSleep.reduce((s, c) => s + c.sleepHours, 0) / withSleep.length
+      : 0;
+    return { label, value: parseFloat(avg.toFixed(1)), hasData: withSleep.length > 0 };
+  });
+
+  const yearMedData = Array.from({ length: 12 }, (_, m) => {
+    const label = `${m + 1}月`;
+    const monthCheckIns = checkIns.filter(c => {
+      const d = new Date(c.date);
+      return d.getFullYear() === currentYear && d.getMonth() === m && c.medicationTaken !== null;
+    });
+    const taken = monthCheckIns.filter(c => c.medicationTaken === true).length;
+    const total = monthCheckIns.length;
+    return { label, taken: total > 0 ? taken >= total / 2 : null };
+  });
+
+  // ── Weekly mode: single week range with offset ───────────────────────────────
+  const range = getWeekRange(offset);
+  const dateRange = buildDateRange(range.start, range.end);
+  const periodLabel = offset === 0 ? '本周' : offset === -1 ? '上周' : `${Math.abs(offset)}周前`;
+
   const periodCheckIns = dateRange.map(d => checkInMap.get(d)).filter(Boolean) as DailyCheckIn[];
 
-  // Prepare data
-  const sleepData = dateRange.map(date => {
+  const sleepData = period === 'year' ? yearSleepData : dateRange.map(date => {
     const c = checkInMap.get(date);
     const d = new Date(date);
-    const label = period === '7d'
-      ? ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
-      : `${d.getDate()}`;
-    return { label, value: c?.sleepHours ?? 0, hasData: !!c && c.sleepHours > 0 };
+    return { label: ['日', '一', '二', '三', '四', '五', '六'][d.getDay()], value: c?.sleepHours ?? 0, hasData: !!c && c.sleepHours > 0 };
   });
 
-  const medData = dateRange.map(date => {
+  const medData = period === 'year' ? yearMedData : dateRange.map(date => {
     const c = checkInMap.get(date);
     const d = new Date(date);
-    const label = period === '7d'
-      ? ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
-      : `${d.getDate()}`;
-    return { label, taken: c ? c.medicationTaken : null };
+    return { label: ['日', '一', '二', '三', '四', '五', '六'][d.getDay()], taken: c ? c.medicationTaken : null };
   });
 
-  // Sleep average for subtitle
-  const sleepWithData = periodCheckIns.filter(c => c.sleepHours > 0);
+  // Sleep subtitle
+  const relevantCheckIns = period === 'year'
+    ? checkIns.filter(c => new Date(c.date).getFullYear() === currentYear)
+    : periodCheckIns;
+  const sleepWithData = relevantCheckIns.filter(c => c.sleepHours > 0);
   const avgSleep = sleepWithData.length > 0
-    ? sleepWithData.reduce((s, c) => s + c.sleepHours, 0) / sleepWithData.length
-    : 0;
+    ? sleepWithData.reduce((s, c) => s + c.sleepHours, 0) / sleepWithData.length : 0;
   const sleepSubtitle = avgSleep > 0
-    ? `${periodLabel}平均 ${avgSleep.toFixed(1)}h · ${avgSleep >= 7 ? '睡眠充足 ✅' : '睡眠不足 ⚠️'}`
-    : `${periodLabel}暂无睡眠记录`;
+    ? `${period === 'year' ? yearLabel : periodLabel}平均 ${avgSleep.toFixed(1)}h · ${avgSleep >= 7 ? '睡眠充足 ✅' : '睡眠不足 ⚠️'}`
+    : `${period === 'year' ? yearLabel : periodLabel}暂无睡眠记录`;
 
-  // Medication stats for subtitle
-  const medWithData = periodCheckIns.filter(c => c.medicationTaken !== null);
+  // Medication stats
+  const medWithData = relevantCheckIns.filter(c => c.medicationTaken !== null);
   const medTaken = medWithData.filter(c => c.medicationTaken === true).length;
   const medRate = medWithData.length > 0 ? Math.round((medTaken / medWithData.length) * 100) : null;
 
-  // Caregiver mood averages
+  // Caregiver mood
   const cgMoodCheckIns = periodCheckIns.filter(c => (c.caregiverMoodScore ?? 0) > 0);
   const avgCaregiverMood = cgMoodCheckIns.length > 0
-    ? cgMoodCheckIns.reduce((s, c) => s + (c.caregiverMoodScore || 0), 0) / cgMoodCheckIns.length
-    : 0;
-  const prevRange = period === '7d' ? getWeekRange(offset - 1) : getMonthRange(offset - 1);
+    ? cgMoodCheckIns.reduce((s, c) => s + (c.caregiverMoodScore || 0), 0) / cgMoodCheckIns.length : 0;
+  const prevRange = getWeekRange(offset - 1);
   const prevDateRange = buildDateRange(prevRange.start, prevRange.end);
   const prevCheckIns = prevDateRange.map(d => checkInMap.get(d)).filter(Boolean) as DailyCheckIn[];
   const prevCgMoodCheckIns = prevCheckIns.filter(c => (c.caregiverMoodScore ?? 0) > 0);
   const prevAvgCaregiverMood = prevCgMoodCheckIns.length > 0
-    ? prevCgMoodCheckIns.reduce((s, c) => s + (c.caregiverMoodScore || 0), 0) / prevCgMoodCheckIns.length
-    : null;
+    ? prevCgMoodCheckIns.reduce((s, c) => s + (c.caregiverMoodScore || 0), 0) / prevCgMoodCheckIns.length : null;
 
   return (
     <View style={styles.container}>
       {/* ── Period Toggle ── */}
       <View style={styles.toggleRow}>
         <View style={styles.periodToggle}>
-          {(['7d', '30d'] as Period[]).map(p => (
+          {(['7d', 'year'] as Period[]).map(p => (
             <TouchableOpacity
               key={p}
               style={[styles.periodBtn, period === p && styles.periodBtnActive]}
               onPress={() => { setPeriod(p); setOffset(0); }}
             >
               <Text style={[styles.periodBtnText, period === p && styles.periodBtnTextActive]}>
-                {p === '7d' ? '周' : '月'}
+                {p === '7d' ? '周' : '年'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -584,21 +604,23 @@ export function TrendChart({ checkIns, patientNickname = '家人', caregiverName
       {/* ── Date Navigation ── */}
       <View style={styles.dateNav}>
         <View>
-          <Text style={styles.dateNavPeriod}>{periodLabel}</Text>
-          <Text style={styles.dateNavRange}>{range.label}</Text>
+          <Text style={styles.dateNavPeriod}>{period === 'year' ? yearLabel : periodLabel}</Text>
+          <Text style={styles.dateNavRange}>{period === 'year' ? '1月 — 12月' : range.label}</Text>
         </View>
-        <View style={styles.dateNavArrows}>
-          <TouchableOpacity style={styles.arrowBtn} onPress={() => setOffset(o => o - 1)}>
-            <Text style={styles.arrowText}>‹</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.arrowBtn, offset === 0 && styles.arrowBtnDisabled]}
-            onPress={() => { if (offset < 0) setOffset(o => o + 1); }}
-            disabled={offset === 0}
-          >
-            <Text style={[styles.arrowText, offset === 0 && styles.arrowTextDisabled]}>›</Text>
-          </TouchableOpacity>
-        </View>
+        {period === '7d' && (
+          <View style={styles.dateNavArrows}>
+            <TouchableOpacity style={styles.arrowBtn} onPress={() => setOffset(o => o - 1)}>
+              <Text style={styles.arrowText}>‹</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.arrowBtn, offset === 0 && styles.arrowBtnDisabled]}
+              onPress={() => { if (offset < 0) setOffset(o => o + 1); }}
+              disabled={offset === 0}
+            >
+              <Text style={[styles.arrowText, offset === 0 && styles.arrowTextDisabled]}>›</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* ── Sleep Chart ── */}
