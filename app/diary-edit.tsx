@@ -70,7 +70,7 @@ function UserBubble({ text }: { text: string }) {
       <View style={styles.userBubbleWrap}>
         <Text style={styles.userBubbleDecor}>😊</Text>
         <LinearGradient
-          colors={['#4ADE80', '#34D399']}
+          colors={['#5DBD7A', '#3DA862']}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
           style={styles.bubbleGreen}
         >
@@ -113,9 +113,9 @@ function AIBubble({ text, animate = false, isFirst = false }: { text: string; an
       )}
       <View style={[styles.bubbleBlue, isFirst ? styles.bubbleBlueFirst : styles.bubbleBluePink]}>
         <View style={styles.bubbleDots}>
-          <View style={[styles.bubbleDot, { backgroundColor: '#F9A8D4' }]} />
-          <View style={[styles.bubbleDot, { backgroundColor: '#D8B4FE' }]} />
-          <View style={[styles.bubbleDot, { backgroundColor: '#BAE6FD' }]} />
+          <View style={[styles.bubbleDot, { backgroundColor: '#D4C4B4' }]} />
+          <View style={[styles.bubbleDot, { backgroundColor: '#C4B4A4' }]} />
+          <View style={[styles.bubbleDot, { backgroundColor: '#B4A494' }]} />
         </View>
         <Text style={styles.bubbleBlueText}>{text}</Text>
       </View>
@@ -130,7 +130,7 @@ function AINameRow() {
     <View style={styles.aiNameRow}>
       <View style={styles.aiAvatarWrap}>
         <LinearGradient
-          colors={['#A855F7', '#EC4899', '#FB7185']}
+          colors={['#8B6E5A', '#A07858', '#7A5C40']}
           style={styles.aiAvatarCircle}
         >
           <Text style={styles.aiAvatarEmoji}>🐴</Text>
@@ -361,18 +361,12 @@ export default function DiaryEditScreen() {
   const todayLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
-    <ScreenContainer containerClassName="bg-[#FFF1F2]">
-      <LinearGradient colors={['#FFF1F2', '#FFF0F5', '#FFF7ED']} style={{ flex: 1 }}>
+    <ScreenContainer containerClassName="bg-[#FAF8F5]">
+      <LinearGradient colors={['#FAF8F5', '#F7F4F0', '#F5F2EC']} style={{ flex: 1 }}>
 
-        {/* Decorative background elements */}
-        <View style={[styles.decor, { top: 70, left: 12 }]} pointerEvents="none">
-          <Text style={{ fontSize: 56, opacity: 0.18 }}>❤️</Text>
-        </View>
-        <View style={[styles.decor, { top: 130, right: 18 }]} pointerEvents="none">
-          <Text style={{ fontSize: 68, opacity: 0.15 }}>☁️</Text>
-        </View>
-        <View style={[styles.decor, { bottom: 200, left: 20 }]} pointerEvents="none">
-          <Text style={{ fontSize: 44, opacity: 0.18 }}>⭐</Text>
+        {/* Subtle decorative accent */}
+        <View style={[styles.decor, { top: 80, right: 20, opacity: 0.06 }]} pointerEvents="none">
+          <Text style={{ fontSize: 120 }}>📔</Text>
         </View>
 
         {/* ── Header ── */}
@@ -386,7 +380,7 @@ export default function DiaryEditScreen() {
           </View>
           {submitted && !finished ? (
             <TouchableOpacity onPress={handleEndAndSave} activeOpacity={0.85}>
-              <LinearGradient colors={['#F472B6', '#FB7185']} style={styles.headerSaveBtn}>
+              <LinearGradient colors={['#B07858', '#8B5E3C']} style={styles.headerSaveBtn}>
                 <Text style={styles.headerSaveBtnText}>❤️ 保存</Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -534,7 +528,7 @@ export default function DiaryEditScreen() {
                 disabled={submitting}
                 activeOpacity={0.85}
               >
-                <LinearGradient colors={['#F472B6', '#FB7185', '#F472B6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitBtn}>
+                <LinearGradient colors={['#B07858', '#8B5E3C', '#A07050']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitBtn}>
                   {submitting ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
@@ -564,7 +558,7 @@ export default function DiaryEditScreen() {
                     disabled={!followUpInput.trim() || followUpLoading}
                     activeOpacity={0.85}
                   >
-                    <LinearGradient colors={['#F472B6', '#FB7185', '#F43F5E']} style={styles.sendBtn}>
+                    <LinearGradient colors={['#B07858', '#8B5E3C']} style={styles.sendBtn}>
                       {followUpLoading ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
@@ -606,31 +600,31 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderBottomWidth: 2, borderBottomColor: '#FCE7F3',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderBottomWidth: 1, borderBottomColor: '#E8E2DA',
     zIndex: 10,
   },
   headerBack: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 10, paddingVertical: 6,
   },
-  headerBackText: { fontSize: 15, color: '#374151', fontWeight: '600' },
+  headerBackText: { fontSize: 15, color: '#5C4A3A', fontWeight: '600' },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#F472B6',
+    width: 7, height: 7, borderRadius: 4,
+    backgroundColor: '#A07858',
   },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: '#DB2777' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#3D2B1F' },
   headerSaveBtn: {
     borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8,
-    shadowColor: '#F472B6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+    shadowColor: '#8B6048', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3,
   },
   headerSaveBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
   headerHomeBtn: {
-    backgroundColor: '#FEE2E2', borderRadius: 999,
+    backgroundColor: '#EDE8E3', borderRadius: 999,
     paddingHorizontal: 12, paddingVertical: 7,
   },
-  headerHomeBtnText: { fontSize: 13, color: '#B45309', fontWeight: '600' },
+  headerHomeBtnText: { fontSize: 13, color: '#6B5444', fontWeight: '600' },
 
   // Loading
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
@@ -641,56 +635,56 @@ const styles = StyleSheet.create({
   // Date pill
   datePillRow: { alignItems: 'center', marginBottom: 20 },
   datePill: {
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 999, paddingHorizontal: 16, paddingVertical: 7,
-    borderWidth: 1, borderColor: '#FCE7F3',
+    borderWidth: 1, borderColor: '#DDD7CE',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
-  datePillText: { fontSize: 12, color: '#6B7280' },
+  datePillText: { fontSize: 12, color: '#7C6D60' },
 
   // Form sections
   section: { marginBottom: 24 },
-  label: { fontSize: 15, fontWeight: '700', color: '#1F2937', marginBottom: 12 },
+  label: { fontSize: 15, fontWeight: '700', color: '#2D1F14', marginBottom: 12 },
   moodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   moodOption: {
     alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8,
-    borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: '#F9A8D4',
-    backgroundColor: 'rgba(255,255,255,0.8)', minWidth: 56,
+    borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: '#DDD7CE',
+    backgroundColor: 'rgba(255,255,255,0.9)', minWidth: 56,
   },
   moodOptionEmoji: { fontSize: 22, marginBottom: 2 },
   moodOptionLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: '500' },
   tagsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tagOption: {
     paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 999, borderWidth: 1.5, borderColor: '#F9A8D4',
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 999, borderWidth: 1.5, borderColor: '#DDD7CE',
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
-  tagOptionSelected: { borderColor: '#EC4899', backgroundColor: '#FCE7F3' },
-  tagOptionText: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
-  tagOptionTextSelected: { color: '#EC4899', fontWeight: '700' },
+  tagOptionSelected: { borderColor: '#A07858', backgroundColor: '#F0EBE3' },
+  tagOptionText: { fontSize: 13, color: '#6B5E52', fontWeight: '500' },
+  tagOptionTextSelected: { color: '#7A5C3E', fontWeight: '700' },
   noteLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   noteInput: {
-    backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 16,
-    borderWidth: 2, borderColor: '#F9A8D4',
-    padding: 14, fontSize: 15, color: '#1F2937',
+    backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#DDD7CE',
+    padding: 14, fontSize: 15, color: '#2D1F14',
     minHeight: 120, lineHeight: 22,
   },
 
   // Summary card
   summaryCard: {
-    backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 20,
     padding: 16, marginBottom: 16,
-    borderWidth: 2, borderColor: '#EDE9FE',
-    shadowColor: '#A855F7', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2,
+    borderWidth: 1, borderColor: '#DDD7CE',
+    shadowColor: '#8B6048', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
   },
   summaryHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
   moodBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   moodBadgeEmoji: { fontSize: 14 },
   moodBadgeLabel: { fontSize: 12, fontWeight: '600' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  tag: { backgroundColor: '#F3E8FF', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-  tagText: { fontSize: 11, color: '#9333EA', fontWeight: '500' },
-  summaryContent: { fontSize: 14, color: '#374151', lineHeight: 20 },
+  tag: { backgroundColor: '#EDE8E3', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  tagText: { fontSize: 11, color: '#7A6354', fontWeight: '500' },
+  summaryContent: { fontSize: 14, color: '#3D2B1F', lineHeight: 20 },
   summaryNoContent: { fontSize: 13, color: COLORS.textSecondary, fontStyle: 'italic' },
 
   // Chat
@@ -726,34 +720,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 16,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
   },
-  bubbleBlueFirst: { borderWidth: 2, borderColor: '#EDE9FE' },
-  bubbleBluePink: { borderWidth: 2, borderColor: '#FCE7F3' },
+  bubbleBlueFirst: { borderWidth: 1.5, borderColor: '#E0D8CC' },
+  bubbleBluePink: { borderWidth: 1.5, borderColor: '#E0D8CC' },
   bubbleDots: { flexDirection: 'row', gap: 3, position: 'absolute', top: 10, right: 12 },
   bubbleDot: { width: 5, height: 5, borderRadius: 2.5 },
-  bubbleBlueText: { fontSize: 15, color: '#374151', lineHeight: 24 },
+  bubbleBlueText: { fontSize: 15, color: '#3D2B1F', lineHeight: 24 },
 
   // AI name row
   aiNameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, marginLeft: 2 },
   aiAvatarWrap: { position: 'relative' },
   aiAvatarCircle: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#A855F7', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 3,
+    shadowColor: '#8B6048', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 3,
   },
-  aiAvatarEmoji: { fontSize: 20 },
+  aiAvatarEmoji: { fontSize: 18 },
   aiOnlineDot: {
     position: 'absolute', bottom: -1, right: -1,
-    width: 13, height: 13, borderRadius: 6.5,
+    width: 12, height: 12, borderRadius: 6,
     backgroundColor: '#4ADE80', borderWidth: 2, borderColor: '#fff',
   },
-  aiName: { fontSize: 13, fontWeight: '800', color: '#1F2937' },
+  aiName: { fontSize: 13, fontWeight: '800', color: '#2D1F14' },
   aiBadgeRow: { flexDirection: 'row', marginTop: 2 },
   aiBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   aiBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
 
   // Typing
   typingRow: { flexDirection: 'row', gap: 4, alignItems: 'center', paddingHorizontal: 4 },
-  typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#F9A8D4' },
+  typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#C4A882' },
 
   // Finished banner inside chat
   finishedBanner: {
@@ -764,8 +758,8 @@ const styles = StyleSheet.create({
 
   // Bottom bar
   bottomBar: {
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderTopWidth: 2, borderTopColor: '#FCE7F3',
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderTopWidth: 1, borderTopColor: '#E8E2DA',
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 24 : 16,
     gap: 10,
   },
@@ -775,7 +769,7 @@ const styles = StyleSheet.create({
   submitBtn: {
     borderRadius: 999, paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#F472B6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 5,
+    shadowColor: '#8B6048', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.22, shadowRadius: 10, elevation: 4,
   },
   submitBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
@@ -783,17 +777,17 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   inputWrap: { flex: 1 },
   chatInput: {
-    backgroundColor: 'rgba(253,242,248,0.9)',
-    borderWidth: 2, borderColor: '#F9A8D4',
+    backgroundColor: 'rgba(250,248,245,0.95)',
+    borderWidth: 1.5, borderColor: '#DDD7CE',
     borderRadius: 999,
     paddingHorizontal: 20, paddingVertical: 12,
-    fontSize: 15, color: '#374151',
+    fontSize: 15, color: '#3D2B1F',
   },
   sendBtnWrap: {},
   sendBtn: {
     width: 50, height: 50, borderRadius: 25,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#F472B6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 5,
+    shadowColor: '#8B6048', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
   },
 
   // End & Save button
