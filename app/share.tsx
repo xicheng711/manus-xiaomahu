@@ -459,7 +459,7 @@ export default function ShareScreen() {
         `睡眠${ci.sleepHours ?? '--'}小时，质量${sleepLabel}`,
         ci.eveningNotes || ci.morningNotes ? `备注：${(ci.eveningNotes || ci.morningNotes || '').slice(0, 30)}` : null,
       ].filter(Boolean) as string[],
-      caregiverNote: `${caregiver}，每一天的坚持都是对${nickname}最深的爱，记得好好休息！`,
+      caregiverNote: `辛苦了，好好休息！`,
       shareText: `🐴🐯【小马虎 · 每日护理简报】\n📅 ${dateStr}\n👴 ${nickname} 今日护理指数：${score}/100\n😴 睡眠：${ci.sleepHours ?? '--'}小时（${sleepLabel}）\n💊 用药：${ci.medicationTaken ? '已按时服药 ✅' : '未按时服药 ❌'}\n由 ${caregiver} 用心记录 💕`,
     };
   }

@@ -311,7 +311,7 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
 要求：
 - summary：基于以上数据，用1-2句客观描述今日状态，直接说数据，不要过度渲染情感，不超过60字
 - highlights：2-3条今日关键事项，每条15字以内，直接描述事实
-- caregiverNote：简短鼓励照顾者的话，20字以内，真诚不浮夸
+- caregiverNote：鼓励照顾者的一句话，必须15字以内，只说温暖正能量，绝对不超过15个字
 - shareText：适合发微信的简报全文，包含主要数据，150字以内
 
 返回JSON格式（不要包含任何代码块标记）：
@@ -325,6 +325,11 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
       try {
         const raw = await callQwen(prompt, SYSTEM_PROMPT, 1, 4000);
         const briefing = JSON.parse(raw);
+        // 截断 caregiverNote 超长内容，最多保留第一句话（15字）
+        if (briefing.caregiverNote && briefing.caregiverNote.length > 20) {
+          const firstSentence = briefing.caregiverNote.split(/[。！？!?]/)[0];
+          briefing.caregiverNote = firstSentence.slice(0, 20);
+        }
         return { success: true, briefing };
       } catch (e) {
         console.error("Briefing generation error:", e);
