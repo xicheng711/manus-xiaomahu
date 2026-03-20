@@ -617,8 +617,8 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
 const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 48 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  homeBtn: { backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
-  homeBtnText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  homeBtn: { backgroundColor: '#6C9E6C', borderRadius: 22, paddingHorizontal: 16, paddingVertical: 9 },
+  homeBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
   title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' },
   refreshBtn: { padding: 8 },
