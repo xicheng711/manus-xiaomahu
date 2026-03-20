@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Easing, Platform, Dimensions,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, Easing, Platform, Dimensions, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -416,15 +416,32 @@ export default function AssistantScreen() {
   }
 
   const scoreDisplay = getScoreDisplay(aiAdvice.careScore ?? 70);
+  const todayLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
-    <ScreenContainer containerClassName="bg-[#FFF8F0]">
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <BackButton onPress={() => router.replace('/(tabs)' as any)} />
-          <Text style={styles.title}>今日数据分析</Text>
-          <View style={{ width: 36 }} />
+    <ScreenContainer containerClassName="bg-[#FFF0F5]">
+      {/* ── Sticky Header ── */}
+      <View style={styles.chatHeader}>
+        <BackButton onPress={() => router.replace('/(tabs)' as any)} />
+        <View style={styles.chatHeaderCenter}>
+          <View style={styles.chatHeaderDot} />
+          <Text style={styles.chatHeaderTitle}>今日数据分析</Text>
+        </View>
+        <TouchableOpacity onPress={() => router.push('/share' as any)}>
+          <LinearGradient colors={['#F472B6', '#FB7185']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.chatSaveBtn}>
+            <Text style={styles.chatSaveBtnText}>📤 分享</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Scrollable chat ── */}
+      <ScrollView contentContainerStyle={styles.chatScroll} showsVerticalScrollIndicator={false}>
+
+        {/* Date divider */}
+        <View style={styles.chatDateRow}>
+          <View style={styles.chatDatePill}>
+            <Text style={styles.chatDateText}>📅 {todayLabel} ☀️</Text>
+          </View>
         </View>
 
         {/* Weather badge */}
@@ -436,28 +453,44 @@ export default function AssistantScreen() {
           </View>
         )}
 
-        {/* Score section */}
-        <Animated.View style={[styles.scoreSection, { opacity: fadeAnim }]}>
+        {/* AI identifier */}
+        <View style={styles.chatAIIdentifier}>
+          <LinearGradient colors={['#A78BFA', '#F472B6']} style={styles.chatAIAvatar}>
+            <Text style={{ fontSize: 18 }}>🐴</Text>
+          </LinearGradient>
+          <View style={{ gap: 3 }}>
+            <Text style={styles.chatAIName}>小马虎护理顾问</Text>
+            <LinearGradient colors={['#3B82F6', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.chatAIBadge}>
+              <Text style={styles.chatAIBadgeText}>✨ 数据分析</Text>
+            </LinearGradient>
+          </View>
+        </View>
+
+        {/* ── Score + Greeting bubble ── */}
+        <Animated.View style={[styles.chatBubbleAI, { opacity: fadeAnim }]}>
+          <View style={styles.chatDecoSticker}><Text style={{ fontSize: 16 }}>✨</Text></View>
+          <View style={styles.chatDecoDots}>
+            <View style={[styles.chatDecoDot, { backgroundColor: '#F9A8D4' }]} />
+            <View style={[styles.chatDecoDot, { backgroundColor: '#C4B5FD' }]} />
+            <View style={[styles.chatDecoDot, { backgroundColor: '#93C5FD' }]} />
+          </View>
           <Text style={styles.greetingText}>{aiAdvice.greeting}</Text>
-          <ScoreRing
-            score={aiAdvice.careScore ?? 70}
-            color={scoreDisplay.color}
-            bgColor={scoreDisplay.bgColor}
-            mascot={scoreDisplay.mascot}
-          />
+          <ScoreRing score={aiAdvice.careScore ?? 70} color={scoreDisplay.color} bgColor={scoreDisplay.bgColor} mascot={scoreDisplay.mascot} />
           <View style={[styles.scoreLabelBadge, { backgroundColor: scoreDisplay.color }]}>
             <Text style={styles.scoreLabelText}>{aiAdvice.scoreLabel ?? scoreDisplay.label}</Text>
           </View>
           <Text style={styles.overallText}>{aiAdvice.overallAssessment}</Text>
         </Animated.View>
 
-        {/* Watch Out */}
+        {/* Watch Out bubble */}
         {aiAdvice.watchOut && (
-          <View style={styles.watchOutCard}>
-            <Text style={styles.watchOutIcon}>⚠️</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.watchOutLabel}>今日特别注意</Text>
-              <Text style={styles.watchOutText}>{aiAdvice.watchOut}</Text>
+          <View style={styles.chatBubbleAI}>
+            <View style={styles.watchOutCard}>
+              <Text style={styles.watchOutIcon}>⚠️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.watchOutLabel}>今日特别注意</Text>
+                <Text style={styles.watchOutText}>{aiAdvice.watchOut}</Text>
+              </View>
             </View>
           </View>
         )}
@@ -465,23 +498,27 @@ export default function AssistantScreen() {
         {/* Advice Cards */}
         <Text style={styles.sectionTitle}>📊 今日数据分析</Text>
         {(aiAdvice.adviceCards ?? []).map((card: any, i: number) => (
-          <AdviceCard key={i} card={card} index={i} />
+          <View key={i} style={styles.chatBubbleAI}>
+            <AdviceCard card={card} index={i} />
+          </View>
         ))}
 
-        {/* Outdoor advice */}
+        {/* Outdoor bubble */}
         {aiAdvice.outdoorAdvice && (
-          <View style={styles.outdoorCard}>
-            <Text style={styles.outdoorIcon}>🌿</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.outdoorLabel}>户外活动建议</Text>
-              <Text style={styles.outdoorText}>{aiAdvice.outdoorAdvice}</Text>
+          <View style={styles.chatBubbleAI}>
+            <View style={styles.outdoorCard}>
+              <Text style={styles.outdoorIcon}>🌿</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.outdoorLabel}>户外活动建议</Text>
+                <Text style={styles.outdoorText}>{aiAdvice.outdoorAdvice}</Text>
+              </View>
             </View>
           </View>
         )}
 
-        {/* Nutrition */}
+        {/* Nutrition bubble */}
         {aiAdvice.nutritionAdvice && (
-          <View style={styles.nutritionCard}>
+          <View style={styles.chatBubbleAI}>
             <Text style={styles.nutritionTitle}>🥗 今日营养建议</Text>
             {aiAdvice.nutritionAdvice.breakfast?.length > 0 && (
               <View style={styles.mealSection}>
@@ -516,10 +553,15 @@ export default function AssistantScreen() {
           </View>
         )}
 
-        {/* Encouragement */}
-        <View style={styles.encourageCard}>
-          <Text style={styles.encourageEmoji}>💕</Text>
-          <Text style={styles.encourageText}>{aiAdvice.encouragement}</Text>
+        {/* Encouragement bubble */}
+        <View style={[styles.chatBubbleAI, { borderColor: '#FBCFE8' }]}>
+          <View style={{ position: 'absolute', bottom: -10, left: -6, zIndex: 10 }}>
+            <Text style={{ fontSize: 22 }}>💖</Text>
+          </View>
+          <View style={styles.encourageCard}>
+            <Text style={styles.encourageEmoji}>💕</Text>
+            <Text style={styles.encourageText}>{aiAdvice.encouragement}</Text>
+          </View>
         </View>
 
         {/* AI badge */}
@@ -527,21 +569,86 @@ export default function AssistantScreen() {
           <Text style={styles.aiBadgeText}>✨ 由小马虎分析生成</Text>
         </View>
 
-        {/* Action buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.checkinBtn} onPress={() => router.replace('/(tabs)' as any)}>
-            <Text style={styles.checkinBtnText}>🏠 回到首页</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.shareBtn} onPress={() => router.push('/share' as any)}>
-            <Text style={styles.shareBtnText}>📤 分享</Text>
+        <View style={{ height: 8 }} />
+      </ScrollView>
+
+      {/* ── Bottom input bar ── */}
+      <View style={styles.chatBottomBar}>
+        <View style={styles.chatInputRow}>
+          <View style={styles.chatInputWrap}>
+            <TextInput
+              style={styles.chatInput}
+              placeholder="继续询问小马虎...💭"
+              placeholderTextColor="#D1A5B8"
+            />
+          </View>
+          <TouchableOpacity>
+            <LinearGradient colors={['#F472B6', '#FB7185']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.chatSendBtn}>
+              <Text style={styles.chatSendBtnText}>➤</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+        <TouchableOpacity style={styles.chatEndBtn} onPress={() => router.replace('/(tabs)' as any)}>
+          <Text style={styles.chatEndBtnText}>结束并返回首页 →</Text>
+        </TouchableOpacity>
+      </View>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  // ── Chat UI ──────────────────────────────────────────────────────────────
+  chatHeader: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)', borderBottomWidth: 2, borderBottomColor: '#FECDD3',
+  },
+  chatHeaderCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  chatHeaderDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#F472B6' },
+  chatHeaderTitle: { fontSize: 17, fontWeight: '800', color: '#1A1A1A' },
+  chatSaveBtn: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
+  chatSaveBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  chatScroll: { padding: 16, paddingBottom: 24 },
+  chatDateRow: { alignItems: 'center', marginBottom: 14 },
+  chatDatePill: {
+    backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: '#FECDD3',
+  },
+  chatDateText: { fontSize: 12, color: '#9B9B9B' },
+  chatAIIdentifier: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  chatAIAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  chatAIName: { fontSize: 13, fontWeight: '800', color: '#1A1A1A' },
+  chatAIBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start' },
+  chatAIBadgeText: { fontSize: 11, color: '#fff', fontWeight: '700' },
+  chatBubbleAI: {
+    backgroundColor: '#fff', borderRadius: 24, padding: 18, marginBottom: 12,
+    borderWidth: 2, borderColor: '#FECDD3',
+    shadowColor: '#EC4899', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4,
+  },
+  chatDecoSticker: {
+    position: 'absolute', top: -12, right: -8, zIndex: 10,
+    backgroundColor: '#FDE047', borderRadius: 18, width: 34, height: 34,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  chatDecoDots: { flexDirection: 'row', gap: 4, justifyContent: 'flex-end', marginBottom: 10 },
+  chatDecoDot: { width: 6, height: 6, borderRadius: 3 },
+  chatBottomBar: {
+    backgroundColor: 'rgba(255,255,255,0.95)', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20,
+    borderTopWidth: 2, borderTopColor: '#FECDD3', gap: 10,
+  },
+  chatInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  chatInputWrap: {
+    flex: 1, backgroundColor: '#FFF0F8', borderRadius: 24,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderWidth: 1.5, borderColor: '#FECDD3',
+  },
+  chatInput: { fontSize: 15, color: '#374151' },
+  chatSendBtn: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  chatSendBtnText: { fontSize: 18, color: '#fff', fontWeight: '700' },
+  chatEndBtn: {
+    backgroundColor: '#1A1A2E', borderRadius: 24, paddingVertical: 15, alignItems: 'center', justifyContent: 'center',
+  },
+  chatEndBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  // ── Legacy / shared ───────────────────────────────────────────────────────
   container: { padding: 20, paddingBottom: 48 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   title: { fontSize: 18, fontWeight: '700', color: COLORS.text },
