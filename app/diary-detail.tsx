@@ -216,7 +216,7 @@ export default function DiaryDetailScreen() {
           {/* AI Reply — WeChat chat bubble style */}
           {entry.aiReply ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💬 AI 护理对话</Text>
+              <Text style={styles.sectionTitle}>💬 小马虎对话</Text>
               <View style={styles.chatBox}>
                 {/* User bubble: diary content */}
                 <View style={styles.bubbleRowRight}>

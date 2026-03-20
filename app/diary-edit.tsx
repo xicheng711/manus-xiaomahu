@@ -500,7 +500,7 @@ export default function DiaryEditScreen() {
             {/* ── CONVERSATION ── */}
             {(conversation.length > 0 || aiLoading) && (
               <View style={styles.chatContainer}>
-                <Text style={styles.chatTitle}>💬 AI 护理对话</Text>
+                <Text style={styles.chatTitle}>💬 小马虎对话</Text>
 
                 {conversation.map((msg, i) => (
                   msg.role === 'user' ? (
