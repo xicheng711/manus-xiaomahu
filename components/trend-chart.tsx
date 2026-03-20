@@ -10,6 +10,8 @@ type Period = '7d' | '30d';
 
 interface TrendChartProps {
   checkIns: DailyCheckIn[];
+  patientNickname?: string;
+  caregiverName?: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

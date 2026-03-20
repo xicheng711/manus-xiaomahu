@@ -167,9 +167,9 @@ export default function AssistantScreen() {
         <View style={styles.loadingContainer}>
           <Animated.Text style={[styles.loadingEmoji, {
             transform: [{ scale: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.1] }) }]
-          }]}>🐴🐯</Animated.Text>
-          <Text style={styles.loadingTitle}>小马虎正在分析...</Text>
-          <Text style={styles.loadingSubtitle}>Gemini AI 正在生成专业护理建议</Text>
+          }]}>📊</Animated.Text>
+          <Text style={styles.loadingTitle}>小马虎正在分析记录...</Text>
+          <Text style={styles.loadingSubtitle}>正在整理近期数据，生成个性化摘要</Text>
           <ActivityIndicator color="#FF6B6B" size="large" style={{ marginTop: 20 }} />
         </View>
       </ScreenContainer>
@@ -244,7 +244,7 @@ export default function AssistantScreen() {
         )}
 
         {/* Advice Cards */}
-        <Text style={styles.sectionTitle}>📋 今日护理建议</Text>
+        <Text style={styles.sectionTitle}>📊 今日数据分析</Text>
         {(aiAdvice.adviceCards ?? []).map((card: any, i: number) => (
           <AdviceCard key={i} card={card} index={i} />
         ))}

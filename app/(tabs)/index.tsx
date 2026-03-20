@@ -173,7 +173,7 @@ function EnhancedCheckinBanner({
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.checkinTitle}>开始今日打卡</Text>
-                  <Text style={styles.checkinSub}>记录{elderNickname}的状态，解锁今日 AI 建议 ✨</Text>
+                  <Text style={styles.checkinSub}>记录{elderNickname}的状态，解锁今日 AI 分析 ✨</Text>
                 </View>
               </View>
               <View style={styles.chevronCircle}>
@@ -274,7 +274,7 @@ function EnhancedAICard({
             </LinearGradient>
           </Animated.View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.aiLabel}>AI 今日护理建议</Text>
+            <Text style={styles.aiLabel}>AI 今日记录分析</Text>
             <Text style={styles.aiSubLabel}>{motivation}</Text>
           </View>
         </View>
@@ -295,7 +295,7 @@ function EnhancedAICard({
                 <View style={styles.aiSkeletonLockBox}>
                   <Text style={{ fontSize: 20 }}>🔒</Text>
                   <Text style={styles.aiSkeletonLockText}>完成早间打卡后解锁</Text>
-                  <Text style={styles.aiSkeletonLockSub}>打卡后即可查看今日护理建议 ✨</Text>
+                  <Text style={styles.aiSkeletonLockSub}>打卡后即可查看今日分析摘要 ✨</Text>
                 </View>
               </View>
             </View>
@@ -559,7 +559,7 @@ export default function HomeScreen() {
         />
 
         {/* ── 趋势图 ── */}
-        {allCheckIns.length > 0 && <TrendChart checkIns={allCheckIns} />}
+        {allCheckIns.length > 0 && <TrendChart checkIns={allCheckIns} patientNickname={elderNickname} caregiverName={caregiverName} />}
 
         {/* ── 护理贴士 ── */}
         {tip && (
