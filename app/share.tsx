@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Animated, ActivityIndicator, Share, Dimensions, Platform,
+  Animated, ActivityIndicator, Share, Dimensions, Platform, Easing,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,6 +13,161 @@ import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 
 const { width: SW } = Dimensions.get('window');
+
+// ─── 简报生成加载屏 ──────────────────────────────────────────────────────────
+function ShareLoadingScreen() {
+  const bar1 = useRef(new Animated.Value(0)).current;
+  const bar2 = useRef(new Animated.Value(0)).current;
+  const bar3 = useRef(new Animated.Value(0)).current;
+  const cardScale = useRef(new Animated.Value(0.85)).current;
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const badgeY = useRef(new Animated.Value(0)).current;
+  const badgeRot = useRef(new Animated.Value(0)).current;
+  const progressVal = useRef(new Animated.Value(0)).current;
+  const shimmerX = useRef(new Animated.Value(-1)).current;
+  const pulse1 = useRef(new Animated.Value(0.4)).current;
+  const pulse2 = useRef(new Animated.Value(0.4)).current;
+  const pulse3 = useRef(new Animated.Value(0.4)).current;
+  const titleOpacity = useRef(new Animated.Value(0)).current;
+  const titleY = useRef(new Animated.Value(18)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(cardScale, { toValue: 1, duration: 450, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+    Animated.stagger(180, [
+      Animated.timing(bar1, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+      Animated.timing(bar2, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+      Animated.timing(bar3, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+    ]).start();
+    Animated.loop(Animated.sequence([
+      Animated.parallel([
+        Animated.timing(badgeY, { toValue: -10, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(badgeRot, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(badgeY, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(badgeRot, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    ])).start();
+    const runProgress = () => {
+      progressVal.setValue(0);
+      Animated.timing(progressVal, { toValue: 1, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: false })
+        .start(({ finished }) => { if (finished) runProgress(); });
+    };
+    runProgress();
+    Animated.loop(Animated.timing(shimmerX, { toValue: 2, duration: 1500, easing: Easing.linear, useNativeDriver: false })).start();
+    const makePulse = (anim: Animated.Value, delay: number) =>
+      Animated.loop(Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(anim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
+      ]));
+    makePulse(pulse1, 0).start();
+    makePulse(pulse2, 500).start();
+    makePulse(pulse3, 1000).start();
+    Animated.parallel([
+      Animated.timing(titleOpacity, { toValue: 1, duration: 600, delay: 300, useNativeDriver: true }),
+      Animated.timing(titleY, { toValue: 0, duration: 600, delay: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const badgeSpin = badgeRot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '5deg'] });
+  const bar1H = bar1.interpolate({ inputRange: [0, 1], outputRange: ['0%', '55%'] });
+  const bar2H = bar2.interpolate({ inputRange: [0, 1], outputRange: ['0%', '80%'] });
+  const bar3H = bar3.interpolate({ inputRange: [0, 1], outputRange: ['0%', '40%'] });
+  const progressW = progressVal.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  const shimmerLeft = shimmerX.interpolate({ inputRange: [-1, 2], outputRange: ['-30%', '130%'] });
+
+  const STATUS = [
+    { emoji: '📋', label: '今日打卡', bg: '#DBEAFE', pulse: pulse1 },
+    { emoji: '🤖', label: 'AI 撰写', bg: '#EDE9FE', pulse: pulse2 },
+    { emoji: '📰', label: '生成简报', bg: '#FCE7F3', pulse: pulse3 },
+  ];
+
+  return (
+    <LinearGradient colors={['#FFF7ED', '#FDF2F8', '#FAF5FF']} style={slStyles.root}>
+      <View style={slStyles.center}>
+        <View style={slStyles.cardWrap}>
+          <Animated.View style={[slStyles.card, { transform: [{ scale: cardScale }], opacity: cardOpacity }]}>
+            <View style={slStyles.gridBg} />
+            <View style={slStyles.bars}>
+              <View style={slStyles.barTrack}>
+                <Animated.View style={[slStyles.barFill, { height: bar1H, backgroundColor: '#4ADE80' }]} />
+              </View>
+              <View style={slStyles.barTrack}>
+                <Animated.View style={[slStyles.barFill, { height: bar2H, backgroundColor: '#F87171' }]} />
+              </View>
+              <View style={slStyles.barTrack}>
+                <Animated.View style={[slStyles.barFill, { height: bar3H, backgroundColor: '#60A5FA' }]} />
+              </View>
+            </View>
+          </Animated.View>
+          <Animated.View style={[slStyles.badge, { transform: [{ translateY: badgeY }, { rotate: badgeSpin }] }]}>
+            <LinearGradient colors={['#A855F7', '#EC4899']} style={slStyles.badgeGrad}>
+              <Text style={slStyles.badgeEmoji}>📰</Text>
+            </LinearGradient>
+          </Animated.View>
+        </View>
+
+        <Animated.View style={[slStyles.textBlock, { opacity: titleOpacity, transform: [{ translateY: titleY }] }]}>
+          <Text style={slStyles.title}>小马虎正在生成简报...</Text>
+          <Text style={slStyles.subtitle}>AI 正在整理今日记录，请稍候</Text>
+        </Animated.View>
+
+        <Animated.View style={[slStyles.progressWrap, { opacity: titleOpacity }]}>
+          <View style={slStyles.progressTrack}>
+            <Animated.View style={[slStyles.progressFill, { width: progressW }]}>
+              <LinearGradient colors={['#A855F7', '#EC4899', '#F97316']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+            </Animated.View>
+            <Animated.View style={[slStyles.shimmer, { left: shimmerLeft }]} />
+          </View>
+        </Animated.View>
+
+        <Animated.View style={[slStyles.statusRow, { opacity: titleOpacity }]}>
+          {STATUS.map((s, i) => (
+            <Animated.View key={i} style={[slStyles.statusItem, { opacity: s.pulse }]}>
+              <View style={[slStyles.statusIcon, { backgroundColor: s.bg }]}>
+                <Text style={{ fontSize: 18 }}>{s.emoji}</Text>
+              </View>
+              <Text style={slStyles.statusLabel}>{s.label}</Text>
+            </Animated.View>
+          ))}
+        </Animated.View>
+      </View>
+    </LinearGradient>
+  );
+}
+
+const slStyles = StyleSheet.create({
+  root: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  cardWrap: { position: 'relative', marginBottom: 40 },
+  card: {
+    backgroundColor: '#FFFFFF', borderRadius: 28, padding: 28,
+    shadowColor: '#A855F7', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 10,
+    width: 180, height: 180, justifyContent: 'flex-end',
+  },
+  gridBg: { ...StyleSheet.absoluteFillObject, borderRadius: 28, opacity: 0.06, borderWidth: 0.5, borderColor: '#000' },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', height: '100%' },
+  barTrack: { width: 36, height: '100%', justifyContent: 'flex-end' },
+  barFill: { width: '100%', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
+  badge: { position: 'absolute', top: -18, right: -18 },
+  badgeGrad: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#A855F7', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6 },
+  badgeEmoji: { fontSize: 22 },
+  textBlock: { alignItems: 'center', marginBottom: 28 },
+  title: { fontSize: 22, fontWeight: '800', color: '#7C3AED', textAlign: 'center', marginBottom: 8 },
+  subtitle: { fontSize: 15, color: '#6B7280', textAlign: 'center' },
+  progressWrap: { width: '100%', marginBottom: 32 },
+  progressTrack: { height: 8, backgroundColor: '#E5E7EB', borderRadius: 8, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 8, overflow: 'hidden' },
+  shimmer: { position: 'absolute', top: 0, width: '25%', height: '100%', backgroundColor: 'rgba(255,255,255,0.4)' },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
+  statusItem: { alignItems: 'center', gap: 6, flex: 1 },
+  statusIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  statusLabel: { fontSize: 12, color: '#6B7280', fontWeight: '600', textAlign: 'center' },
+});
 
 // ─── Score Ring (animated) ───────────────────────────────────────────────────
 function ScoreRing({ score, size = 100 }: { score: number; size?: number }) {
@@ -288,18 +444,7 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
   }
 
   // ── Loading ──
-  if (loading) {
-    return (
-      <ScreenContainer containerClassName="bg-background">
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingEmoji}>📊</Text>
-          <Text style={styles.loadingTitle}>正在生成今日简报...</Text>
-          <Text style={styles.loadingSubtitle}>Gemini AI 正在撰写</Text>
-          <ActivityIndicator color="#6C9E6C" size="large" style={{ marginTop: 20 }} />
-        </View>
-      </ScreenContainer>
-    );
-  }
+  if (loading) return <ShareLoadingScreen />;
 
   return (
     <ScreenContainer containerClassName="bg-background">
@@ -404,10 +549,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
   refreshBtn: { padding: 8 },
   refreshBtnText: { fontSize: 20 },
-  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  loadingEmoji: { fontSize: 64, marginBottom: 16 },
-  loadingTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 8 },
-  loadingSubtitle: { fontSize: 14, color: '#9B9B9B' },
   generatingBox: {
     flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center',
     padding: 24, backgroundColor: '#F0F7EE', borderRadius: 16, marginBottom: 20,
