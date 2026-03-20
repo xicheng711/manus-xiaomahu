@@ -9,7 +9,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { getMedications, saveMedications, Medication, getProfile } from '@/lib/storage';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import * as Haptics from 'expo-haptics';
-import { scheduleMedicationMorningEvening, cancelMedicationReminder } from '@/lib/notifications';
+import { scheduleMedicationMorningEvening, scheduleMedicationReminder, cancelMedicationReminder } from '@/lib/notifications';
 
 const TIMES = ['06:00','07:00','07:30','08:00','08:30','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
 const FREQUENCIES = ['每天一次', '每天两次', '每天三次', '每隔一天', '每周一次', '需要时服用'];
