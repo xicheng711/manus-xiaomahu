@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Animated, Easing, Alert,
+  StyleSheet, Animated, Easing, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -169,6 +169,7 @@ export default function DiaryScreen() {
   const router = useRouter();
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [editMode, setEditMode] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; date: string } | null>(null);
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -206,22 +207,18 @@ export default function DiaryScreen() {
 
   function confirmDelete(entryId: string, entryDate: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      '删除日记',
-      `确定要删除 ${entryDate} 的日记吗？\n删除后无法恢复。`,
-      [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '删除', style: 'destructive',
-          onPress: async () => {
-            await deleteDiaryEntry(entryId);
-            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            await loadEntries();
-            if (entries.length <= 1) setEditMode(false);
-          },
-        },
-      ]
-    );
+    setDeleteTarget({ id: entryId, date: entryDate });
+  }
+
+  async function executeDelete() {
+    if (!deleteTarget) return;
+    await deleteDiaryEntry(deleteTarget.id);
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setDeleteTarget(null);
+    const updated = await getDiaryEntries();
+    const next = updated.slice(0, 30);
+    setEntries(next);
+    if (next.length === 0) setEditMode(false);
   }
 
   return (
@@ -306,6 +303,40 @@ export default function DiaryScreen() {
           </TouchableOpacity>
         </Animated.View>
       )}
+
+      {/* Custom delete confirmation modal */}
+      <Modal
+        visible={!!deleteTarget}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteTarget(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalIcon}>🗑️</Text>
+            <Text style={styles.modalTitle}>删除日记</Text>
+            <Text style={styles.modalMsg}>
+              确定要删除 {deleteTarget?.date} 的日记吗？{'\n'}删除后无法恢复。
+            </Text>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setDeleteTarget(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalDeleteBtn}
+                onPress={executeDelete}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalDeleteText}>删除</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -428,4 +459,31 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabIcon: { fontSize: 24 },
+
+  // Delete confirmation modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalBox: {
+    backgroundColor: '#FFFFFF', borderRadius: 20,
+    padding: 28, width: 300, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+  },
+  modalIcon: { fontSize: 36, marginBottom: 10 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A', marginBottom: 10 },
+  modalMsg: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  modalBtns: { flexDirection: 'row', gap: 12, width: '100%' },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: '#F3F4F6', alignItems: 'center',
+    borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  modalCancelText: { fontSize: 15, fontWeight: '600', color: '#6B7280' },
+  modalDeleteBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 12,
+    backgroundColor: '#EF4444', alignItems: 'center',
+  },
+  modalDeleteText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
 });
