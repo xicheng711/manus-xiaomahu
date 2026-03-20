@@ -814,7 +814,7 @@ export default function CheckinScreen() {
     if (!isMorning) {
       const streakDots = Math.min(streak, 7);
       return (
-        <LinearGradient colors={['#0F0A2E', '#1A1040', '#2D1B69', '#4A1F8C']} style={{ flex: 1 }}>
+        <LinearGradient colors={['#3B0D7A', '#5B21B6', '#7C3AED', '#8B5CF6']} style={{ flex: 1 }}>
           {showCelebration && <CelebrationEffect />}
           {/* Star field */}
           <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -843,7 +843,7 @@ export default function CheckinScreen() {
               </View>
               {/* Green check badge */}
               <View style={styles.nightCheckBadge}>
-                <Text style={{ fontSize: 14, color: '#fff', fontWeight: '900' }}>✓</Text>
+                <Text style={{ fontSize: 20, color: '#fff', fontWeight: '900' }}>✓</Text>
               </View>
             </View>
 
@@ -1517,22 +1517,22 @@ const styles = StyleSheet.create({
 
   // ── Night / Evening done screen ──
   nightMoonOuter: {
-    width: 180, height: 180, borderRadius: 90,
-    backgroundColor: 'rgba(167,139,250,0.25)',
-    borderWidth: 3, borderColor: 'rgba(196,132,252,0.7)',
+    width: 210, height: 210, borderRadius: 105,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 28,
-    shadowColor: '#A855F7', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 40, elevation: 30,
+    shadowColor: '#C4B5FD', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 50, elevation: 30,
   },
   nightMoonInner: {
-    width: 140, height: 140, borderRadius: 70,
-    backgroundColor: 'rgba(233,213,255,0.2)',
-    borderWidth: 2, borderColor: 'rgba(216,180,254,0.5)',
+    width: 160, height: 160, borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)',
     alignItems: 'center', justifyContent: 'center',
   },
   nightCheckBadge: {
-    position: 'absolute', bottom: 10, right: 10,
-    width: 36, height: 36, borderRadius: 18,
+    position: 'absolute', bottom: 8, right: 8,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#22C55E',
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#22C55E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 8,
