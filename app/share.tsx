@@ -595,15 +595,6 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
             {/* ── Family Sync Notice ── */}
             <Text style={styles.familySyncNotice}>🏠 今日简报已自动同步到家庭共享</Text>
 
-            {/* ── Tips ── */}
-            <View style={styles.tipsCard}>
-              <Text style={styles.tipsTitle}>💡 家庭协作建议</Text>
-              <Text style={styles.tipItem}>每天分享日报，让所有家人了解{elderNickname}的状态</Text>
-              <Text style={styles.tipItem}>建立家庭微信群，共同讨论护理方案</Text>
-              <Text style={styles.tipItem}>轮流照顾，避免单人长期照顾导致疲惫</Text>
-              <Text style={styles.tipItem}>重要医疗信息及时同步给所有家庭成员</Text>
-            </View>
-
             <View style={styles.disclaimer}>
               <Text style={styles.disclaimerText}>✨ 由小马虎生成 · 仅供参考</Text>
             </View>
