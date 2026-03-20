@@ -110,8 +110,9 @@ export function getWeekday(date: Date = new Date()): string {
 }
 
 export function getFormattedDate(date: Date = new Date()): string {
+  const y = date.getFullYear();
   const m = date.getMonth() + 1;
   const d = date.getDate();
   const w = getWeekday(date);
-  return `${m}月${d}日 ${w}`;
+  return `${y}年${m}月${d}日 ${w}`;
 }
