@@ -4,8 +4,7 @@ import { HapticTab } from "@/components/haptic-tab";
 import { Platform, View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-const INACTIVE_BG = "#382d68";
-const INACTIVE_BORDER = "#382c67";
+const INACTIVE_BG = "#F3F4F6";
 const INACTIVE_LABEL = "#9CA3AF";
 
 const TAB_CONFIG: Record<string, {
@@ -37,7 +36,7 @@ function TabIcon({ route, focused }: { route: string; focused: boolean }) {
           <Text style={styles.activeEmoji}>{cfg.emoji}</Text>
         </LinearGradient>
       ) : (
-        <View style={[styles.iconCircle, { backgroundColor: INACTIVE_BG, borderWidth: 1.5, borderColor: INACTIVE_BORDER }]}>
+        <View style={[styles.iconCircle, { backgroundColor: INACTIVE_BG }]}>
           <Text style={styles.inactiveEmoji}>{cfg.emoji}</Text>
         </View>
       )}
