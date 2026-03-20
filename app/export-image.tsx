@@ -202,7 +202,7 @@ function LongImageCard({
       <View style={imgStyles.footer}>
         <View style={imgStyles.footerDivider} />
         <Text style={imgStyles.footerText}>🐴🐯 小马虎 · 用爱守护每一天</Text>
-        <Text style={imgStyles.footerSub}>{dateStr} {timeStr} · Gemini AI 生成</Text>
+        <Text style={imgStyles.footerSub}>{dateStr} {timeStr} · 小马虎生成</Text>
       </View>
     </View>
   );

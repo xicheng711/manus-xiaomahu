@@ -232,7 +232,7 @@ export default function DiaryDetailScreen() {
                     <Text style={styles.aiAvatarEmoji}>🩺</Text>
                   </View>
                   <Text style={styles.aiName}>小马虎护理顾问</Text>
-                  <Text style={styles.aiBadge}>Gemini AI</Text>
+                  <Text style={styles.aiBadge}>小马虎</Text>
                 </View>
                 {/* AI blue bubble */}
                 <View style={styles.bubbleRowLeft}>

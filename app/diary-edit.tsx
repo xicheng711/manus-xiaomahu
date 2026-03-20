@@ -99,7 +99,7 @@ function AIBubble({ text, animate = false }: { text: string; animate?: boolean }
           <Text style={styles.aiAvatarEmoji}>🩺</Text>
         </View>
         <Text style={styles.aiName}>小马虎护理顾问</Text>
-        <Text style={styles.aiBadge}>Gemini AI</Text>
+        <Text style={styles.aiBadge}>小马虎</Text>
       </View>
       <View style={styles.bubbleRowLeft}>
         <View style={styles.bubbleBlue}>
@@ -531,7 +531,7 @@ export default function DiaryEditScreen() {
                   <View style={styles.followUpRow}>
                     <TextInput
                       style={styles.followUpInput}
-                      placeholder="继续向 AI 提问..."
+                      placeholder="继续向小马虎提问..."
                       value={followUpInput}
                       onChangeText={setFollowUpInput}
                       placeholderTextColor="#B8BCC0"

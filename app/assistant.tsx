@@ -345,7 +345,7 @@ export default function AssistantScreen() {
         setAiAdvice(result.advice);
         setWeatherData(result.weather);
       } else {
-        setError(result.error ?? 'AI建议生成失败，请稍后重试');
+        setError(result.error ?? '小马虎分析失败，请稍后重试');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '网络错误，请检查连接');
@@ -488,7 +488,7 @@ export default function AssistantScreen() {
 
         {/* AI badge */}
         <View style={styles.aiBadge}>
-          <Text style={styles.aiBadgeText}>✨ 由 Gemini 2.5 Flash AI 专业生成</Text>
+          <Text style={styles.aiBadgeText}>✨ 由小马虎分析生成</Text>
         </View>
 
         {/* Action buttons */}

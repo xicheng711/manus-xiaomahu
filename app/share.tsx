@@ -286,7 +286,7 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
       {/* ── Footer ── */}
       <View style={cardStyles.footer}>
         <Text style={cardStyles.footerLeft}>由 {caregiverName} 用心记录</Text>
-        <Text style={cardStyles.footerRight}>✨ Gemini AI · 小马虎</Text>
+        <Text style={cardStyles.footerRight}>✨ 小马虎</Text>
       </View>
     </Animated.View>
   );
@@ -471,7 +471,7 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
         ) : generating ? (
           <View style={styles.generatingBox}>
             <ActivityIndicator color="#6C9E6C" />
-            <Text style={styles.generatingText}>✨ Gemini AI 正在生成精美简报...</Text>
+            <Text style={styles.generatingText}>✨ 小马虎正在生成精美简报...</Text>
           </View>
         ) : briefing && checkIn ? (
           <>
@@ -533,7 +533,7 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
             </View>
 
             <View style={styles.disclaimer}>
-              <Text style={styles.disclaimerText}>✨ 由 Gemini AI 生成 · 仅供参考，不构成医疗建议</Text>
+              <Text style={styles.disclaimerText}>✨ 由小马虎生成 · 仅供参考</Text>
             </View>
           </>
         ) : null}
