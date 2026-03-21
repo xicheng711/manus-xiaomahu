@@ -179,8 +179,26 @@ export default function OnboardingScreen() {
   const [joinerCodeError, setJoinerCodeError] = useState('');
   const [joinerName, setJoinerName] = useState('');
   const [joinerEmoji, setJoinerEmoji] = useState('👩');
+  const [joinerPhotoUri, setJoinerPhotoUri] = useState<string | undefined>(undefined);
+  const [joinerAvatarType, setJoinerAvatarType] = useState<'photo' | 'emoji'>('emoji');
   const [joinerRelationship, setJoinerRelationship] = useState('');
   const [joinerCustomRelationship, setJoinerCustomRelationship] = useState('');
+
+  async function pickJoinerPhoto() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setJoinerPhotoUri(result.assets[0].uri);
+      setJoinerAvatarType('photo');
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
 
   // ── Legacy family step states (kept for compatibility) ────────
   const [familyMode, setFamilyMode] = useState<'choose' | 'join' | 'create' | 'skip'>('choose');
@@ -355,9 +373,9 @@ export default function OnboardingScreen() {
   const canNext = getCanNext();
 
   return (
-    <ScreenContainer containerClassName={step === 1 ? 'bg-transparent' : 'bg-background'}>
-      {/* Full-screen gradient background for step 1 (Figma design) */}
-      {step === 1 && (
+    <ScreenContainer containerClassName={(step === 1 || step === 4) ? 'bg-transparent' : 'bg-background'}>
+      {/* Full-screen gradient background for step 1 & joiner step 4 (Figma design) */}
+      {(step === 1 || (step === 4 && userType === 'joiner')) && (
         <LinearGradient
           colors={['#FFF0F5', '#FFE4EC', '#FFF5F7', '#FFF0F5']}
           locations={[0, 0.3, 0.7, 1]}
@@ -907,17 +925,32 @@ export default function OnboardingScreen() {
         )}
 
         {/* ══════════════════════════════════════════════
-            JOINER PATH: Step 4 – Identity (name + relationship)
+            JOINER PATH: Step 4 – Identity (name + avatar + photo)
             ══════════════════════════════════════════════ */}
         {step === 4 && userType === 'joiner' && (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
             <View style={styles.stepContainer}>
-              <Text style={styles.mascot}>😊</Text>
+              {/* Avatar preview circle with upload tap */}
+              <TouchableOpacity onPress={pickJoinerPhoto} activeOpacity={0.82} style={styles.joinerAvatarWrap}>
+                <LinearGradient colors={['#F9A8D4', '#FB7185']} style={styles.joinerAvatarCircle}>
+                  {joinerPhotoUri ? (
+                    <Image source={{ uri: joinerPhotoUri }} style={styles.joinerAvatarPhoto} />
+                  ) : (
+                    <Text style={{ fontSize: 44 }}>{joinerEmoji}</Text>
+                  )}
+                </LinearGradient>
+                {/* Camera badge */}
+                <View style={styles.joinerCameraBadge}>
+                  <Text style={{ fontSize: 14 }}>📷</Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={[styles.avatarHint, { marginTop: 8, marginBottom: 24 }]}>点击上传你的照片</Text>
+
               <Text style={styles.title}>告诉我们你是谁</Text>
-              <Text style={styles.subtitle}>方便家庭成员认识你</Text>
+              <Text style={[styles.subtitle, { marginBottom: 24 }]}>方便家庭成员认识你</Text>
 
               {/* Name */}
-              <View style={[styles.inputGroup, { width: '100%', marginTop: 16 }]}>
+              <View style={[styles.inputGroup, { width: '100%' }]}>
                 <Text style={styles.label}>你的昵称</Text>
                 <TextInput
                   style={styles.input}
@@ -928,52 +961,33 @@ export default function OnboardingScreen() {
                 />
               </View>
 
-              {/* Avatar */}
-              <View style={[styles.inputGroup, { width: '100%' }]}>
-                <Text style={styles.label}>选择头像</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  {FAMILY_EMOJIS.map(e => (
-                    <TouchableOpacity
-                      key={e}
-                      style={[styles.familyEmojiBtn, joinerEmoji === e && styles.familyEmojiBtnActive]}
-                      onPress={() => setJoinerEmoji(e)}
-                    >
-                      <Text style={{ fontSize: 22 }}>{e}</Text>
-                    </TouchableOpacity>
-                  ))}
+              {/* Emoji avatar grid (secondary option when no photo) */}
+              {!joinerPhotoUri && (
+                <View style={[styles.inputGroup, { width: '100%' }]}>
+                  <Text style={styles.label}>或选择一个表情头像</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                    {FAMILY_EMOJIS.map(e => (
+                      <TouchableOpacity
+                        key={e}
+                        style={[styles.familyEmojiBtn, joinerEmoji === e && joinerAvatarType === 'emoji' && styles.familyEmojiBtnActive]}
+                        onPress={() => { setJoinerEmoji(e); setJoinerAvatarType('emoji'); }}
+                      >
+                        <Text style={{ fontSize: 22 }}>{e}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
+              )}
 
-              {/* Relationship */}
-              <View style={[styles.inputGroup, { width: '100%' }]}>
-                <Text style={styles.label}>与被照顾者的关系</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {RELATIONSHIPS.map(r => (
-                    <TouchableOpacity
-                      key={r}
-                      style={[
-                        styles.familyRoleBtn,
-                        joinerRelationship === r && styles.familyRoleBtnActive,
-                        { paddingHorizontal: 12, paddingVertical: 8 }
-                      ]}
-                      onPress={() => setJoinerRelationship(r)}
-                    >
-                      <Text style={[styles.familyRoleBtnText, joinerRelationship === r && styles.familyRoleBtnTextActive]}>
-                        {r}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                {joinerRelationship === '其他' && (
-                  <TextInput
-                    style={[styles.input, { marginTop: 10 }]}
-                    placeholder="请输入关系..."
-                    value={joinerCustomRelationship}
-                    onChangeText={setJoinerCustomRelationship}
-                    placeholderTextColor="#9BA1A6"
-                  />
-                )}
-              </View>
+              {/* Clear photo button if photo selected */}
+              {joinerPhotoUri && (
+                <TouchableOpacity
+                  onPress={() => { setJoinerPhotoUri(undefined); setJoinerAvatarType('emoji'); }}
+                  style={{ marginTop: 4, paddingVertical: 8 }}
+                >
+                  <Text style={{ color: '#FB7185', fontSize: 14, textAlign: 'center' }}>重新选择表情头像</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
         )}
@@ -1299,6 +1313,23 @@ const styles = StyleSheet.create({
     alignItems: 'center', width: '100%',
   },
   btnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  // ── Joiner avatar upload (step 4) ────────────────────────────
+  joinerAvatarWrap: { position: 'relative', marginTop: 8, marginBottom: 4 },
+  joinerAvatarCircle: {
+    width: 100, height: 100, borderRadius: 50,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#FB7185', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+  },
+  joinerAvatarPhoto: { width: 100, height: 100, borderRadius: 50 },
+  joinerCameraBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#FECDD3',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3,
+  },
 
   // ── Role Selection (step 1) — Figma design ────────────────────
   // Card now wraps a LinearGradient — only layout/border/shadow here
