@@ -355,7 +355,17 @@ export default function OnboardingScreen() {
   const canNext = getCanNext();
 
   return (
-    <ScreenContainer containerClassName="bg-background">
+    <ScreenContainer containerClassName={step === 1 ? 'bg-transparent' : 'bg-background'}>
+      {/* Full-screen gradient background for step 1 (Figma design) */}
+      {step === 1 && (
+        <LinearGradient
+          colors={['#FFF0F5', '#FFE4EC', '#FFF5F7', '#FFF0F5']}
+          locations={[0, 0.3, 0.7, 1]}
+          start={{ x: 0.2, y: 0 }}
+          end={{ x: 0.8, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      )}
       {/* Progress bar — gradient horizontal segments (Figma design) */}
       <View style={styles.progressBarRow}>
         {STEPS.map((_, i) => (
