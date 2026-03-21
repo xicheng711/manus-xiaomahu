@@ -7,7 +7,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getMedications, saveMedications, Medication, getProfile, CareNeedType, CareNeedsProfile } from '@/lib/storage';
+import { getMedications, saveMedications, Medication, getProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
+import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import * as Haptics from 'expo-haptics';
 import { scheduleMedicationMorningEvening, scheduleMedicationReminder, cancelMedicationReminder } from '@/lib/notifications';
@@ -85,7 +86,7 @@ function MedCard({ med, onToggle, onDelete, onEdit, index }: { med: Medication; 
 }
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
-export default function MedicationScreen() {
+function MedicationScreenContent() {
   const [meds, setMeds] = useState<Medication[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
   const [careNeeds, setCareNeeds] = useState<CareNeedType[]>([]);
@@ -706,3 +707,17 @@ const styles = StyleSheet.create({
   tipsList: { gap: 10 },
   tipItem: { fontSize: 13, color: '#78350F', lineHeight: 21, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: '#FDE68A' },
 });
+
+export default function MedicationScreen() {
+  const [isCreator, setIsCreator] = useState<boolean | null>(null);
+  useFocusEffect(useCallback(() => { getCurrentUserIsCreator().then(v => setIsCreator(v)); }, []));
+  if (isCreator === null) return null;
+  if (!isCreator) return (
+    <JoinerLockedScreen
+      icon="💊"
+      title="用药管理"
+      description="记录和管理家人的用药是主要照顾者的专属功能。"
+    />
+  );
+  return <MedicationScreenContent />;
+}

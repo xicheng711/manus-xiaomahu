@@ -8,7 +8,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getDiaryEntries, deleteDiaryEntry, DiaryEntry } from '@/lib/storage';
+import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator } from '@/lib/storage';
+import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
@@ -166,7 +167,7 @@ function EmptyState({ onStart }: { onStart: () => void }) {
 }
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
-export default function DiaryScreen() {
+function DiaryScreenContent() {
   const router = useRouter();
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [editMode, setEditMode] = useState(false);
@@ -487,3 +488,17 @@ const styles = StyleSheet.create({
   },
   modalDeleteText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
 });
+
+export default function DiaryScreen() {
+  const [isCreator, setIsCreator] = useState<boolean | null>(null);
+  useFocusEffect(useCallback(() => { getCurrentUserIsCreator().then(v => setIsCreator(v)); }, []));
+  if (isCreator === null) return null;
+  if (!isCreator) return (
+    <JoinerLockedScreen
+      icon="📔"
+      title="护理日记"
+      description="记录家人护理日记是主要照顾者的专属功能。"
+    />
+  );
+  return <DiaryScreenContent />;
+}

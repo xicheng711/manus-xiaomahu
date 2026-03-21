@@ -5,10 +5,11 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getAllCheckIns, getProfile, DailyCheckIn, SleepInput, todayStr } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getAllCheckIns, getProfile, DailyCheckIn, SleepInput, todayStr, getCurrentUserIsCreator } from '@/lib/storage';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import * as Haptics from 'expo-haptics';
@@ -560,7 +561,7 @@ const MEAL_OPTIONS = ['正常进食', '食量偏少', '几乎没吃', '吃了特
 const MEAL_ICONS = ['🍽️', '🥢', '🚫', '🍳'];
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
-export default function CheckinScreen() {
+function CheckinScreenContent() {
   const router = useRouter();
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [mode, setMode] = useState<'landing' | 'morning' | 'evening'>('landing');
@@ -1633,3 +1634,17 @@ const calStyles = StyleSheet.create({
   },
   popupCloseText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
 });
+
+export default function CheckinScreen() {
+  const [isCreator, setIsCreator] = useState<boolean | null>(null);
+  useFocusEffect(useCallback(() => { getCurrentUserIsCreator().then(v => setIsCreator(v)); }, []));
+  if (isCreator === null) return null;
+  if (!isCreator) return (
+    <JoinerLockedScreen
+      icon="✨"
+      title="每日打卡"
+      description="记录家人每天的状态是主要照顾者的专属功能。"
+    />
+  );
+  return <CheckinScreenContent />;
+}

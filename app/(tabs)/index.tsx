@@ -9,11 +9,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getRandomTip } from '@/lib/care-knowledge';
 import { getWeatherByGPS, buildGreetingWithWeather, fetchWeather, GpsWeatherInfo, WeatherData } from '@/lib/weather';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getCurrentUserIsCreator } from '@/lib/storage';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
 import * as Haptics from 'expo-haptics';
 import { WeeklyEcho } from '@/components/weekly-echo';
+import { JoinerHomeScreen } from '@/components/joiner-home';
 
 const { width } = Dimensions.get('window');
 
@@ -419,6 +420,21 @@ function getPersonalizedAISuggestion(checkIn: DailyCheckIn): string {
 
 // ─── 主页面 ─────────────────────────────────────────────────────────────
 export default function HomeScreen() {
+  const [isCreator, setIsCreator] = useState<boolean | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    getCurrentUserIsCreator().then(v => setIsCreator(v));
+  }, []));
+
+  // 未知角色时不渲染（避免闪烁）
+  if (isCreator === null) return null;
+  // Joiner → 显示观察者首页
+  if (!isCreator) return <JoinerHomeScreen />;
+
+  return <CreatorHomeScreen />;
+}
+
+function CreatorHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [greeting, setGreeting] = useState('');
