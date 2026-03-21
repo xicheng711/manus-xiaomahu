@@ -243,6 +243,7 @@ export default function FamilyScreen() {
   const [newAnnouncementId, setNewAnnouncementId] = useState<string | null>(null);
   const briefingCardRef = useRef<View>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -437,7 +438,7 @@ export default function FamilyScreen() {
           right={
             <TouchableOpacity
               style={styles.roomCodeBadge}
-              onPress={() => Alert.alert('邀请家人', `邀请码：${room.roomCode}\n\n将此码分享给家人，让他们加入你的家庭空间！`)}
+              onPress={() => setShowInviteModal(true)}
             >
               <Text style={styles.roomCodeText}>🔗 {room.roomCode}</Text>
             </TouchableOpacity>
@@ -489,7 +490,7 @@ export default function FamilyScreen() {
         ))}
         <TouchableOpacity
           style={styles.addMemberChip}
-          onPress={() => Alert.alert('邀请家人', `邀请码：${room.roomCode}\n\n将此码分享给家人，让他们下载小马虎并输入邀请码加入！`)}
+          onPress={() => setShowInviteModal(true)}
         >
           <View style={styles.addMemberBtn}>
             <Text style={styles.addMemberBtnText}>＋</Text>
@@ -908,6 +909,32 @@ export default function FamilyScreen() {
           </View>
         );
       })()}
+
+      {/* ── 邀请家人 Modal ── */}
+      <Modal
+        visible={showInviteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowInviteModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.inviteOverlay}
+          activeOpacity={1}
+          onPress={() => setShowInviteModal(false)}
+        >
+          <View style={styles.inviteCard}>
+            <Text style={styles.inviteTitle}>👨‍👩‍👧 邀请家人加入</Text>
+            <Text style={styles.inviteDesc}>将下方邀请码分享给家人，让他们在小马虎里输入加入家庭空间</Text>
+            <View style={styles.inviteCodeBox}>
+              <Text style={styles.inviteCode}>{room.roomCode}</Text>
+            </View>
+            <Text style={styles.inviteHint}>家人打开小马虎 → 家庭共享 → 输入邀请码 → 加入</Text>
+            <TouchableOpacity style={styles.inviteCloseBtn} onPress={() => setShowInviteModal(false)}>
+              <Text style={styles.inviteCloseBtnText}>知道了</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Animated.View>
   );
 }
@@ -1106,6 +1133,16 @@ const styles = StyleSheet.create({
   briefingDateTabActive: { backgroundColor: '#A855F7', borderColor: '#A855F7' },
   briefingDateTabText: { fontSize: 13, fontWeight: '600', color: '#687076' },
   briefingDateTabTextActive: { color: '#fff' },
+  // 邀请 Modal
+  inviteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  inviteCard: { width: '100%', backgroundColor: '#fff', borderRadius: 24, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 16 },
+  inviteTitle: { fontSize: 18, fontWeight: '800', color: '#1A1A2E', marginBottom: 10, textAlign: 'center' },
+  inviteDesc: { fontSize: 13, color: '#687076', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  inviteCodeBox: { backgroundColor: '#FAF5FF', borderRadius: 16, borderWidth: 2, borderColor: '#C084FC', borderStyle: 'dashed', paddingHorizontal: 32, paddingVertical: 18, marginBottom: 16, alignItems: 'center' },
+  inviteCode: { fontSize: 32, fontWeight: '900', color: '#9333EA', letterSpacing: 8 },
+  inviteHint: { fontSize: 12, color: '#9BA1A6', textAlign: 'center', marginBottom: 24, lineHeight: 18 },
+  inviteCloseBtn: { backgroundColor: '#A855F7', borderRadius: 20, paddingHorizontal: 40, paddingVertical: 14, alignItems: 'center' },
+  inviteCloseBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
 
 const card = StyleSheet.create({
