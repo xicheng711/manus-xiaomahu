@@ -1,10 +1,10 @@
 export function ObserverFeed() {
   const feed = [
-    { id: 1, type: "checkin", time: "08:23", icon: "✅", color: "#10B981", bg: "#ECFDF5", tag: "早间打卡", title: "奶奶今晨状态良好", detail: "心情 😊 好 · 睡眠 7.5h · 用药已服" },
-    { id: 2, type: "med", time: "08:30", icon: "💊", color: "#6366F1", bg: "#EEF2FF", tag: "用药记录", title: "降压药已按时服用", detail: "安立生坦片 5mg · 小明记录" },
-    { id: 3, type: "diary", time: "10:15", icon: "📔", color: "#F59E0B", bg: "#FFFBEB", tag: "护理日记", title: "今天带奶奶晒了太阳", detail: "散步约20分钟，精神比昨天好很多…" },
-    { id: 4, type: "announce", time: "14:02", icon: "📢", color: "#EC4899", bg: "#FDF2F8", tag: "家庭公告", title: "下周三复查，提醒大家", detail: "协和医院神经内科 · 记得早点出发" },
-    { id: 5, type: "checkin", time: "21:05", icon: "🌙", color: "#8B5CF6", bg: "#F5F3FF", tag: "晚间打卡", title: "今日护理完成 ⭐ 92分", detail: "心情 😴 平静 · 晚饭胃口好 · 已休息" },
+    { id: 1, type: "checkin", time: "08:23", icon: "✅", color: "#10B981", bg: "#ECFDF5", tag: "早间打卡", title: "奶奶今晨状态良好", detail: "心情 😊 好 · 睡眠 7.5h · 用药已服", author: null },
+    { id: 2, type: "med", time: "08:30", icon: "💊", color: "#6366F1", bg: "#EEF2FF", tag: "用药记录", title: "降压药已按时服用", detail: "安立生坦片 5mg", author: "小明" },
+    { id: 3, type: "diary", time: "10:15", icon: "📔", color: "#F59E0B", bg: "#FFFBEB", tag: "护理日记", title: "今天带奶奶晒了太阳", detail: "散步约20分钟，精神比昨天好很多…", author: "小明" },
+    { id: 4, type: "announce", time: "14:02", icon: "📢", color: "#EC4899", bg: "#FDF2F8", tag: "家庭公告", title: "下周三复查，提醒大家", detail: "协和医院神经内科 · 记得早点出发", author: "小明" },
+    { id: 5, type: "checkin", time: "21:05", icon: "🌙", color: "#8B5CF6", bg: "#F5F3FF", tag: "晚间打卡", title: "今日护理完成 ⭐ 92分", detail: "心情 😴 平静 · 晚饭胃口好 · 已休息", author: null },
   ];
 
   return (
@@ -70,8 +70,14 @@ export function ObserverFeed() {
               </div>
               {/* Content */}
               <div className="flex-1 pb-1">
-                <div className="flex items-center gap-2 mb-0.5">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: item.bg, color: item.color }}>{item.tag}</span>
+                  {item.author && (
+                    <span className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+                      <span className="w-4 h-4 rounded-full bg-slate-200 inline-flex items-center justify-center text-xs leading-none">👤</span>
+                      {item.author}
+                    </span>
+                  )}
                   <span className="text-xs text-slate-400">{item.time}</span>
                 </div>
                 <p className="text-sm font-semibold text-slate-800">{item.title}</p>
