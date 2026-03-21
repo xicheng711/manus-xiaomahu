@@ -60,6 +60,7 @@ export interface ElderProfile {
   caregiverZodiacName: string;
   caregiverPhotoUri?: string;  // uploaded photo URI
   caregiverAvatarType?: 'photo' | 'zodiac'; // which avatar to show
+  elderAvatarType?: 'photo' | 'zodiac'; // 被照顾者头像类型
   city: string;            // 城市名，用于天气查询
   reminderMorning: string;  // e.g. '08:00'
   reminderEvening: string;  // e.g. '21:00'

@@ -1,11 +1,11 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet,
-  Platform, TextInput, Alert,
+  Platform, TextInput, Image, Modal,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { ScreenContainer } from '@/components/screen-container';
 import { getProfile, saveProfile, ElderProfile } from '@/lib/storage';
 import { getZodiac } from '@/lib/zodiac';
@@ -21,12 +21,37 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [permDenied, setPermDenied] = useState(false);
 
   // Inline edit state
   const [editingCaregiverName, setEditingCaregiverName] = useState(false);
   const [caregiverNameDraft, setCaregiverNameDraft] = useState('');
   const [editingElderNickname, setEditingElderNickname] = useState(false);
   const [elderNicknameDraft, setElderNicknameDraft] = useState('');
+
+  const pickPhoto = useCallback(async (target: 'caregiver' | 'elder') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setPermDenied(true);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    const uri = result.assets[0].uri;
+    setProfile(prev => {
+      if (!prev) return prev;
+      const updated = target === 'caregiver'
+        ? { ...prev, caregiverPhotoUri: uri, caregiverAvatarType: 'photo' as const }
+        : { ...prev, photoUri: uri, elderAvatarType: 'photo' as const };
+      saveProfile(updated);
+      return updated;
+    });
+  }, []);
 
   useFocusEffect(useCallback(() => {
     getProfile().then(p => {
@@ -113,7 +138,18 @@ export default function ProfileScreen() {
         {/* ── 照顾者信息 ── */}
         <Text style={styles.sectionLabel}>👤 照顾者</Text>
         <View style={[styles.card, { backgroundColor: caregiverZodiac.bgColor }]}>
-          <Text style={styles.cardEmoji}>{caregiverZodiac.emoji}</Text>
+          {/* 头像区域 */}
+          <TouchableOpacity style={styles.avatarWrap} onPress={() => pickPhoto('caregiver')} activeOpacity={0.8}>
+            {profile.caregiverAvatarType === 'photo' && profile.caregiverPhotoUri ? (
+              <Image source={{ uri: profile.caregiverPhotoUri }} style={styles.avatarPhoto} />
+            ) : (
+              <Text style={styles.cardEmoji}>{caregiverZodiac.emoji}</Text>
+            )}
+            <View style={styles.cameraChip}>
+              <Text style={styles.cameraChipText}>📷</Text>
+            </View>
+          </TouchableOpacity>
+
           <View style={styles.cardInfo}>
             {editingCaregiverName ? (
               <View style={styles.inlineEditRow}>
@@ -134,7 +170,7 @@ export default function ProfileScreen() {
                   setCaregiverNameDraft(profile.caregiverName);
                   setEditingCaregiverName(false);
                 }}>
-                  <Ionicons name="close" size={18} color="#9BA1A6" />
+                  <Text style={{ fontSize: 16, color: '#9BA1A6' }}>✕</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -147,7 +183,7 @@ export default function ProfileScreen() {
                     setEditingCaregiverName(true);
                   }}
                 >
-                  <Ionicons name="pencil-outline" size={16} color="#9BA1A6" />
+                  <Text style={{ fontSize: 13, color: '#9BA1A6' }}>✏️</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -159,7 +195,18 @@ export default function ProfileScreen() {
         {/* ── 老人信息 ── */}
         <Text style={styles.sectionLabel}>🧡 被照顾者</Text>
         <View style={[styles.card, { backgroundColor: elderZodiac.bgColor }]}>
-          <Text style={styles.cardEmoji}>{elderZodiac.emoji}</Text>
+          {/* 头像区域 */}
+          <TouchableOpacity style={styles.avatarWrap} onPress={() => pickPhoto('elder')} activeOpacity={0.8}>
+            {profile.elderAvatarType === 'photo' && profile.photoUri ? (
+              <Image source={{ uri: profile.photoUri }} style={styles.avatarPhoto} />
+            ) : (
+              <Text style={styles.cardEmoji}>{elderZodiac.emoji}</Text>
+            )}
+            <View style={styles.cameraChip}>
+              <Text style={styles.cameraChipText}>📷</Text>
+            </View>
+          </TouchableOpacity>
+
           <View style={styles.cardInfo}>
             {editingElderNickname ? (
               <View style={styles.inlineEditRow}>
@@ -180,7 +227,7 @@ export default function ProfileScreen() {
                   setElderNicknameDraft(profile.nickname || profile.name);
                   setEditingElderNickname(false);
                 }}>
-                  <Ionicons name="close" size={18} color="#9BA1A6" />
+                  <Text style={{ fontSize: 16, color: '#9BA1A6' }}>✕</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -193,7 +240,7 @@ export default function ProfileScreen() {
                     setEditingElderNickname(true);
                   }}
                 >
-                  <Ionicons name="pencil-outline" size={16} color="#9BA1A6" />
+                  <Text style={{ fontSize: 13, color: '#9BA1A6' }}>✏️</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -201,6 +248,20 @@ export default function ProfileScreen() {
             <Text style={styles.cardSub2}>{profile.name}</Text>
           </View>
         </View>
+
+        {/* 权限被拒绝提示 Modal */}
+        <Modal visible={permDenied} transparent animationType="fade" onRequestClose={() => setPermDenied(false)}>
+          <View style={styles.permOverlay}>
+            <View style={styles.permBox}>
+              <Text style={{ fontSize: 32, marginBottom: 10 }}>📷</Text>
+              <Text style={styles.permTitle}>需要相册权限</Text>
+              <Text style={styles.permMsg}>请前往手机「设置」→「隐私」→「照片」，允许此 App 访问相册。</Text>
+              <TouchableOpacity style={styles.permBtn} onPress={() => setPermDenied(false)}>
+                <Text style={styles.permBtnText}>知道了</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         {/* City */}
         <View style={styles.infoRow}>
@@ -303,6 +364,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 16,
     marginBottom: 16,
   },
+  // Avatar
+  avatarWrap: { position: 'relative', width: 72, height: 72, alignItems: 'center', justifyContent: 'center' },
+  avatarPhoto: { width: 72, height: 72, borderRadius: 36, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.7)' },
+  cameraChip: {
+    position: 'absolute', bottom: -2, right: -4,
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3,
+  },
+  cameraChipText: { fontSize: 13 },
+
   cardEmoji: { fontSize: 48 },
   cardInfo: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
@@ -357,6 +429,14 @@ const styles = StyleSheet.create({
   editBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   btn: { backgroundColor: '#FF6B6B', borderRadius: 20, paddingHorizontal: 32, paddingVertical: 14 },
   btnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  // Permission denied modal
+  permOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  permBox: { backgroundColor: '#fff', borderRadius: 20, padding: 28, width: 300, alignItems: 'center' },
+  permTitle: { fontSize: 17, fontWeight: '800', color: '#11181C', marginBottom: 8 },
+  permMsg: { fontSize: 14, color: '#687076', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  permBtn: { backgroundColor: '#FF6B6B', borderRadius: 14, paddingHorizontal: 28, paddingVertical: 12 },
+  permBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
   // Reminder time customization
   reminderEditCard: {
