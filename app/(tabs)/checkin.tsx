@@ -1180,7 +1180,7 @@ function CheckinScreenContent() {
           ))}
           <TextInput
             style={styles.mealCustomInput}
-            placeholder={`补充【${elderNickname}】今天吃的东西…`}
+            placeholder={`补充${elderNickname}今天吃的东西…`}
             value={mealCustom}
             onChangeText={setMealCustom}
             placeholderTextColor="#B8BCC0"
