@@ -1013,7 +1013,7 @@ function CheckinScreenContent() {
       role: 'elder' as const,
       roleLabel: `【${elderNickname}】的状态`,
       q: `${elderNickname}昨晚睡眠情况`,
-      emoji: '🌙',
+      emoji: '🌤️',
       hint: sleepType === 'quick' ? '选择总睡眠时长' : '添加具体睡眠时间段',
       content: (
         <View style={{ gap: 12 }}>
@@ -1394,8 +1394,8 @@ function CheckinScreenContent() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Animated Progress Bar */}
-        <AnimatedProgress current={step} total={currentSteps.length} />
+        {/* Animated Progress Bar — hide when single step */}
+        {currentSteps.length > 1 && <AnimatedProgress current={step} total={currentSteps.length} />}
 
         {/* Question Card */}
         <Animated.View style={[styles.questionCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -1406,7 +1406,9 @@ function CheckinScreenContent() {
             <View style={styles.questionEmojiCircle}>
               <Text style={styles.questionEmojiText}>{(currentStep as any).emoji || '📋'}</Text>
             </View>
-            <Text style={styles.questionNum}>第 {step + 1} / {currentSteps.length} 题</Text>
+            {currentSteps.length > 1 && (
+              <Text style={styles.questionNum}>第 {step + 1} / {currentSteps.length} 题</Text>
+            )}
           </View>
           <Text style={styles.question}>{currentStep.q}</Text>
           <Text style={styles.hint}>{currentStep.hint}</Text>
