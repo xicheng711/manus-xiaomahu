@@ -765,10 +765,7 @@ function CheckinScreenContent() {
       const derivedQuality: 'good' | 'fair' | 'poor' =
         nightWakings === 0 ? 'good' : nightWakings <= 2 ? 'fair' : 'poor';
       const effectiveSleepHours = sleepType === 'detailed' && sleepSegments.length > 0
-        ? sleepSegments.reduce((sum, seg) => {
-            const ms = new Date(seg.end).getTime() - new Date(seg.start).getTime();
-            return sum + Math.max(0, ms / 3600000);
-          }, 0)
+        ? computeSegmentTotal()
         : SLEEP_RANGE_HOURS[sleepRangeIdx];
 
       Object.assign(data, {
@@ -946,12 +943,15 @@ function CheckinScreenContent() {
     );
   }
 
+  const computeSegmentHours = (seg: { start: string; end: string }) => {
+    let ms = new Date(seg.end).getTime() - new Date(seg.start).getTime();
+    if (ms < 0) ms += 24 * 3600000;
+    return Math.min(ms / 3600000, 16);
+  };
+
   const computeSegmentTotal = () => {
     if (sleepSegments.length === 0) return 0;
-    return sleepSegments.reduce((sum, seg) => {
-      const ms = new Date(seg.end).getTime() - new Date(seg.start).getTime();
-      return sum + Math.max(0, ms / 3600000);
-    }, 0);
+    return sleepSegments.reduce((sum, seg) => sum + computeSegmentHours(seg), 0);
   };
 
   const addSleepSegment = () => {
@@ -974,13 +974,12 @@ function CheckinScreenContent() {
   const updateSegmentTime = (idx: number, field: 'start' | 'end', hour: number, minute: number) => {
     setSleepSegments(prev => {
       const updated = [...prev];
-      const d = new Date(updated[idx][field]);
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const baseDate = hour >= 18 ? yesterday : today;
+      const d = new Date(baseDate);
       d.setHours(hour, minute, 0, 0);
-      if (field === 'start') {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        d.setFullYear(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-      }
       updated[idx] = { ...updated[idx], [field]: d.toISOString() };
       return updated;
     });

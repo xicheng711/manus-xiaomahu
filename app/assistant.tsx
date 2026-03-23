@@ -389,7 +389,9 @@ export default function AssistantScreen() {
                 {ci.sleepSegments.map((seg: any, i: number) => {
                   const startD = new Date(seg.start);
                   const endD = new Date(seg.end);
-                  const hrs = Math.max(0, (endD.getTime() - startD.getTime()) / 3600000);
+                  let ms = endD.getTime() - startD.getTime();
+                  if (ms < 0) ms += 24 * 3600000;
+                  const hrs = Math.min(ms / 3600000, 16);
                   const fmt = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
                   return (
                     <View key={i} style={s.segmentRow}>
