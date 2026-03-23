@@ -23,6 +23,14 @@ const MOOD_OPTIONS = [
   { emoji: '😤', label: '烦躁', color: '#DC2626' },
 ];
 
+const CAREGIVER_MOOD_MAP: Record<string, { label: string; color: string }> = {
+  '😊': { label: '挺好的', color: '#22C55E' },
+  '😌': { label: '还行', color: '#84CC16' },
+  '😕': { label: '有点累', color: '#F59E0B' },
+  '😢': { label: '不太好', color: '#EF4444' },
+  '😤': { label: '快撑不住了', color: '#DC2626' },
+};
+
 // ─── Diary Card ───────────────────────────────────────────────────────────────
 function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
   entry: DiaryEntry;
@@ -32,6 +40,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
   editMode: boolean;
 }) {
   const mood = MOOD_OPTIONS.find(m => m.emoji === entry.moodEmoji) || MOOD_OPTIONS[2];
+  const cgMood = entry.caregiverMoodEmoji ? CAREGIVER_MOOD_MAP[entry.caregiverMoodEmoji] : null;
   const hasAiReply = !!entry.aiReply;
   const aiPreview = entry.aiReply
     ? entry.aiReply.length > 60 ? entry.aiReply.slice(0, 60) + '...' : entry.aiReply
@@ -77,11 +86,17 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
             <Text style={styles.diaryDate}>{entry.date}</Text>
             {timeStr ? <Text style={styles.diaryTime}>{timeStr}</Text> : null}
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <View style={[styles.moodBadge, { backgroundColor: mood.color + '18' }]}>
               <Text style={styles.moodBadgeEmoji}>{entry.moodEmoji}</Text>
               <Text style={[styles.moodBadgeLabel, { color: mood.color }]}>{mood.label}</Text>
             </View>
+            {cgMood && (
+              <View style={[styles.moodBadge, { backgroundColor: '#FDF2F8' }]}>
+                <Text style={styles.moodBadgeEmoji}>{entry.caregiverMoodEmoji}</Text>
+                <Text style={[styles.moodBadgeLabel, { color: cgMood.color }]}>我{cgMood.label}</Text>
+              </View>
+            )}
             {editMode && (
               <Animated.View style={{ transform: [{ translateX: deleteShake }] }}>
                 <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} activeOpacity={0.8}>
@@ -269,15 +284,21 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
       {selectedDate && entriesByDate[selectedDate] && (
         <View style={calStyles.selectedSection}>
           <Text style={calStyles.selectedLabel}>{selectedDate.replace(/-/g, '年').replace(/年(\d+)年/, '年$1月').replace(/月(\d+)$/, '月$1日')} 的日记</Text>
-          {entriesByDate[selectedDate].map(e => (
-            <TouchableOpacity key={e.id} style={calStyles.miniCard} onPress={() => onOpenEntry(e.id)} activeOpacity={0.8}>
-              <Text style={calStyles.miniMood}>{e.moodEmoji || '📔'}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={calStyles.miniContent} numberOfLines={2}>{e.content}</Text>
-              </View>
-              <Text style={{ fontSize: 12, color: '#9CA3AF' }}>›</Text>
-            </TouchableOpacity>
-          ))}
+          {entriesByDate[selectedDate].map(e => {
+            const cg = e.caregiverMoodEmoji ? CAREGIVER_MOOD_MAP[e.caregiverMoodEmoji] : null;
+            return (
+              <TouchableOpacity key={e.id} style={calStyles.miniCard} onPress={() => onOpenEntry(e.id)} activeOpacity={0.8}>
+                <Text style={calStyles.miniMood}>{e.moodEmoji || '📔'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={calStyles.miniContent} numberOfLines={2}>{e.content}</Text>
+                  {cg && (
+                    <Text style={calStyles.miniCaregiverMood}>我的心情：{e.caregiverMoodEmoji} {cg.label}</Text>
+                  )}
+                </View>
+                <Text style={{ fontSize: 12, color: '#9CA3AF' }}>›</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
     </View>
@@ -392,6 +413,11 @@ function DiaryScreenContent() {
           <EmptyState onStart={openNewEntry} />
         ) : (
           <>
+            <View style={styles.selfCareBanner}>
+              <Text style={styles.selfCareEmoji}>💕</Text>
+              <Text style={styles.selfCareText}>照顾好自己，才能更好地照顾家人 ❤️</Text>
+            </View>
+
             {/* ── 最近7条 ── */}
             <View style={styles.entriesList}>
               <View style={styles.listTitleRow}>
@@ -505,6 +531,15 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#FECACA',
   },
   editHintText: { fontSize: 13, color: '#B91C1C', textAlign: 'center', fontWeight: '500' },
+
+  selfCareBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF5F7', borderRadius: RADIUS.lg,
+    padding: 12, marginBottom: 14,
+    borderWidth: 1, borderColor: '#FCE7F3',
+  },
+  selfCareEmoji: { fontSize: 18 },
+  selfCareText: { fontSize: 13, color: '#BE185D', fontWeight: '600', flex: 1 },
 
   // Entry list
   entriesList: { gap: 12 },
@@ -645,6 +680,7 @@ const calStyles = StyleSheet.create({
   miniCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F9FAFB', borderRadius: 12, padding: 10 },
   miniMood: { fontSize: 22 },
   miniContent: { fontSize: 13, color: '#374151', lineHeight: 18 },
+  miniCaregiverMood: { fontSize: 11, color: '#9CA3AF', marginTop: 3 },
 });
 
 export default function DiaryScreen() {
