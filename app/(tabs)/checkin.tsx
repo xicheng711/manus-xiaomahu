@@ -955,16 +955,22 @@ function CheckinScreenContent() {
   };
 
   const addSleepSegment = () => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const defaultStart = new Date(yesterday);
-    defaultStart.setHours(22, 0, 0, 0);
-    const defaultEnd = new Date();
-    defaultEnd.setHours(6, 30, 0, 0);
-    setSleepSegments(prev => [...prev, {
-      start: defaultStart.toISOString(),
-      end: defaultEnd.toISOString(),
-    }]);
+    setSleepSegments(prev => {
+      if (prev.length > 0) {
+        const lastEnd = new Date(prev[prev.length - 1].end);
+        const newStart = new Date(lastEnd);
+        const newEnd = new Date(lastEnd);
+        newEnd.setMinutes(newEnd.getMinutes() + 90);
+        return [...prev, { start: newStart.toISOString(), end: newEnd.toISOString() }];
+      }
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const defaultStart = new Date(yesterday);
+      defaultStart.setHours(22, 0, 0, 0);
+      const defaultEnd = new Date();
+      defaultEnd.setHours(6, 30, 0, 0);
+      return [...prev, { start: defaultStart.toISOString(), end: defaultEnd.toISOString() }];
+    });
   };
 
   const removeSleepSegment = (idx: number) => {
