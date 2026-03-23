@@ -296,9 +296,9 @@ function EnhancedAICard({
               </View>
               <View style={styles.aiSkeletonOverlay}>
                 <View style={styles.aiSkeletonLockBox}>
-                  <Text style={{ fontSize: 20 }}>🔒</Text>
-                  <Text style={styles.aiSkeletonLockText}>完成早间打卡后解锁</Text>
-                  <Text style={styles.aiSkeletonLockSub}>打卡后即可查看今日分析摘要 ✨</Text>
+                  <Text style={{ fontSize: 20 }}>🌅</Text>
+                  <Text style={styles.aiSkeletonLockText}>早安！记录昨晚的状态吧</Text>
+                  <Text style={styles.aiSkeletonLockSub}>每天花1分钟打卡，小马虎帮你追踪变化 🌿</Text>
                 </View>
               </View>
             </View>

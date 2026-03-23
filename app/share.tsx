@@ -15,6 +15,24 @@ import { BarChart, PieChart } from 'react-native-gifted-charts';
 
 const { width: SW } = Dimensions.get('window');
 
+const CAREGIVER_ENCOURAGEMENTS = [
+  '{caregiver}，你温柔又尽心，{elder}很幸福有你在身边',
+  '{caregiver}，每一天的坚持都是对{elder}最深的爱，辛苦了',
+  '{caregiver}，照顾好自己才能更好地陪伴{elder}，今天也要好好休息哦',
+  '{caregiver}，你的付出让{elder}的每一天都更温暖',
+  '{caregiver}，坚持记录本身就很了不起，为你点赞',
+  '{caregiver}，{elder}的每一点进步都有你的功劳',
+  '{caregiver}，今天也很棒！记得留点时间给自己',
+  '{caregiver}，陪伴是最长情的告白，你做得很好',
+  '{caregiver}，{elder}身边有你，是最大的幸运',
+  '{caregiver}，照顾家人的路上你不孤单，小马虎一直陪着你',
+  '{caregiver}，你的温柔和耐心，{elder}都感受得到',
+  '{caregiver}，日复一日的陪伴就是最好的爱',
+  '{caregiver}，不要忘了，你自己也值得被好好对待',
+  '{caregiver}，你的用心记录让{elder}的健康更有保障',
+  '{caregiver}，每一次打卡都是爱的证明，继续加油',
+];
+
 // ─── 当日简报缓存（避免返回后重新生成）────────────────────────────────────────
 let _briefingCache: { date: string; briefing: any; shareText: string } | null = null;
 function getTodayKey() { return new Date().toISOString().slice(0, 10); }
@@ -223,6 +241,22 @@ const badgeStyles = StyleSheet.create({
 });
 
 // ─── Beautiful Briefing Card ─────────────────────────────────────────────────
+function AnimatedBadge({ emoji, label, value, color, delay }: { emoji: string; label: string; value: string; color: string; delay: number }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(16)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, delay, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 400, delay, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <DataBadge emoji={emoji} label={label} value={value} color={color} />
+    </Animated.View>
+  );
+}
+
 function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverName, elderEmoji }: {
   briefing: any; checkIn: DailyCheckIn; careScore: number;
   elderNickname: string; caregiverName: string; elderEmoji: string;
@@ -262,14 +296,14 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
         <ScoreRing score={careScore} size={88} />
       </View>
 
-      {/* ── Data Grid (4 badges) ── */}
+      {/* ── Data Grid (4 badges with staggered entrance) ── */}
       <View style={cardStyles.dataGrid}>
-        <DataBadge emoji="😴" label="睡眠" value={`${checkIn.sleepHours}h · ${sleepLabel}`} color="#6C9E6C" />
-        <DataBadge emoji={checkIn.moodEmoji || '😊'} label="心情" value={`${checkIn.moodScore}/10`} color="#F0A500" />
+        <AnimatedBadge emoji="😴" label="睡眠" value={`${checkIn.sleepHours}h · ${sleepLabel}`} color="#6C9E6C" delay={0} />
+        <AnimatedBadge emoji={checkIn.moodEmoji || '😊'} label="心情" value={`${checkIn.moodScore}/10`} color="#F0A500" delay={100} />
       </View>
       <View style={cardStyles.dataGrid}>
-        <DataBadge emoji="💊" label="用药" value={medLabel} color="#3B82F6" />
-        <DataBadge emoji="🍽️" label="饮食" value={checkIn.mealNotes ? (checkIn.mealNotes.length > 6 ? checkIn.mealNotes.slice(0, 6) + '…' : checkIn.mealNotes) : '已记录'} color="#EC4899" />
+        <AnimatedBadge emoji="💊" label="用药" value={medLabel} color="#3B82F6" delay={200} />
+        <AnimatedBadge emoji="🍽️" label="饮食" value={checkIn.mealNotes ? (checkIn.mealNotes.length > 6 ? checkIn.mealNotes.slice(0, 6) + '…' : checkIn.mealNotes) : '已记录'} color="#EC4899" delay={300} />
       </View>
 
       {/* ── AI Summary ── */}
@@ -283,25 +317,13 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
         </Text>
       </View>
 
-      {/* ── Highlights ── */}
-      {briefing.highlights?.length > 0 && (
-        <View style={cardStyles.highlightsBox}>
-          {briefing.highlights.map((h: string, i: number) => (
-            <View key={i} style={cardStyles.highlightRow}>
-              <Text style={cardStyles.highlightIcon}>✨</Text>
-              <Text style={cardStyles.highlightText}>{h}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
       {/* ── Caregiver Note ── */}
       <View style={cardStyles.caregiverBox}>
         <Text style={cardStyles.caregiverIcon}>💕</Text>
         <Text style={cardStyles.caregiverText}>
           {briefing.caregiverNote && briefing.caregiverNote.trim().length > 0
             ? briefing.caregiverNote
-            : `${caregiverName}，每一天的坚持都是对${elderNickname}最深的爱。感谢您的付出，好好休息！`}
+            : CAREGIVER_ENCOURAGEMENTS[new Date().getDate() % CAREGIVER_ENCOURAGEMENTS.length].replace('{caregiver}', caregiverName).replace('{elder}', elderNickname)}
         </Text>
       </View>
 
@@ -317,8 +339,8 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
 const cardStyles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22, marginBottom: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 10,
-    borderWidth: 1, borderColor: '#F0F0EE',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2,
+    borderWidth: 1, borderColor: '#F5F5F5',
   },
   header: { marginBottom: 18 },
   headerLeft: {},
@@ -334,10 +356,6 @@ const cardStyles = StyleSheet.create({
   summaryIcon: { fontSize: 18, marginBottom: 6 },
   summaryTitle: { fontSize: 14, fontWeight: '700', color: '#3D7A3D', marginBottom: 8 },
   summaryText: { fontSize: 14, color: '#374151', lineHeight: 22 },
-  highlightsBox: { gap: 8, marginBottom: 14 },
-  highlightRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  highlightIcon: { fontSize: 14, marginTop: 2 },
-  highlightText: { flex: 1, fontSize: 13, color: '#4B5563', lineHeight: 20 },
   caregiverBox: {
     flexDirection: 'row', gap: 10, backgroundColor: '#FFF5F7', borderRadius: 14, padding: 14,
     marginBottom: 16, alignItems: 'center',
@@ -381,10 +399,9 @@ function SleepDetailSection({ checkIn }: { checkIn: DailyCheckIn }) {
         />
         <View style={{ marginLeft: 20, flex: 1 }}>
           <Text style={{ fontSize: 16, fontWeight: '700', color: '#11181C' }}>总睡眠 {totalSleepHours} 小时</Text>
-          {awakeHours > 0 && (
-            <Text style={{ fontSize: 13, color: '#D97706', marginTop: 4 }}>夜间清醒 {awakeHours} 小时</Text>
-          )}
-          <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>夜间醒来 {wakingsCount} 次</Text>
+          <Text style={{ fontSize: 13, color: '#D97706', marginTop: 4 }}>
+            {awakeHours > 0 ? `夜间清醒 ${awakeHours} 小时 · ` : ''}醒来 {wakingsCount} 次
+          </Text>
           <View style={sleepStyles.legendRow}>
             <View style={sleepStyles.legendItem}>
               <View style={[sleepStyles.legendDot, { backgroundColor: '#6EE7B7' }]} />
@@ -470,28 +487,30 @@ function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sl
           <Text style={sleepStyles.legendText}>&lt;5h</Text>
         </View>
       </View>
-      <BarChart
-        data={barData}
-        adjustToWidth
-        width={CHART_W}
-        height={130}
-        barBorderTopLeftRadius={6}
-        barBorderTopRightRadius={6}
-        noOfSections={4}
-        maxValue={12}
-        yAxisThickness={0}
-        yAxisLabelWidth={30}
-        xAxisThickness={1}
-        xAxisColor="#E5E7EB"
-        rulesColor="#F3F4F6"
-        rulesType="solid"
-        initialSpacing={10}
-        endSpacing={30}
-        yAxisTextStyle={{ fontSize: 10, color: '#9CA3AF' }}
-        xAxisLabelTextStyle={{ fontSize: 11, color: '#6B7280', fontWeight: '500' }}
-        isAnimated
-        animationDuration={600}
-      />
+      <View style={{ paddingRight: 20, paddingBottom: 10, width: '100%' }}>
+        <BarChart
+          data={barData}
+          adjustToWidth
+          width={CHART_W}
+          height={130}
+          barBorderTopLeftRadius={6}
+          barBorderTopRightRadius={6}
+          noOfSections={4}
+          maxValue={12}
+          yAxisThickness={0}
+          yAxisLabelWidth={30}
+          xAxisThickness={1}
+          xAxisColor="#E5E7EB"
+          rulesColor="#F3F4F6"
+          rulesType="solid"
+          initialSpacing={10}
+          endSpacing={30}
+          yAxisTextStyle={{ fontSize: 10, color: '#9CA3AF' }}
+          xAxisLabelTextStyle={{ fontSize: 11, color: '#6B7280', fontWeight: '500' }}
+          isAnimated
+          animationDuration={600}
+        />
+      </View>
     </View>
   );
 }
@@ -499,7 +518,8 @@ function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sl
 const sleepStyles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 16,
-    borderWidth: 1, borderColor: '#F0F0EE',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2,
+    borderWidth: 1, borderColor: '#F5F5F5',
   },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', marginBottom: 14 },
   donutRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
@@ -535,6 +555,14 @@ export default function ShareScreen() {
   const [sharingImage, setSharingImage] = useState(false);
   const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; nightWakings: number }>>([]);
   const cardRef = useRef<View>(null);
+  const sharePulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(sharePulse, { toValue: 1.02, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(sharePulse, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ])).start();
+  }, []);
 
   const generateBriefingMutation = trpc.ai.generateBriefing.useMutation();
 
@@ -722,15 +750,7 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
         <View style={styles.header}>
           <BackButton />
           <Text style={styles.title}>📋 今日记录分析</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)' as any)}>
-            <LinearGradient
-              colors={['#FF6B6B', '#B45AED']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={styles.homeBtn}
-            >
-              <Text style={styles.homeBtnText}>🏠 回到主页</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <View style={{ width: 40 }} />
         </View>
 
         {error ? (
@@ -767,21 +787,23 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
             {/* ── Weekly Sleep Trend (Bar Chart) ── */}
             <WeeklySleepChart weeklyData={weeklyData} />
 
-            {/* ── WeChat Share Button ── */}
-            <TouchableOpacity
-              style={[styles.shareWechatBtn, sharingImage && { opacity: 0.7 }]}
-              onPress={handleShareAsImage}
-              disabled={sharingImage}
-            >
-              {sharingImage ? (
-                <ActivityIndicator color="#fff" style={{ marginRight: 6 }} />
-              ) : (
-                <Text style={styles.shareWechatIcon}>💬</Text>
-              )}
-              <Text style={styles.shareWechatText}>
-                {sharingImage ? '生成图片中...' : '一键分享到微信'}
-              </Text>
-            </TouchableOpacity>
+            {/* ── WeChat Share Button (pulse) ── */}
+            <Animated.View style={{ transform: [{ scale: sharePulse }] }}>
+              <TouchableOpacity
+                style={[styles.shareWechatBtn, sharingImage && { opacity: 0.7 }]}
+                onPress={handleShareAsImage}
+                disabled={sharingImage}
+              >
+                {sharingImage ? (
+                  <ActivityIndicator color="#fff" style={{ marginRight: 6 }} />
+                ) : (
+                  <Text style={styles.shareWechatIcon}>💬</Text>
+                )}
+                <Text style={styles.shareWechatText}>
+                  {sharingImage ? '生成图片中...' : '一键分享到微信'}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
 
             {/* ── Home Button ── */}
             <TouchableOpacity onPress={() => router.push('/(tabs)' as any)} activeOpacity={0.88} style={{ marginBottom: 12 }}>
