@@ -944,8 +944,8 @@ function CheckinScreenContent() {
   }
 
   const computeSegmentHours = (seg: { start: string; end: string }) => {
-    let ms = new Date(seg.end).getTime() - new Date(seg.start).getTime();
-    if (ms < 0) ms += 24 * 3600000;
+    const ms = new Date(seg.end).getTime() - new Date(seg.start).getTime();
+    if (ms <= 0) return 0;
     return Math.min(ms / 3600000, 16);
   };
 
@@ -991,7 +991,7 @@ function CheckinScreenContent() {
     });
   };
 
-  // ── Morning Steps (v5.0: 快捷/详细睡眠 + 无照顾者心情) ──
+  // ── Morning Steps (v6.0: 2 screens only) ──
   const morningSteps = [
     {
       role: 'elder' as const,
@@ -1138,107 +1138,96 @@ function CheckinScreenContent() {
               </TouchableOpacity>
             </View>
           )}
-        </View>
-      ),
-    },
-    {
-      role: 'elder' as const,
-      roleLabel: `【${elderNickname}】的状态`,
-      q: `夜里醒了几次？`,
-      emoji: '😴',
-      hint: '用加减按钮调整次数',
-      content: (
-        <View style={{ gap: 20, alignItems: 'center' }}>
-          <View style={styles.counterRow}>
-            <TouchableOpacity
-              style={[styles.counterBtn, nightWakings === 0 && styles.counterBtnDisabled]}
-              onPress={() => {
-                if (nightWakings > 0) setNightWakings(v => v - 1);
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.counterBtnText}>−</Text>
-            </TouchableOpacity>
-            <View style={styles.counterDisplay}>
-              <Text style={styles.counterValue}>{nightWakings}</Text>
-              <Text style={styles.counterUnit}>次</Text>
+
+          <View style={{ marginTop: 8, backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 10 }}>夜间醒来次数</Text>
+            <View style={styles.counterRow}>
+              <TouchableOpacity
+                style={[styles.counterBtn, nightWakings === 0 && styles.counterBtnDisabled]}
+                onPress={() => {
+                  if (nightWakings > 0) setNightWakings(v => v - 1);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.counterBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.counterDisplay}>
+                <Text style={styles.counterValue}>{nightWakings}</Text>
+                <Text style={styles.counterUnit}>次</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.counterBtn}
+                onPress={() => {
+                  setNightWakings(v => v + 1);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.counterBtnText}>＋</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.counterBtn}
-              onPress={() => {
-                setNightWakings(v => v + 1);
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.counterBtnText}>＋</Text>
-            </TouchableOpacity>
+            {nightWakings === 0 && (
+              <Text style={{ fontSize: 13, color: '#9BA1A6', textAlign: 'center', marginTop: 6 }}>很好！一夜无醒 🎉</Text>
+            )}
+            {nightWakings >= 3 && (
+              <Text style={{ fontSize: 13, color: '#E67E22', textAlign: 'center', marginTop: 6 }}>频繁醒来需关注 ⚠️</Text>
+            )}
           </View>
-          {nightWakings === 0 && (
-            <Text style={{ fontSize: 14, color: '#9BA1A6' }}>很好！一夜无醒 🎉</Text>
-          )}
-          {nightWakings >= 3 && (
-            <Text style={{ fontSize: 14, color: '#E67E22' }}>频繁醒来需关注 ⚠️</Text>
-          )}
         </View>
       ),
     },
     {
       role: 'elder' as const,
       roleLabel: `【${elderNickname}】的状态`,
-      q: `白天有小睡吗？`,
+      q: `白天小睡 & 补充信息`,
       emoji: '☀️',
-      hint: '选择是否有白天小睡',
+      hint: '记录白天小睡和补充说明',
       content: (
-        <View style={{ gap: 12 }}>
-          <View style={styles.optionGrid2}>
-            <TouchableOpacity
-              style={[styles.gridPill, !daytimeNap && styles.gridPillSelected]}
-              onPress={() => {
-                setDaytimeNap(false);
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.pillIcon}>☀️</Text>
-              <Text style={[styles.gridPillLabel, !daytimeNap && styles.gridPillLabelSelected]}>没有小睡</Text>
-              {!daytimeNap && <Text style={styles.pillCheck}>✓</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.gridPill, daytimeNap && styles.gridPillSelected]}
-              onPress={() => {
-                setDaytimeNap(true);
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.pillIcon}>😪</Text>
-              <Text style={[styles.gridPillLabel, daytimeNap && styles.gridPillLabelSelected]}>有小睡</Text>
-              {daytimeNap && <Text style={styles.pillCheck}>✓</Text>}
-            </TouchableOpacity>
+        <View style={{ gap: 16 }}>
+          <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 10 }}>白天有小睡吗？</Text>
+            <View style={styles.optionGrid2}>
+              <TouchableOpacity
+                style={[styles.gridPill, !daytimeNap && styles.gridPillSelected]}
+                onPress={() => {
+                  setDaytimeNap(false);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.pillIcon}>☀️</Text>
+                <Text style={[styles.gridPillLabel, !daytimeNap && styles.gridPillLabelSelected]}>没有小睡</Text>
+                {!daytimeNap && <Text style={styles.pillCheck}>✓</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.gridPill, daytimeNap && styles.gridPillSelected]}
+                onPress={() => {
+                  setDaytimeNap(true);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.pillIcon}>😪</Text>
+                <Text style={[styles.gridPillLabel, daytimeNap && styles.gridPillLabelSelected]}>有小睡</Text>
+                {daytimeNap && <Text style={styles.pillCheck}>✓</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      ),
-    },
-    {
-      role: 'notes' as const,
-      roleLabel: '补充备注（可选）',
-      q: '还有什么要补充的吗？',
-      emoji: '📝',
-      hint: '如昨晚有特殊情况，可以简单记录一下（可选）',
-      content: (
-        <View>
-          <TextInput
-            style={styles.noteInput}
-            placeholder={`例如：${elderNickname}夜间醒来找水、情绪有些不稳、拒绝吃药...`}
-            value={morningNotes}
-            onChangeText={setMorningNotes}
-            multiline numberOfLines={4}
-            placeholderTextColor="#B8BCC0"
-            returnKeyType="done"
-          />
-          <Text style={styles.noteHint}>💡 这里的信息会帮助生成更准确的护理简报</Text>
+
+          <View>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 8 }}>还有什么要补充的吗？（可选）</Text>
+            <TextInput
+              style={styles.noteInput}
+              placeholder={`例如：${elderNickname}夜间醒来找水、情绪有些不稳...`}
+              value={morningNotes}
+              onChangeText={setMorningNotes}
+              multiline numberOfLines={4}
+              placeholderTextColor="#B8BCC0"
+              returnKeyType="done"
+            />
+            <Text style={styles.noteHint}>💡 这里的信息会帮助生成更准确的护理简报</Text>
+          </View>
         </View>
       ),
     },
@@ -1348,10 +1337,9 @@ function CheckinScreenContent() {
   const currentStep = currentSteps[step];
   const isLast = step === currentSteps.length - 1;
 
-  // Role badge colors
-  const roleBadgeProps = currentStep.role === 'elder'
+  const roleBadgeProps = (currentStep as any).role === 'elder'
     ? { label: currentStep.roleLabel, color: '#2563EB', bgColor: '#EFF6FF' }
-    : currentStep.role === 'caregiver'
+    : (currentStep as any).role === 'caregiver'
     ? { label: currentStep.roleLabel, color: '#7C3AED', bgColor: '#F5F0FF' }
     : { label: currentStep.roleLabel, color: '#059669', bgColor: '#ECFDF5' };
 
