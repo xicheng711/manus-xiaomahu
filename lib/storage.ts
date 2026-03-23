@@ -101,6 +101,7 @@ export interface DailyCheckIn {
   sleepSegments?: SleepSegment[];    // 详细模式：多段睡眠时间
   nightWakings?: number;             // 夜里醒来次数
   daytimeNap?: boolean;              // 白天是否有小睡
+  napMinutes?: number;               // 白天小睡时长（分钟，30为单位）
   // v4.0 展示字段（兼容旧数据，用于UI显示）
   sleepRange?: string;       // 如 "7-9小时"
   nightAwakenings?: string;  // 如 "1-2次"

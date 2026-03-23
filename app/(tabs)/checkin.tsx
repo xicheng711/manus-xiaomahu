@@ -581,7 +581,6 @@ function CheckinScreenContent() {
   const [awakeTimeIdx, setAwakeTimeIdx] = useState(0);    // "几乎没有"
   const [napIdx, setNapIdx] = useState(0);                // "没有"
   const [nightWakings, setNightWakings] = useState(0);
-  const [daytimeNap, setDaytimeNap] = useState(false);
   const [morningNotes, setMorningNotes] = useState('');
 
   // Evening fields
@@ -589,6 +588,7 @@ function CheckinScreenContent() {
   const [medicationTaken, setMedicationTaken] = useState(true);
   const [mealOptionIdx, setMealOptionIdx] = useState(0);
   const [mealCustom, setMealCustom] = useState('');
+  const [napMinutes, setNapMinutes] = useState(0);
   const [eveningNotes, setEveningNotes] = useState('');
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -664,7 +664,8 @@ function CheckinScreenContent() {
         if (today.sleepType) setSleepType(today.sleepType);
         if (today.sleepSegments) setSleepSegments(today.sleepSegments);
         if (today.nightWakings != null) setNightWakings(today.nightWakings);
-        if (today.daytimeNap != null) setDaytimeNap(today.daytimeNap);
+        if (today.napMinutes != null) setNapMinutes(today.napMinutes);
+        else if (today.daytimeNap) setNapMinutes(30);
         const mIdx = MOODS.findIndex(m => m.score === today.moodScore);
         if (mIdx >= 0) setMoodIdx(mIdx);
         setMedicationTaken(today.medicationTaken ?? true);
@@ -775,7 +776,6 @@ function CheckinScreenContent() {
         sleepType,
         sleepSegments: sleepType === 'detailed' ? sleepSegments : undefined,
         nightWakings,
-        daytimeNap,
         sleepHours: Math.round(effectiveSleepHours * 10) / 10,
         sleepQuality: derivedQuality,
         sleepRange: SLEEP_RANGES[sleepRangeIdx],
@@ -792,6 +792,8 @@ function CheckinScreenContent() {
         medicationTaken,
         mealOption: [MEAL_OPTIONS[mealOptionIdx]].concat(mealCustom.trim() ? [mealCustom.trim()] : []).join('、'),
         mealNotes: [MEAL_OPTIONS[mealOptionIdx]].concat(mealCustom.trim() ? [mealCustom.trim()] : []).join('、'),
+        daytimeNap: napMinutes > 0,
+        napMinutes,
         eveningNotes,
         eveningDone: true,
       });
@@ -1174,59 +1176,18 @@ function CheckinScreenContent() {
               <Text style={{ fontSize: 13, color: '#E67E22', textAlign: 'center', marginTop: 6 }}>频繁醒来需关注 ⚠️</Text>
             )}
           </View>
-        </View>
-      ),
-    },
-    {
-      role: 'elder' as const,
-      roleLabel: `【${elderNickname}】的状态`,
-      q: `白天小睡 & 补充信息`,
-      emoji: '☀️',
-      hint: '记录白天小睡和补充说明',
-      content: (
-        <View style={{ gap: 16 }}>
-          <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16 }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 10 }}>白天有小睡吗？</Text>
-            <View style={styles.optionGrid2}>
-              <TouchableOpacity
-                style={[styles.gridPill, !daytimeNap && styles.gridPillSelected]}
-                onPress={() => {
-                  setDaytimeNap(false);
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.pillIcon}>☀️</Text>
-                <Text style={[styles.gridPillLabel, !daytimeNap && styles.gridPillLabelSelected]}>没有小睡</Text>
-                {!daytimeNap && <Text style={styles.pillCheck}>✓</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.gridPill, daytimeNap && styles.gridPillSelected]}
-                onPress={() => {
-                  setDaytimeNap(true);
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.pillIcon}>😪</Text>
-                <Text style={[styles.gridPillLabel, daytimeNap && styles.gridPillLabelSelected]}>有小睡</Text>
-                {daytimeNap && <Text style={styles.pillCheck}>✓</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
 
-          <View>
+          <View style={{ marginTop: 4 }}>
             <Text style={{ fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 8 }}>还有什么要补充的吗？（可选）</Text>
             <TextInput
               style={styles.noteInput}
               placeholder={`例如：${elderNickname}夜间醒来找水、情绪有些不稳...`}
               value={morningNotes}
               onChangeText={setMorningNotes}
-              multiline numberOfLines={4}
+              multiline numberOfLines={3}
               placeholderTextColor="#B8BCC0"
               returnKeyType="done"
             />
-            <Text style={styles.noteHint}>💡 这里的信息会帮助生成更准确的护理简报</Text>
           </View>
         </View>
       ),
@@ -1310,6 +1271,65 @@ function CheckinScreenContent() {
             placeholderTextColor="#B8BCC0"
             returnKeyType="done"
           />
+        </View>
+      ),
+    },
+    {
+      role: 'elder' as const,
+      roleLabel: `【${elderNickname}】的状态`,
+      q: `${elderNickname}白天有小睡吗？`,
+      emoji: '😴',
+      hint: '选择小睡时长（30分钟为单位）',
+      content: (
+        <View style={{ gap: 16 }}>
+          <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16, alignItems: 'center' }}>
+            <View style={styles.napScrollRow}>
+              <TouchableOpacity
+                style={[styles.counterBtn, napMinutes === 0 && styles.counterBtnDisabled]}
+                onPress={() => {
+                  if (napMinutes >= 30) setNapMinutes(v => v - 30);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.counterBtnText}>−</Text>
+              </TouchableOpacity>
+              <View style={styles.napDisplay}>
+                <Text style={styles.napValue}>{napMinutes === 0 ? '没有小睡' : napMinutes >= 60 ? `${(napMinutes / 60).toFixed(1).replace('.0', '')} 小时` : `${napMinutes} 分钟`}</Text>
+                <Text style={styles.napUnit}>{napMinutes > 0 ? '每次点击 ± 30分钟' : '点击 ＋ 添加时长'}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.counterBtn}
+                onPress={() => {
+                  if (napMinutes < 300) setNapMinutes(v => v + 30);
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.counterBtnText}>＋</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.napQuickRow}>
+              {[0, 30, 60, 90, 120].map(mins => (
+                <TouchableOpacity
+                  key={mins}
+                  style={[styles.napQuickBtn, napMinutes === mins && styles.napQuickBtnActive]}
+                  onPress={() => {
+                    setNapMinutes(mins);
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.napQuickText, napMinutes === mins && styles.napQuickTextActive]}>
+                    {mins === 0 ? '无' : mins < 60 ? `${mins}分` : `${mins / 60}h`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          {napMinutes >= 120 && (
+            <Text style={{ fontSize: 13, color: '#E67E22', textAlign: 'center' }}>白天小睡较长，可能影响夜间睡眠 ⚠️</Text>
+          )}
         </View>
       ),
     },
@@ -1687,6 +1707,25 @@ const styles = StyleSheet.create({
   counterDisplay: { alignItems: 'center' },
   counterValue: { fontSize: 48, fontWeight: '900', color: '#11181C' },
   counterUnit: { fontSize: 14, fontWeight: '600', color: '#9BA1A6', marginTop: -4 },
+
+  napScrollRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16,
+  },
+  napDisplay: { alignItems: 'center', minWidth: 140 },
+  napValue: { fontSize: 22, fontWeight: '800', color: '#11181C' },
+  napUnit: { fontSize: 12, color: '#9BA1A6', marginTop: 2 },
+  napQuickRow: {
+    flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center',
+  },
+  napQuickBtn: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB',
+  },
+  napQuickBtnActive: {
+    backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary,
+  },
+  napQuickText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
+  napQuickTextActive: { color: COLORS.primary },
 
   // Nav
   navRow: { flexDirection: 'row', gap: 12 },
