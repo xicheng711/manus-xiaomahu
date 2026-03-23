@@ -400,23 +400,34 @@ export default function OnboardingScreen() {
         {/* STEP 0: Welcome */}
         {step === 0 && (
           <View style={styles.stepContainer}>
-            <Image source={require('../assets/images/icon.png')} style={styles.mascotImg} />
-            <Text style={styles.title}>您好，我是小马虎！</Text>
-            <Text style={styles.subtitle}>
-              我是您的专业护理记录小助手{'\n'}
-              记录每一天的护理时光{'\n\n'}
-              让我们先认识一下吧 😊
+            <View style={styles.welcomeIconWrap}>
+              <LinearGradient
+                colors={['#F3E8FF', '#FCE7F3', '#FFF7ED']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={styles.welcomeIconBg}
+              >
+                <Image source={require('../assets/images/icon.png')} style={styles.mascotImg} />
+              </LinearGradient>
+              <View style={styles.welcomeSparkle1}><Text style={{ fontSize: 16 }}>✨</Text></View>
+              <View style={styles.welcomeSparkle2}><Text style={{ fontSize: 12 }}>💜</Text></View>
+            </View>
+            <Text style={styles.welcomeTitle}>您好，我是小马虎！</Text>
+            <Text style={styles.welcomeSub}>
+              您的专业护理记录小助手{'\n'}
+              记录每一天的护理时光
             </Text>
-            <View style={styles.featureList}>
+            <Text style={styles.welcomeCta}>让我们先认识一下吧 😊</Text>
+            <View style={styles.featureGrid}>
               {[
-                { icon: '🌅', text: 'AI 每日\n护理建议' },
-                { icon: '💊', text: '用药\n提醒管理' },
-                { icon: '📖', text: '护理日记\nAI 陪伴' },
-                { icon: '🤝', text: '家庭共享\n简报' },
+                { icon: '🌅', label: '每日护理', desc: '贴心建议', color: '#FEF3C7', border: '#FDE68A' },
+                { icon: '💊', label: '用药管理', desc: '按时提醒', color: '#DBEAFE', border: '#93C5FD' },
+                { icon: '📔', label: '护理日记', desc: '温暖记录', color: '#FCE7F3', border: '#F9A8D4' },
+                { icon: '🤝', label: '家庭共享', desc: '全家守护', color: '#D1FAE5', border: '#6EE7B7' },
               ].map(f => (
-                <View key={f.icon} style={styles.featureItem}>
-                  <Text style={styles.featureIcon}>{f.icon}</Text>
-                  <Text style={styles.featureText}>{f.text}</Text>
+                <View key={f.icon} style={[styles.featureCard, { backgroundColor: f.color, borderColor: f.border }]}>
+                  <Text style={styles.featureCardIcon}>{f.icon}</Text>
+                  <Text style={styles.featureCardLabel}>{f.label}</Text>
+                  <Text style={styles.featureCardDesc}>{f.desc}</Text>
                 </View>
               ))}
             </View>
@@ -1144,15 +1155,23 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: 24 },
   stepContainer: { alignItems: 'center', paddingBottom: 24 },
   mascot: { fontSize: 64, marginBottom: 16, marginTop: 8 },
-  mascotImg: { width: 120, height: 120, borderRadius: 28, marginBottom: 16, marginTop: 8 },
+  mascotImg: { width: 100, height: 100, borderRadius: 24 },
   mascotImgSm: { width: 90, height: 90, borderRadius: 22, marginBottom: 16, marginTop: 8 },
   zodiacBig: { fontSize: 72, marginBottom: 12, marginTop: 8 },
   title: { fontSize: 26, fontWeight: '700', color: '#11181C', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: '#687076', textAlign: 'center', lineHeight: 24, marginBottom: 24 },
-  featureList: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 16, width: '100%' },
-  featureItem: { width: '47%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F9FA', borderRadius: 20, paddingVertical: 20, paddingHorizontal: 12, gap: 10 },
-  featureIcon: { fontSize: 38 },
-  featureText: { fontSize: 16, fontWeight: '700', color: '#11181C', textAlign: 'center', lineHeight: 22 },
+  welcomeIconWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center', marginBottom: 20, marginTop: 8 },
+  welcomeIconBg: { width: 130, height: 130, borderRadius: 36, alignItems: 'center', justifyContent: 'center', shadowColor: '#C084FC', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6 },
+  welcomeSparkle1: { position: 'absolute', top: -4, right: -8 },
+  welcomeSparkle2: { position: 'absolute', bottom: 4, left: -6 },
+  welcomeTitle: { fontSize: 28, fontWeight: '900', color: '#1A1A2E', textAlign: 'center', marginBottom: 8, letterSpacing: -0.5 },
+  welcomeSub: { fontSize: 15, color: '#6B7280', textAlign: 'center', lineHeight: 24, marginBottom: 6 },
+  welcomeCta: { fontSize: 15, color: '#7C3AED', fontWeight: '600', textAlign: 'center', marginBottom: 28 },
+  featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, width: '100%' },
+  featureCard: { width: '47%', alignItems: 'center', justifyContent: 'center', borderRadius: 20, paddingVertical: 18, paddingHorizontal: 10, gap: 6, borderWidth: 1.5 },
+  featureCardIcon: { fontSize: 32 },
+  featureCardLabel: { fontSize: 15, fontWeight: '800', color: '#1A1A2E', textAlign: 'center' },
+  featureCardDesc: { fontSize: 12, color: '#6B7280', textAlign: 'center', fontWeight: '500' },
   inputGroup: { width: '100%', marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '600', color: '#687076', marginBottom: 8 },
   zodiacHint: { fontSize: 16, fontWeight: '700', color: '#FF6B6B', marginBottom: 8, textAlign: 'center' },
