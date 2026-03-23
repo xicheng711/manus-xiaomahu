@@ -131,9 +131,27 @@ export default function OnboardingScreen() {
   // Elder info
   const [elderName, setElderName] = useState('');
   const [elderNickname, setElderNickname] = useState('');
+  const [elderPhotoUri, setElderPhotoUri] = useState<string | undefined>(undefined);
+  const [elderAvatarType, setElderAvatarType] = useState<'photo' | 'zodiac'>('zodiac');
   const [birthYearIdx, setBirthYearIdx] = useState(20);
   const [birthMonthIdx, setBirthMonthIdx] = useState(0);
   const [birthDayIdx, setBirthDayIdx] = useState(0);
+
+  async function pickElderPhoto() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setElderPhotoUri(result.assets[0].uri);
+      setElderAvatarType('photo');
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
 
   // Caregiver info
   const [caregiverName, setCaregiverName] = useState('');
@@ -283,6 +301,8 @@ export default function OnboardingScreen() {
       birthDate,
       zodiacEmoji: elderZodiac.emoji,
       zodiacName: elderZodiac.name,
+      elderPhotoUri,
+      elderAvatarType,
       caregiverName: caregiverName || '家人',
       caregiverBirthYear: String(caregiverBirthYear),
       caregiverZodiacEmoji: caregiverZodiac.emoji,
@@ -320,8 +340,9 @@ export default function OnboardingScreen() {
       role: 'caregiver',
       roleLabel: '主要照顾者',
       emoji: '👩',
+      photoUri: caregiverPhotoUri,
       color: '#FF6B6B',
-    }, previewRoomCode).catch(() => {});
+    }, previewRoomCode, { emoji: elderZodiac.emoji, photoUri: elderPhotoUri }).catch(() => {});
     router.replace('/(tabs)');
   }
 
@@ -538,7 +559,23 @@ export default function OnboardingScreen() {
         {step === 2 && userType === 'creator' && (
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.stepContainer}>
-              <Text style={styles.zodiacBig}>{elderZodiac.emoji}</Text>
+              <View style={styles.avatarSection}>
+                <TouchableOpacity style={styles.avatarCircle} onPress={pickElderPhoto}>
+                  {elderAvatarType === 'photo' && elderPhotoUri ? (
+                    <Image source={{ uri: elderPhotoUri }} style={styles.avatarPhoto} />
+                  ) : (
+                    <Text style={styles.avatarZodiacEmoji}>{elderZodiac.emoji}</Text>
+                  )}
+                </TouchableOpacity>
+                <Text style={styles.avatarHint}>
+                  {elderPhotoUri ? '点击更换照片' : '点击上传头像'}
+                </Text>
+                {elderPhotoUri ? (
+                  <TouchableOpacity onPress={() => { setElderPhotoUri(undefined); setElderAvatarType('zodiac'); }} style={{ marginTop: 4 }}>
+                    <Text style={{ fontSize: 12, color: '#EF4444' }}>✕ 移除照片</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
                <Text style={styles.title}>被照顾者信息</Text>
               <Text style={styles.subtitle}>让小马虎了解您照顾的家人</Text>
 
