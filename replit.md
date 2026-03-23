@@ -172,13 +172,23 @@ The `users` table stores authentication data. The schema is in `drizzle/schema.t
 - Mood saved as `caregiverMoodEmoji`/`caregiverMoodLabel` in DiaryEntry
 - Calendar shows mood emoji on date cells (with useMemo for performance)
 
-### Care Summary Page (app/assistant.tsx) — Refactored
-- **No more AI advice cards** — replaced with data visualization
-- **Care score header**: ring display + summary + encouragement (from simplified AI response)
-- **Yesterday's review cards**: 2x2 grid (情绪/睡眠/用药/饮食) — **prioritizes yesterdayCheckIn** for correct time-series
-- **Weekly sleep bar chart**: react-native-gifted-charts BarChart, color-coded (green ≥7h, yellow 5-7h, red <5h)
-- **Sleep segment timeline**: shows detailed sleep segments when available
-- **Night waking summary**: weekly total displayed below chart
+### Route Unification (v5.2)
+- **`/assistant` route deprecated** — all post-checkin and analysis flows redirect to `/share` (now "今日记录分析")
+- `checkin.tsx` morning done → `/share`; `index.tsx` AI card + data summary + quick actions → `/share`
+- `share.tsx` prioritizes today's check-in over yesterday's (`today || yesterday`)
+
+### Care Analysis Page (app/share.tsx) — Unified
+- **Title**: "📋 今日记录分析"
+- **Layout order**: header card → 5-grid badges → AI summary → sleep detail (donut) → weekly bar chart → home button → share buttons
+- **Sleep donut**: green (#6EE7B7) = sleep hours, warm yellow (#FEF3C7) = awake hours; uses real `awakeHours` for detailed mode
+- **Bar chart**: `endSpacing={30}` to prevent right-side clipping
+- **Bottom**: "返回首页" gradient button + WeChat share + family sync notice
+
+### Awake Hours Computation (v5.2)
+- **`awakeHours`** field added to `DailyCheckIn` in `lib/storage.ts`
+- Computed in `checkin.tsx` for detailed mode: sum of gaps between consecutive sorted sleep segments
+- Displayed inline as "总计：X 小时 | 夜间清醒：Y 小时"
+- `share.tsx` donut: detailed mode uses `awakeHours ?? 0`; quick/legacy mode uses `max(0, 8 - sleepHours)` fallback
 
 ### Briefing Persistence (lib/storage.ts, app/assistant.tsx) — v5.1
 - **CareBriefing** interface: `{ date, careScore, summary, encouragement, generatedAt, checkInDate }`

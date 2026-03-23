@@ -356,11 +356,12 @@ function SleepDetailSection({ checkIn }: { checkIn: DailyCheckIn }) {
   const segments = checkIn.sleepSegments ?? [];
   const totalSleepHours = checkIn.sleepHours ?? 0;
   const wakingsCount = checkIn.nightWakings ?? 0;
-
-  const awakeHours = Math.max(0, 8 - totalSleepHours);
+  const awakeHours = checkIn.sleepType === 'detailed'
+    ? (checkIn.awakeHours ?? 0)
+    : Math.max(0, Math.round((8 - totalSleepHours) * 10) / 10);
   const donutData = [
     { value: totalSleepHours || 0.1, color: '#6EE7B7' },
-    { value: awakeHours || 0.1, color: '#FEF3C7' },
+    { value: awakeHours > 0 ? awakeHours : 0.1, color: '#FEF3C7' },
   ];
 
   return (
@@ -380,7 +381,10 @@ function SleepDetailSection({ checkIn }: { checkIn: DailyCheckIn }) {
         />
         <View style={{ marginLeft: 20, flex: 1 }}>
           <Text style={{ fontSize: 16, fontWeight: '700', color: '#11181C' }}>总睡眠 {totalSleepHours} 小时</Text>
-          <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>夜间醒来 {wakingsCount} 次</Text>
+          {awakeHours > 0 && (
+            <Text style={{ fontSize: 13, color: '#D97706', marginTop: 4 }}>夜间清醒 {awakeHours} 小时</Text>
+          )}
+          <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>夜间醒来 {wakingsCount} 次</Text>
           <View style={sleepStyles.legendRow}>
             <View style={sleepStyles.legendItem}>
               <View style={[sleepStyles.legendDot, { backgroundColor: '#6EE7B7' }]} />
@@ -482,7 +486,7 @@ function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sl
         rulesColor="#F3F4F6"
         rulesType="solid"
         initialSpacing={10}
-        endSpacing={20}
+        endSpacing={30}
         yAxisTextStyle={{ fontSize: 10, color: '#9CA3AF' }}
         xAxisLabelTextStyle={{ fontSize: 11, color: '#6B7280', fontWeight: '500' }}
         isAnimated
@@ -550,7 +554,7 @@ export default function ShareScreen() {
 
       const today = await getTodayCheckIn();
       const yesterday = await getYesterdayCheckIn();
-      const ci = yesterday || today;
+      const ci = today || yesterday;
 
       if (!ci) {
         setError('请先完成今日打卡，再生成简报');
@@ -717,7 +721,7 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
         {/* ── Header ── */}
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.title}>📋 今日简报</Text>
+          <Text style={styles.title}>📋 今日记录分析</Text>
           <TouchableOpacity onPress={() => router.push('/(tabs)' as any)}>
             <LinearGradient
               colors={['#FF6B6B', '#B45AED']}
@@ -779,8 +783,15 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
               </Text>
             </TouchableOpacity>
 
+            {/* ── Home Button ── */}
+            <TouchableOpacity onPress={() => router.push('/(tabs)' as any)} activeOpacity={0.88} style={{ marginBottom: 12 }}>
+              <LinearGradient colors={['#A07858', '#8B6914']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.homeBottomBtn}>
+                <Text style={styles.homeBottomBtnText}>🏠 返回首页</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
             {/* ── Family Sync Notice ── */}
-            <Text style={styles.familySyncNotice}>🏠 今日简报已自动同步到家庭共享</Text>
+            <Text style={styles.familySyncNotice}>🏠 今日记录已自动同步到家庭共享</Text>
 
             <View style={styles.disclaimer}>
               <Text style={styles.disclaimerText}>✨ 由小马虎生成 · 仅供参考</Text>
@@ -832,6 +843,8 @@ const styles = StyleSheet.create({
   },
   tipsTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 },
   tipItem: { fontSize: 13, color: '#6B7280', lineHeight: 20, paddingLeft: 4 },
+  homeBottomBtn: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 24 },
+  homeBottomBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
   disclaimer: { alignItems: 'center', marginBottom: 8 },
   disclaimerText: { fontSize: 11, color: '#BBBBB8', textAlign: 'center' },
 });

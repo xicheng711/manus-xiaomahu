@@ -775,6 +775,7 @@ function CheckinScreenContent() {
         sleepProblems,
         sleepType,
         sleepSegments: sleepType === 'detailed' ? sleepSegments : undefined,
+        awakeHours: sleepType === 'detailed' && sleepSegments.length >= 2 ? computeAwakeHours() : undefined,
         nightWakings,
         sleepHours: Math.round(effectiveSleepHours * 10) / 10,
         sleepQuality: derivedQuality,
@@ -915,8 +916,8 @@ function CheckinScreenContent() {
           <Text style={styles.doneSub}>
             {`今天也辛苦了！\n小马虎已根据${elderNickname}的状态和您的心情\n整理好了今日个性化护理摘要 🌿`}
           </Text>
-          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/assistant' as any)}>
-            <Text style={styles.doneBtnText}>查看今日护理简报 ✨</Text>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/share' as any)}>
+            <Text style={styles.doneBtnText}>查看今日记录分析 ✨</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.doneBtnSecondary} onPress={() => {
             setDone(false);
@@ -954,6 +955,19 @@ function CheckinScreenContent() {
   const computeSegmentTotal = () => {
     if (sleepSegments.length === 0) return 0;
     return sleepSegments.reduce((sum, seg) => sum + computeSegmentHours(seg), 0);
+  };
+
+  const computeAwakeHours = () => {
+    if (sleepSegments.length < 2) return 0;
+    const sorted = [...sleepSegments].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    let total = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const prevEnd = new Date(sorted[i - 1].end).getTime();
+      const currStart = new Date(sorted[i].start).getTime();
+      const gap = currStart - prevEnd;
+      if (gap > 0) total += gap / 3600000;
+    }
+    return Math.round(total * 10) / 10;
   };
 
   const addSleepSegment = () => {
@@ -1046,6 +1060,9 @@ function CheckinScreenContent() {
               <View style={styles.segmentTotalBar}>
                 <Text style={styles.segmentTotalText}>
                   总计：{computeSegmentTotal().toFixed(1)} 小时
+                  {sleepSegments.length >= 2 && computeAwakeHours() > 0
+                    ? `  |  夜间清醒：${computeAwakeHours()} 小时`
+                    : ''}
                 </Text>
               </View>
               {sleepSegments.map((seg, idx) => {
