@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Animated, ActivityIndicator, Share, Dimensions, Platform, Easing, Alert,
@@ -8,9 +8,10 @@ import { router } from 'expo-router';
 import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
-import { getProfile, getTodayCheckIn, getYesterdayCheckIn, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
+import { BarChart, PieChart } from 'react-native-gifted-charts';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -348,6 +349,172 @@ const cardStyles = StyleSheet.create({
   footerRight: { fontSize: 12, color: '#6C9E6C', fontWeight: '600' },
 });
 
+const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+const CHART_W = SW - 80;
+
+function SleepDetailSection({ checkIn }: { checkIn: DailyCheckIn }) {
+  const segments = checkIn.sleepSegments ?? [];
+  const totalSleepHours = checkIn.sleepHours ?? 0;
+  const wakingsCount = checkIn.nightWakings ?? 0;
+
+  const awakeHours = Math.max(0, 8 - totalSleepHours);
+  const donutData = [
+    { value: totalSleepHours || 0.1, color: '#6EE7B7' },
+    { value: awakeHours || 0.1, color: '#FEF3C7' },
+  ];
+
+  return (
+    <View style={sleepStyles.card}>
+      <Text style={sleepStyles.sectionTitle}>🌙 昨晚睡眠详情</Text>
+      <View style={sleepStyles.donutRow}>
+        <PieChart
+          donut
+          innerRadius={30}
+          radius={45}
+          data={donutData}
+          centerLabelComponent={() => (
+            <View style={{ justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#374151' }}>{totalSleepHours}h</Text>
+            </View>
+          )}
+        />
+        <View style={{ marginLeft: 20, flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#11181C' }}>总睡眠 {totalSleepHours} 小时</Text>
+          <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>夜间醒来 {wakingsCount} 次</Text>
+          <View style={sleepStyles.legendRow}>
+            <View style={sleepStyles.legendItem}>
+              <View style={[sleepStyles.legendDot, { backgroundColor: '#6EE7B7' }]} />
+              <Text style={sleepStyles.legendText}>睡眠</Text>
+            </View>
+            <View style={sleepStyles.legendItem}>
+              <View style={[sleepStyles.legendDot, { backgroundColor: '#FEF3C7' }]} />
+              <Text style={sleepStyles.legendText}>清醒</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {segments.length > 0 && (
+        <View style={sleepStyles.timeline}>
+          {segments.map((seg: any, i: number) => {
+            const startD = new Date(seg.start);
+            const endD = new Date(seg.end);
+            const ms = endD.getTime() - startD.getTime();
+            const hrs = ms <= 0 ? 0 : Math.min(ms / 3600000, 16);
+            const fmt = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            const isLast = i === segments.length - 1;
+            return (
+              <View key={i} style={sleepStyles.segRow}>
+                <View style={sleepStyles.segTimeline}>
+                  <View style={sleepStyles.segDot} />
+                  {!isLast && <View style={sleepStyles.segLine} />}
+                </View>
+                <Text style={sleepStyles.segLabel}>{`睡眠 ${i + 1}`}</Text>
+                <Text style={sleepStyles.segTime}>{fmt(startD)} - {fmt(endD)}</Text>
+                <View style={sleepStyles.segBadge}>
+                  <Text style={sleepStyles.segDuration}>{Math.round(hrs * 10) / 10}h</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sleepHours: number; nightWakings: number }> }) {
+  const barData = useMemo(() => {
+    const reversed = [...weeklyData].reverse();
+    return reversed.map((d) => {
+      const dayOfWeek = new Date(d.date + 'T00:00:00').getDay();
+      const label = WEEKDAY_LABELS[dayOfWeek];
+      const hours = d.sleepHours || 0;
+      const hasData = hours > 0;
+      const color = hasData
+        ? (hours >= 7 ? '#6EE7B7' : hours >= 5 ? '#FCD34D' : '#FCA5A5')
+        : '#F3F4F6';
+      return {
+        value: hasData ? hours : 0.15,
+        label,
+        frontColor: color,
+        topLabelComponent: () => (
+          <Text style={{ fontSize: 10, color: '#6B7280', marginBottom: 2 }}>
+            {hasData ? `${hours}h` : ''}
+          </Text>
+        ),
+      };
+    });
+  }, [weeklyData]);
+
+  if (weeklyData.length === 0) return null;
+
+  return (
+    <View style={sleepStyles.card}>
+      <Text style={sleepStyles.sectionTitle}>📊 近一周睡眠趋势</Text>
+      <View style={sleepStyles.chartLegend}>
+        <View style={sleepStyles.legendItem}>
+          <View style={[sleepStyles.legendDot, { backgroundColor: '#6EE7B7' }]} />
+          <Text style={sleepStyles.legendText}>7h+</Text>
+        </View>
+        <View style={sleepStyles.legendItem}>
+          <View style={[sleepStyles.legendDot, { backgroundColor: '#FCD34D' }]} />
+          <Text style={sleepStyles.legendText}>5-7h</Text>
+        </View>
+        <View style={sleepStyles.legendItem}>
+          <View style={[sleepStyles.legendDot, { backgroundColor: '#FCA5A5' }]} />
+          <Text style={sleepStyles.legendText}>&lt;5h</Text>
+        </View>
+      </View>
+      <BarChart
+        data={barData}
+        adjustToWidth
+        width={CHART_W}
+        height={130}
+        barBorderTopLeftRadius={6}
+        barBorderTopRightRadius={6}
+        noOfSections={4}
+        maxValue={12}
+        yAxisThickness={0}
+        yAxisLabelWidth={30}
+        xAxisThickness={1}
+        xAxisColor="#E5E7EB"
+        rulesColor="#F3F4F6"
+        rulesType="solid"
+        initialSpacing={10}
+        endSpacing={20}
+        yAxisTextStyle={{ fontSize: 10, color: '#9CA3AF' }}
+        xAxisLabelTextStyle={{ fontSize: 11, color: '#6B7280', fontWeight: '500' }}
+        isAnimated
+        animationDuration={600}
+      />
+    </View>
+  );
+}
+
+const sleepStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 16,
+    borderWidth: 1, borderColor: '#F0F0EE',
+  },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', marginBottom: 14 },
+  donutRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  legendRow: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 11, color: '#6B7280' },
+  chartLegend: { flexDirection: 'row', gap: 12, marginBottom: 12, justifyContent: 'flex-end' },
+  timeline: { borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12 },
+  segRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 },
+  segTimeline: { width: 16, alignItems: 'center' },
+  segDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#6EE7B7', borderWidth: 2, borderColor: '#D1FAE5' },
+  segLine: { width: 2, height: 24, backgroundColor: '#E5E7EB', marginTop: 2 },
+  segLabel: { fontSize: 13, color: '#374151', fontWeight: '600', width: 50 },
+  segTime: { flex: 1, fontSize: 13, color: '#6B7280' },
+  segBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
+  segDuration: { fontSize: 13, fontWeight: '700', color: '#4B5563' },
+});
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function ShareScreen() {
   const [briefing, setBriefing] = useState<any>(null);
@@ -362,6 +529,7 @@ export default function ShareScreen() {
   const [shareText, setShareText] = useState('');
   const [copied, setCopied] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
+  const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; nightWakings: number }>>([]);
   const cardRef = useRef<View>(null);
 
   const generateBriefingMutation = trpc.ai.generateBriefing.useMutation();
@@ -393,6 +561,9 @@ export default function ShareScreen() {
       setCheckIn(ci);
       const score = ci.careScore || 70;
       setCareScore(score);
+
+      const weekly = await getWeeklySleepData(7);
+      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, nightWakings: d.nightWakings })));
 
       // ── 命中缓存直接展示，无需重新调用 AI ──
       if (!forceRefresh) {
@@ -585,6 +756,12 @@ ${checkIn.moodEmoji} 心情：${checkIn.moodScore}/10
                 elderEmoji={elderEmoji}
               />
             </View>
+
+            {/* ── Last Night Sleep Detail (Donut + Timeline) ── */}
+            <SleepDetailSection checkIn={checkIn} />
+
+            {/* ── Weekly Sleep Trend (Bar Chart) ── */}
+            <WeeklySleepChart weeklyData={weeklyData} />
 
             {/* ── WeChat Share Button ── */}
             <TouchableOpacity

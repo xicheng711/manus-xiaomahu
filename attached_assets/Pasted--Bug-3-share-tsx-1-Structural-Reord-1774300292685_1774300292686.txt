@@ -1,0 +1,74 @@
+我们需要进行一次组件顺序的逻辑重构，并彻底解决图表溢出 Bug。请严格按照以下 3 步修改 share.tsx（或对应的简报卡片组件）：
+
+1. 调整模块的上下顺序 (Structural Reordering)
+现在的顺序不符合阅读逻辑。请调整 UI 树的顺序：
+
+第一部分：展示“昨晚睡眠详情”（图表 + 时间段列表）。
+
+第二部分：展示“近一周睡眠趋势”（柱状图）。
+请把 昨晚睡眠时段 的代码块整体移动到 近一周睡眠趋势 的上方。
+
+2. 新增“昨晚睡眠”的环形图 (Add Donut Chart for Last Night)
+在“昨晚睡眠时段”模块的顶部，不要只放文字列表，请使用 react-native-gifted-charts 增加一个直观的环形图（Donut Chart），并在右侧或下方配合文字说明。
+
+具体要求与代码参考：
+
+使用 <PieChart donut /> 组件。
+
+计算出昨夜的“总睡眠时长”，显示在环形图的中心（centerLabelComponent）。
+
+如果有夜间醒来，用另一种颜色（如浅黄色或灰色）在环形中表现出来。
+
+TypeScript
+import { PieChart } from 'react-native-gifted-charts';
+
+// 渲染示例结构：
+<View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+  {/* 左侧环形图 */}
+  <PieChart
+    donut
+    innerRadius={30}
+    radius={45}
+    data={[
+      { value: totalSleepHours, color: '#6EE7B7' }, // 睡眠部分 (薄荷绿)
+      { value: awakeHours, color: '#FEF3C7' }       // 苏醒部分 (浅黄)
+    ]}
+    centerLabelComponent={() => (
+      <View style={{justifyContent: 'center', alignItems: 'center'}}>
+        <Text style={{fontSize: 16, fontWeight: 'bold', color: '#374151'}}>{totalSleepHours}h</Text>
+      </View>
+    )}
+  />
+  {/* 右侧文字统计 */}
+  <View style={{ marginLeft: 20 }}>
+    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#11181C' }}>总睡眠 {totalSleepHours} 小时</Text>
+    <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>夜间醒来 {wakingsCount} 次</Text>
+  </View>
+</View>
+
+// 在环形图下方，继续保留现有的 Timeline 风格的时间段列表 (睡眠1, 睡眠2...)
+3. 彻底修复柱状图溢出 Bug (Fix BarChart Overflow)
+近一周睡眠趋势的 <BarChart /> 最右侧的柱子被切断了。这通常是因为宽度计算或间距设置不当。请在 <BarChart /> 中强制添加以下属性来修复：
+
+增加 endSpacing={20} 或 endSpacing={30}，给图表右侧强制留出空间，防止最后一个柱子贴边被裁。
+
+明确设置外层容器宽度，或者在 <BarChart /> 中加上 width={Dimensions.get('window').width - 80} (减去的数值根据你的实际 padding 调整)。
+
+加上 adjustToWidth={true}，让图表自动适应剩余空间。
+
+TypeScript
+<BarChart
+  data={weeklySleepData}
+  barWidth={18}
+  spacing={16} // 根据屏幕宽度微调
+  initialSpacing={10}
+  endSpacing={20} // 🔴 关键修复：防止最右侧被切断
+  adjustToWidth={true} // 🔴 关键修复：自动适应容器宽度
+  roundedTop
+  hideRules
+  xAxisThickness={0}
+  yAxisThickness={0}
+  yAxisLabelWidth={30}
+  frontColor="#6EE7B7"
+/>
+请优先把环形图加进去，并把那根断掉的柱子修好！
