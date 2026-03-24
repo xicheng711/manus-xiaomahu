@@ -349,22 +349,9 @@ export default function FamilyScreen() {
   }
 
   async function handleDeleteAnnouncement(id: string) {
-    Alert.alert(
-      '删除公告',
-      '要删除这条公告吗？删除后无法恢复。',
-      [
-        { text: '再想想', style: 'cancel' },
-        {
-          text: '确认删除', style: 'destructive',
-          onPress: async () => {
-            await deleteFamilyAnnouncement(id);
-            if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await loadData();
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+    await deleteFamilyAnnouncement(id);
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await loadData();
   }
 
   async function handleShareBriefing() {
@@ -977,6 +964,21 @@ function AnnouncementCard({
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const [showReactorsFor, setShowReactorsFor] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const deleteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleDeletePress() {
+    if (deleteConfirm) {
+      // 第二次点击 → 真正删除
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+      setDeleteConfirm(false);
+      onDelete();
+    } else {
+      // 第一次点击 → 进入确认态，3秒后自动取消
+      setDeleteConfirm(true);
+      deleteTimerRef.current = setTimeout(() => setDeleteConfirm(false), 3000);
+    }
+  }
 
   const time = new Date(ann.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   const date = ann.date !== new Date().toISOString().split('T')[0]
@@ -1076,8 +1078,14 @@ function AnnouncementCard({
           })()}
         </View>
         {isOwn && (
-          <TouchableOpacity onPress={onDelete} style={card.deleteBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={card.deleteText}>✕</Text>
+          <TouchableOpacity
+            onPress={handleDeletePress}
+            style={[card.deleteBtn, deleteConfirm && card.deleteBtnConfirm]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[card.deleteText, deleteConfirm && card.deleteTextConfirm]}>
+              {deleteConfirm ? '确认删除?' : '🗑'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -1264,8 +1272,10 @@ const card = StyleSheet.create({
   roleLabel: { fontSize: 10, color: AppColors.purple.strong, backgroundColor: AppColors.purple.soft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, fontWeight: '600' },
   time: { fontSize: 10, color: AppColors.text.tertiary, marginLeft: 'auto' },
   content: { fontSize: 15, color: AppColors.text.primary, lineHeight: 22, marginBottom: 8 },
-  deleteBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: AppColors.coral.soft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  deleteText: { fontSize: 12, color: AppColors.coral.primary, fontWeight: '700' },
+  deleteBtn: { minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 8, backgroundColor: AppColors.coral.soft, alignItems: 'center', justifyContent: 'center', flexShrink: 0, alignSelf: 'flex-start', marginTop: 2 },
+  deleteBtnConfirm: { backgroundColor: AppColors.coral.primary, borderRadius: 12 },
+  deleteText: { fontSize: 13, color: AppColors.coral.primary, fontWeight: '700' },
+  deleteTextConfirm: { fontSize: 11, color: '#fff', fontWeight: '800' },
 
   // ── Reactions ──
   reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
