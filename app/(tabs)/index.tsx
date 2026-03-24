@@ -59,9 +59,21 @@ function FloatingCloud({ top = 0, left = 0, delay = 0 }: { top?: number; left?: 
 }
 
 
-// ─── 背景装饰：闪烁星星 ─────────────────────────────────────────────
-
-// ─── 背景装饰：上升气球 ─────────────────────────────────────────────
+// ─── 背景装饰：闪烁星星 ✦ ───────────────────────────────────────────
+function FloatingSparkle({ top = 0, left = 0, delay = 0, size = 9 }: {
+  top?: number; left?: number; delay?: number; size?: number;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    setTimeout(() => {
+      Animated.loop(Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.55, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.08, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])).start();
+    }, delay);
+  }, []);
+  return <Animated.Text style={{ position: 'absolute', top, left, fontSize: size, opacity, color: '#D4A8C8' }}>✦</Animated.Text>;
+}
 
 // ─── 打卡横幅：增强版 ─────────────────────────────────────────────────
 function EnhancedCheckinBanner({
@@ -78,7 +90,7 @@ function EnhancedCheckinBanner({
   const wave2Rotate = useRef(new Animated.Value(0)).current;
 
   const starAnimations = useRef(
-    Array.from({ length: 6 }, () => ({
+    Array.from({ length: 4 }, () => ({
       scale: new Animated.Value(0),
       opacity: new Animated.Value(0),
       rotate: new Animated.Value(0),
@@ -87,9 +99,8 @@ function EnhancedCheckinBanner({
 
   // 星星位置固定（不在渲染时用 Math.random）
   const starPositions = useMemo(() => [
-    { top: '25%', left: '15%' }, { top: '55%', left: '60%' },
-    { top: '30%', left: '80%' }, { top: '70%', left: '30%' },
-    { top: '20%', left: '45%' }, { top: '65%', left: '75%' },
+    { top: '22%', left: '18%' }, { top: '55%', left: '64%' },
+    { top: '28%', left: '78%' }, { top: '68%', left: '38%' },
   ], []);
 
   useEffect(() => {
@@ -154,7 +165,7 @@ function EnhancedCheckinBanner({
         <TouchableOpacity onPress={handlePress} activeOpacity={0.88}>
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <LinearGradient
-              colors={[...Gradients.coral, '#F47D96']}
+              colors={['#FFBBA5', '#F4907E', '#EB79A5']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.checkinBanner}
             >
@@ -165,22 +176,27 @@ function EnhancedCheckinBanner({
                 const starRot = star.rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
                 return (
                   <Animated.View key={i} style={[styles.starDecor, starPositions[i], { opacity: star.opacity, transform: [{ scale: star.scale }, { rotate: starRot }] }]}>
-                    <Text style={{ fontSize: 12, color: 'white' }}>✨</Text>
+                    <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.95)' }}>✦</Text>
                   </Animated.View>
                 );
               })}
 
+              {/* 软白光晕 */}
+              <View style={styles.bannerSheen} pointerEvents="none" />
+              {/* 右下角小心心 */}
+              <Text style={styles.bannerHeart}>♡</Text>
+
               <View style={styles.checkinLeft}>
                 <View style={styles.checkinIconBox}>
-                  <Text style={{ fontSize: 26 }}>📋</Text>
+                  <Text style={{ fontSize: 24 }}>📋</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.checkinTitle}>开始今日记录</Text>
-                  <Text style={styles.checkinSub}>记录{elderNickname}的状态，1分钟即可完成</Text>
+                  <Text style={styles.checkinSub}>轻松记录{elderNickname}的状态，约1分钟</Text>
                 </View>
               </View>
               <View style={styles.chevronCircle}>
-                <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.9)', fontWeight: '600' }}>›</Text>
+                <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.92)', fontWeight: '700' }}>›</Text>
               </View>
             </LinearGradient>
           </Animated.View>
@@ -304,33 +320,43 @@ function EnhancedAICard({
 
 // ─── 快捷入口卡片 ────────────────────────────────────────────────────
 function QuickActionCard({
-  emoji, decorEmoji, label, gradientStart, gradientEnd, bgColor, onPress, delay,
+  emoji, label, gradientStart, gradientEnd, bgColor, onPress, delay, pulse = false,
 }: {
-  emoji: string; decorEmoji: string; label: string;
+  emoji: string; label: string;
   gradientStart: string; gradientEnd: string; bgColor: string;
-  onPress: () => void; delay: number;
+  onPress: () => void; delay: number; pulse?: boolean;
 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const emojiRotate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 400, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
 
     setTimeout(() => {
       Animated.loop(Animated.timing(emojiRotate, {
-        toValue: 1, duration: 3000, easing: Easing.inOut(Easing.ease), useNativeDriver: true,
+        toValue: 1, duration: 3200, easing: Easing.inOut(Easing.ease), useNativeDriver: true,
       })).start();
     }, delay + 600);
+
+    if (pulse) {
+      setTimeout(() => {
+        Animated.loop(Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.028, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])).start();
+      }, delay + 1200);
+    }
   }, []);
 
   const emojiRot = emojiRotate.interpolate({
     inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: ['0deg', '10deg', '0deg', '-10deg', '0deg'],
+    outputRange: ['0deg', '8deg', '0deg', '-8deg', '0deg'],
   });
 
   const handlePress = () => {
@@ -339,17 +365,26 @@ function QuickActionCard({
   };
 
   return (
-    <Animated.View style={[styles.quickItem, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }]}>
-      <TouchableOpacity style={[styles.quickCard, { backgroundColor: bgColor }]} onPress={handlePress} activeOpacity={0.85}>
-        <LinearGradient colors={[gradientStart, gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.quickIconBox}>
-          <Text style={styles.quickEmoji}>{emoji}</Text>
-        </LinearGradient>
-        <View style={{ flex: 1 }} />
-        <Text style={styles.quickLabel}>{label}</Text>
-        <Animated.Text style={[styles.quickDecorEmoji, { transform: [{ rotate: emojiRot }] }]}>
-          {decorEmoji}
-        </Animated.Text>
-      </TouchableOpacity>
+    <Animated.View style={[styles.quickItem, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <TouchableOpacity style={[styles.quickCard, { backgroundColor: bgColor }]} onPress={handlePress} activeOpacity={0.85}>
+            {/* 软白光晕覆盖层 */}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <LinearGradient
+                colors={['rgba(255,255,255,0.48)', 'rgba(255,255,255,0)']}
+                start={{ x: 0.05, y: 0 }} end={{ x: 1, y: 1 }}
+                style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}
+              />
+            </View>
+            <LinearGradient colors={[gradientStart, gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.quickIconBox}>
+              <Animated.Text style={[styles.quickEmoji, { transform: [{ rotate: emojiRot }] }]}>{emoji}</Animated.Text>
+            </LinearGradient>
+            <View style={{ flex: 1 }} />
+            <Text style={styles.quickLabel}>{label}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -505,10 +540,10 @@ function CreatorHomeScreen() {
     : '完成打卡后，自动整理今日照护数据';
 
   const quickActions = [
-    { emoji: '💊', decorEmoji: '', label: '用药记录', route: '/medication', gradientStart: Gradients.coral[0], gradientEnd: Gradients.coral[1], bgColor: AppColors.coral.soft },
-    { emoji: '📔', decorEmoji: '', label: '护理日记', route: '/diary',      gradientStart: Gradients.peach[0], gradientEnd: Gradients.peach[1], bgColor: AppColors.peach.soft },
-    { emoji: '👥', decorEmoji: '', label: '家庭同步', route: '/family',     gradientStart: Gradients.purple[0], gradientEnd: Gradients.purple[1], bgColor: AppColors.purple.soft },
-    { emoji: '📊', decorEmoji: '', label: '数据分析',  route: '/share',  gradientStart: Gradients.green[0], gradientEnd: Gradients.green[1], bgColor: AppColors.green.soft },
+    { emoji: '💊', label: '用药记录', route: '/medication', gradientStart: Gradients.coral[0], gradientEnd: Gradients.coral[1], bgColor: AppColors.coral.soft, pulse: false },
+    { emoji: '📔', label: '护理日记', route: '/diary',      gradientStart: Gradients.peach[0], gradientEnd: Gradients.peach[1], bgColor: AppColors.peach.soft, pulse: false },
+    { emoji: '👥', label: '家庭同步', route: '/family',     gradientStart: Gradients.purple[0], gradientEnd: Gradients.purple[1], bgColor: AppColors.purple.soft, pulse: false },
+    { emoji: '📊', label: '数据分析', route: '/share',      gradientStart: Gradients.green[0], gradientEnd: Gradients.green[1], bgColor: AppColors.green.soft, pulse: true },
   ];
 
   return (
@@ -521,11 +556,14 @@ function CreatorHomeScreen() {
 
       {/* ── 背景装饰层（不干扰交互）── */}
       <View style={styles.bgDecorLayer} pointerEvents="none">
-        {/* 3朵云 */}
-        <FloatingCloud top={60} left={-10} delay={0} />
-        <FloatingCloud top={40} left={width * 0.38} delay={600} />
-        <FloatingCloud top={80} left={width * 0.68} delay={1200} />
-
+        {/* 云朵 */}
+        <FloatingCloud top={62} left={-10} delay={0} />
+        <FloatingCloud top={42} left={width * 0.38} delay={600} />
+        <FloatingCloud top={78} left={width * 0.68} delay={1200} />
+        {/* ✦ 闪光 */}
+        <FloatingSparkle top={28} left={width * 0.18} delay={400} size={9} />
+        <FloatingSparkle top={72} left={width * 0.54} delay={900} size={7} />
+        <FloatingSparkle top={108} left={width * 0.82} delay={1600} size={8} />
       </View>
 
       <ScrollView
@@ -621,16 +659,17 @@ function CreatorHomeScreen() {
         <View style={{ marginBottom: 4 }}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>快捷入口</Text>
+            <Text style={{ fontSize: 11, color: AppColors.peach.primary, marginBottom: 2, marginLeft: 2 }}>✦</Text>
           </View>
           <View style={styles.quickGrid}>
             <View style={styles.quickRow}>
               {quickActions.slice(0, 2).map((item, i) => (
-                <QuickActionCard key={item.route} {...item} onPress={() => router.push(item.route as any)} delay={50 + i * 80} />
+                <QuickActionCard key={item.route} emoji={item.emoji} label={item.label} gradientStart={item.gradientStart} gradientEnd={item.gradientEnd} bgColor={item.bgColor} pulse={item.pulse} onPress={() => router.push(item.route as any)} delay={50 + i * 80} />
               ))}
             </View>
             <View style={styles.quickRow}>
               {quickActions.slice(2, 4).map((item, i) => (
-                <QuickActionCard key={item.route} {...item} onPress={() => router.push(item.route as any)} delay={210 + i * 80} />
+                <QuickActionCard key={item.route} emoji={item.emoji} label={item.label} gradientStart={item.gradientStart} gradientEnd={item.gradientEnd} bgColor={item.bgColor} pulse={item.pulse} onPress={() => router.push(item.route as any)} delay={210 + i * 80} />
               ))}
             </View>
           </View>
@@ -849,26 +888,28 @@ const styles = StyleSheet.create({
   appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   appName: { fontSize: 24, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.5 },
   greeting: { fontSize: 15, color: AppColors.text.tertiary, fontWeight: '500', lineHeight: 22 },
-  profileBtn: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', ...SHADOWS.md },
-  profileGradient: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  profilePhoto: { width: 56, height: 56, borderRadius: 16 },
+  profileBtn: { width: 56, height: 56, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', ...SHADOWS.md },
+  profileGradient: { width: 56, height: 56, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  profilePhoto: { width: 56, height: 56, borderRadius: 20 },
 
   // 打卡横幅
-  checkinBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 24, padding: 18, overflow: 'hidden', ...SHADOWS.md },
-  bannerDecor1: { position: 'absolute', top: -20, right: -20, width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(255,255,255,0.15)' },
-  bannerDecor2: { position: 'absolute', bottom: -20, left: 60, width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.10)' },
+  checkinBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 28, padding: 20, overflow: 'hidden', ...SHADOWS.md },
+  bannerDecor1: { position: 'absolute', top: -24, right: -24, width: 110, height: 110, borderRadius: 55, backgroundColor: 'rgba(255,255,255,0.14)' },
+  bannerDecor2: { position: 'absolute', bottom: -18, left: 55, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.09)' },
+  bannerSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '55%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: 'rgba(255,255,255,0.08)' },
+  bannerHeart: { position: 'absolute', bottom: 14, right: 58, fontSize: 15, color: 'rgba(255,255,255,0.38)' },
   starDecor: { position: 'absolute' },
   checkinLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
-  checkinIconBox: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
-  checkinIconBoxDone: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: AppColors.green.soft },
-  checkinTitle: { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  checkinIconBox: { width: 54, height: 54, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.28)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' },
+  checkinIconBoxDone: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: AppColors.green.soft },
+  checkinTitle: { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.4 },
   checkinTitleDone: { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  checkinSub: { fontSize: 13, color: 'rgba(255,255,255,0.88)', marginTop: 2 },
+  checkinSub: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 3, lineHeight: 18 },
   checkinSubDone: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
-  checkinDone: { flexDirection: 'row', alignItems: 'center', backgroundColor: AppColors.green.soft, borderWidth: 1.5, borderColor: AppColors.green.primary, borderRadius: 24, padding: 18, marginBottom: 16, ...SHADOWS.sm },
-  chevronCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' },
+  checkinDone: { flexDirection: 'row', alignItems: 'center', backgroundColor: AppColors.green.soft, borderWidth: 1.5, borderColor: AppColors.green.primary + '80', borderRadius: 28, padding: 18, marginBottom: 16, ...SHADOWS.sm },
+  chevronCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.30)', alignItems: 'center', justifyContent: 'center' },
   chevronCircleDone: { width: 32, height: 32, borderRadius: 16, backgroundColor: AppColors.bg.secondary, alignItems: 'center', justifyContent: 'center' },
-  careScoreBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, backgroundColor: AppColors.peach.soft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
+  careScoreBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, backgroundColor: AppColors.peach.soft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start' },
 
   // AI 卡片
   aiCard: { marginBottom: 16, backgroundColor: AppColors.purple.soft, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: AppColors.purple.primary + '60', overflow: 'hidden', ...SHADOWS.sm },
@@ -892,14 +933,13 @@ const styles = StyleSheet.create({
   quickGrid: { marginTop: 4 },
   quickRow: { flexDirection: 'row', gap: 14, marginBottom: 14 },
   quickItem: { flex: 1 },
-  quickCard: { borderRadius: 24, padding: 16, height: 160, flexDirection: 'column', alignItems: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)', ...SHADOWS.sm },
-  quickIconBox: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
-  quickEmoji: { fontSize: 28, lineHeight: 34 },
-  quickLabel: { fontSize: 16, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.3, lineHeight: 22 },
-  quickDecorEmoji: { fontSize: 22, opacity: 0.65, marginTop: 2 },
+  quickCard: { borderRadius: 22, padding: 16, paddingBottom: 14, height: 140, flexDirection: 'column', alignItems: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.85)', overflow: 'hidden', ...SHADOWS.sm },
+  quickIconBox: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  quickEmoji: { fontSize: 26, lineHeight: 30 },
+  quickLabel: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.3, lineHeight: 20 },
 
   // 数据摘要卡片
-  summaryCard: { backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: AppColors.border.soft, ...SHADOWS.sm },
+  summaryCard: { backgroundColor: '#FEFAF7', borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: AppColors.border.soft, ...SHADOWS.sm },
   summaryCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   summaryCardTitle: { fontSize: 15, fontWeight: '800', color: COLORS.text },
   summaryCardEdit: { fontSize: 13, color: AppColors.purple.strong, fontWeight: '600' },
