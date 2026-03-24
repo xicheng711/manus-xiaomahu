@@ -280,7 +280,9 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
       <LinearGradient colors={[AppColors.green.soft, '#F0F7F2']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={cardStyles.headerRibbon}>
         <View style={cardStyles.headerLeft}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Image source={require('@/assets/images/app-icon.png')} style={{ width: 24, height: 24, borderRadius: 6 }} />
+            <View style={{ width: 24, height: 24, borderRadius: 6, overflow: 'hidden' }}>
+              <Image source={require('@/assets/images/app-icon.png')} style={{ width: 24, height: 24, backgroundColor: 'transparent' }} />
+            </View>
             <Text style={cardStyles.appName}>小马虎 · 每日护理简报</Text>
           </View>
           <Text style={cardStyles.date}>{today}</Text>
@@ -336,7 +338,9 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
       <View style={cardStyles.footer}>
         <Text style={cardStyles.footerLeft}>记录人：{caregiverName}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Image source={require('@/assets/images/app-icon.png')} style={{ width: 14, height: 14, borderRadius: 3 }} />
+          <View style={{ width: 14, height: 14, borderRadius: 3, overflow: 'hidden' }}>
+              <Image source={require('@/assets/images/app-icon.png')} style={{ width: 14, height: 14, backgroundColor: 'transparent' }} />
+            </View>
           <Text style={cardStyles.footerRight}>小马虎</Text>
         </View>
       </View>
