@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
   quickGrid: { marginTop: 4 },
   quickRow: { flexDirection: 'row', gap: 14, marginBottom: 14 },
   quickItem: { flex: 1 },
-  quickCard: { borderRadius: 22, padding: 16, paddingBottom: 14, height: 140, flexDirection: 'column', alignItems: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.85)', overflow: 'hidden', ...SHADOWS.sm },
+  quickCard: { borderRadius: 22, padding: 16, paddingBottom: 14, height: 140, flexDirection: 'column', alignItems: 'flex-start', overflow: 'hidden', ...SHADOWS.sm },
   quickIconBox: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   quickEmoji: { fontSize: 26, lineHeight: 30 },
   quickLabel: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.3, lineHeight: 20 },
