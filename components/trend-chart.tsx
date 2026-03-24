@@ -354,18 +354,9 @@ const sleepStyles = StyleSheet.create({
 function MedicationChart({ data }: { data: { label: string; taken: boolean | null }[] }) {
   const takenCount = data.filter(d => d.taken === true).length;
   const missedCount = data.filter(d => d.taken === false).length;
-  const total = takenCount + missedCount;
-  const rate = total > 0 ? Math.round((takenCount / total) * 100) : 0;
 
   return (
     <View>
-      <View style={medStyles.rateRow}>
-        <Text style={medStyles.rateLabel}>服药率</Text>
-        <Text style={[medStyles.rateNum, { color: rate >= 80 ? '#16A34A' : rate >= 50 ? '#F0A500' : '#DC2626' }]}>{rate}%</Text>
-      </View>
-      <View style={medStyles.rateBar}>
-        <View style={[medStyles.rateFill, { width: `${rate}%`, backgroundColor: rate >= 80 ? '#16A34A' : rate >= 50 ? '#F0A500' : '#DC2626' }]} />
-      </View>
       <View style={medStyles.dotGrid}>
         {data.map((d, i) => (
           <View key={i} style={medStyles.dotCol}>
@@ -396,11 +387,6 @@ function MedicationChart({ data }: { data: { label: string; taken: boolean | nul
 }
 
 const medStyles = StyleSheet.create({
-  rateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  rateLabel: { fontSize: 13, color: AppColors.text.secondary, fontWeight: '500' },
-  rateNum: { fontSize: 24, fontWeight: '900' },
-  rateBar: { height: 8, backgroundColor: AppColors.border.soft, borderRadius: 4, overflow: 'hidden', marginBottom: 14 },
-  rateFill: { height: '100%', borderRadius: 4 },
   dotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 12 },
   dotCol: { alignItems: 'center', minWidth: 30 },
   dot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
@@ -486,9 +472,6 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
     ? `${period === 'year' ? yearLabel : periodLabel}平均 ${avgSleep.toFixed(1)}h · ${avgSleep >= 7 ? '睡眠充足 ✅' : '睡眠不足 ⚠️'}`
     : `${period === 'year' ? yearLabel : periodLabel}暂无睡眠记录`;
 
-  const medWithData = relevantCheckIns.filter(c => c.medicationTaken !== null);
-  const medTaken = medWithData.filter(c => c.medicationTaken === true).length;
-  const medRate = medWithData.length > 0 ? Math.round((medTaken / medWithData.length) * 100) : null;
 
   // 心情分数：优先用日记里的 caregiverMoodEmoji，已废弃的 caregiverMoodScore 作为兜底
   const cgMoodDates = dateRange.filter(d => (diaryMoodMap[d] ?? (checkInMap.get(d)?.caregiverMoodScore ?? 0)) > 0);
@@ -560,9 +543,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
           </View>
           <View style={styles.sectionHeaderText}>
             <Text style={styles.sectionTitle}>{patientNickname}的用药情况</Text>
-            <Text style={styles.sectionSubtitle}>
-              {medRate !== null ? `${periodLabel}服药记录 · 服药率 ${medRate}%` : `${periodLabel}服药记录`}
-            </Text>
+            <Text style={styles.sectionSubtitle}>{periodLabel}服药记录</Text>
           </View>
         </View>
         <MedicationChart data={medData} />
