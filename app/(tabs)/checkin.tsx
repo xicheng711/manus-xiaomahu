@@ -1860,7 +1860,7 @@ const styles = StyleSheet.create({
 });
 
 // ─── Calendar Styles ──────────────────────────────────────────────────────────
-const CELL_SIZE = Math.floor((width - 48) / 7);
+const CELL_SIZE = Math.floor((width - 76) / 7);
 const calStyles = StyleSheet.create({
   sectionHeader: { marginTop: 20, marginBottom: 10, flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
