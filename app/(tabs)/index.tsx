@@ -722,16 +722,16 @@ function CreatorHomeScreen() {
                     </View>
                   </>
                 )}
-                {latestCheckIn.careScore != null && (
-                  <>
-                    <View style={styles.summaryCardDivider} />
-                    <View style={styles.summaryCardItem}>
-                      <Text style={styles.summaryCardEmoji}>⭐</Text>
-                      <Text style={styles.summaryCardLabel}>今日状态</Text>
-                      <Text style={[styles.summaryCardValue, { color: '#F59E0B' }]}>{latestCheckIn.careScore}分</Text>
-                    </View>
-                  </>
-                )}
+                <View style={styles.summaryCardDivider} />
+                <View style={styles.summaryCardItem}>
+                  <Text style={styles.summaryCardEmoji}>⭐</Text>
+                  <Text style={styles.summaryCardLabel}>今日状态</Text>
+                  {latestCheckIn.eveningDone && latestCheckIn.careScore != null ? (
+                    <Text style={[styles.summaryCardValue, { color: '#F59E0B' }]}>{latestCheckIn.careScore}分</Text>
+                  ) : (
+                    <Text style={[styles.summaryCardValue, { color: AppColors.text.secondary }]}>--</Text>
+                  )}
+                </View>
               </View>
             </View>
           );

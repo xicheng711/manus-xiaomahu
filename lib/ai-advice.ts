@@ -44,8 +44,9 @@ export interface NutritionAdvice {
 export function calculateCareScore(
   yesterday: DailyCheckIn | null,
   weather: WeatherData | null
-): number {
-  if (!yesterday) return 50;
+): number | null {
+  if (!yesterday) return null;
+  if (!yesterday.eveningDone) return null;
   let score = 50;
 
   // 睡眠评分 (最高 +25 分)
@@ -130,7 +131,7 @@ export function generateDailyAdvice(
   extraNotes?: string
 ): DailyAdviceReport {
   const nickname = elderNickname || '家人';
-  const careScore = calculateCareScore(yesterday, weather);
+  const careScore = calculateCareScore(yesterday, weather) ?? 50;
   const scoreDisplay = getScoreDisplay(careScore);
   const cards: CareAdvice[] = [];
 
@@ -156,6 +157,31 @@ export function generateDailyAdvice(
       outdoorAdvice: weather?.advice ?? '请先完成打卡以获取个性化建议。',
       encouragement: '您开始使用小马虎，是对老人最好的关爱！💕',
       watchOut: '请先完成今日打卡以获取个性化建议。',
+    };
+  }
+
+  if (!yesterday.eveningDone) {
+    return {
+      careScore: 50,
+      scoreEmoji: '📋',
+      scoreLabel: '暂未评分',
+      scoreColor: '#B8860B',
+      scoreBgColor: '#FFF8EE',
+      greeting: `${nickname}的部分记录已完成`,
+      overallAssessment: `${nickname}的早间打卡已记录。缺少昨晚打卡数据，暂无法生成完整评分。请补充昨晚记录后查看完整分析。`,
+      adviceCards: [{
+        title: '补充昨晚打卡',
+        icon: '📝',
+        priority: 'high',
+        color: '#B8860B',
+        bgColor: '#FFF8EE',
+        advice: '请补充昨晚的心情、用药和饮食记录，以便生成完整的护理评分。',
+        actionTips: ['前往打卡页面补充昨晚记录', '完成后简报将自动更新'],
+      }],
+      nutritionAdvice: generateNutritionAdvice(50, weather),
+      outdoorAdvice: weather?.advice ?? '请补充昨晚打卡以获取个性化建议。',
+      encouragement: '记录越完整，分析越准确。',
+      watchOut: '缺少昨晚记录，评分暂不可用。',
     };
   }
 

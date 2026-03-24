@@ -261,10 +261,11 @@ export default function AssistantScreen() {
     );
   }
 
-  const score = advice.careScore ?? 70;
-  const sd = getScoreDisplay(score);
-  const todayLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
   const ci = yesterdayCheckIn ?? todayCheckIn;
+  const hasCompleteEvening = ci?.eveningDone ?? false;
+  const score = hasCompleteEvening ? (advice.careScore ?? null) : null;
+  const sd = getScoreDisplay(score ?? 50);
+  const todayLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
   const moodLabel = ci?.moodScore ? (ci.moodScore >= 7 ? '状态不错' : ci.moodScore >= 5 ? '状态一般' : '状态欠佳') : null;
   const moodEmoji = ci?.moodScore ? (ci.moodScore >= 7 ? '😊' : ci.moodScore >= 5 ? '😐' : '😟') : null;
@@ -297,14 +298,14 @@ export default function AssistantScreen() {
             style={s.scoreCard}
           >
             <View style={s.scoreRow}>
-              <View style={[s.scoreCircle, { borderColor: sd.color + '40' }]}>
-                <Text style={{ fontSize: 28 }}>{sd.emoji}</Text>
-                <Text style={[s.scoreNum, { color: sd.color }]}>{score}</Text>
-                <Text style={s.scoreMax}>/100</Text>
+              <View style={[s.scoreCircle, { borderColor: (score != null ? sd.color : '#D5CFC9') + '40' }]}>
+                <Text style={{ fontSize: 28 }}>{score != null ? sd.emoji : '📋'}</Text>
+                <Text style={[s.scoreNum, { color: score != null ? sd.color : AppColors.text.secondary }]}>{score != null ? score : '--'}</Text>
+                {score != null && <Text style={s.scoreMax}>/100</Text>}
               </View>
               <View style={s.scoreRight}>
-                <View style={[s.scoreBadge, { backgroundColor: sd.color }]}>
-                  <Text style={s.scoreBadgeText}>{sd.label}</Text>
+                <View style={[s.scoreBadge, { backgroundColor: score != null ? sd.color : '#D5CFC9' }]}>
+                  <Text style={s.scoreBadgeText}>{score != null ? sd.label : '暂未评分'}</Text>
                 </View>
                 <Text style={s.scoreSummary}>{advice.summary || `${elderNickname}今天整体状态不错`}</Text>
               </View>
