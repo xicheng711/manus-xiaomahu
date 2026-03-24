@@ -27,8 +27,11 @@ interface TrendChartProps {
 function getWeekRange(offset: number): { start: Date; end: Date; label: string } {
   const now = new Date();
   const dayOfWeek = now.getDay();
+  // Start from Monday: if today is Sunday (0), go back 6 days; otherwise go back (dayOfWeek-1) days
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - dayOfWeek + (offset * 7));
+  startOfWeek.setDate(now.getDate() - daysToMonday + (offset * 7));
+  startOfWeek.setHours(0, 0, 0, 0);
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 6);
   const label = `${startOfWeek.getMonth() + 1}月${startOfWeek.getDate()}日 至 ${endOfWeek.getMonth() + 1}月${endOfWeek.getDate()}日`;
@@ -294,61 +297,75 @@ const curveStyles = StyleSheet.create({
   xLabel: { fontSize: 10, color: AppColors.text.tertiary, textAlign: 'center', flex: 1 },
 });
 
-function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean }[] }) {
-  const chartH = 100;
+function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean; isToday?: boolean }[] }) {
+  const chartH = 110;
   const maxVal = 12;
-  const barW = Math.max(8, Math.min(20, (CHART_W - 20) / data.length - 4));
+  const barW = 22;
 
   return (
-    <View>
-      <View style={sleepStyles.chartArea}>
-        <View style={sleepStyles.yAxis}>
-          <Text style={sleepStyles.yLabel}>12h</Text>
-          <Text style={sleepStyles.yLabel}>6h</Text>
-          <Text style={sleepStyles.yLabel}>0</Text>
-        </View>
-        <View style={[sleepStyles.barsContainer, { height: chartH }]}>
-          {data.map((d, i) => {
-            const h = d.hasData ? Math.max(4, (d.value / maxVal) * chartH) : 0;
-            const color = d.value >= 7 ? '#6EE7B7' : d.value >= 5 ? '#FCD34D' : '#FCA5A5';
-            return (
-              <View key={i} style={sleepStyles.barCol}>
-                <View style={sleepStyles.barWrapper}>
-                  {d.hasData ? (
-                    <>
-                      <Text style={sleepStyles.barValue}>{d.value}h</Text>
-                      <View style={[sleepStyles.bar, { height: h, backgroundColor: color, width: barW, borderRadius: barW / 2 }]} />
-                    </>
-                  ) : (
-                    <View style={[sleepStyles.barEmpty, { width: barW, borderRadius: barW / 2 }]} />
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </View>
+    <View style={sleepStyles.root}>
+      {/* Y-axis */}
+      <View style={[sleepStyles.yAxis, { height: chartH }]}>
+        <Text style={sleepStyles.yLabel}>12h</Text>
+        <Text style={sleepStyles.yLabel}>6h</Text>
+        <Text style={sleepStyles.yLabel}>0</Text>
       </View>
-      <View style={sleepStyles.xAxis}>
-        {data.map((d, i) => (
-          <Text key={i} style={sleepStyles.xLabel} numberOfLines={1}>{d.label}</Text>
-        ))}
+
+      {/* Bars */}
+      <View style={sleepStyles.barsArea}>
+        {data.map((d, i) => {
+          const fillH = d.hasData ? Math.max(6, (d.value / maxVal) * chartH) : 0;
+          const barColor = !d.hasData
+            ? 'transparent'
+            : d.value >= 7 ? AppColors.green.primary
+            : d.value >= 5 ? '#F0A500'
+            : AppColors.coral.primary;
+          const labelColor = !d.hasData ? AppColors.text.tertiary
+            : d.value >= 7 ? AppColors.green.primary
+            : d.value >= 5 ? '#F0A500'
+            : AppColors.coral.primary;
+          const isToday = d.isToday ?? false;
+
+          return (
+            <View key={i} style={sleepStyles.barCol}>
+              {/* value label */}
+              <Text style={[sleepStyles.valueLabel, { color: labelColor, opacity: d.hasData ? 1 : 0 }]}>
+                {d.hasData ? `${d.value}h` : ''}
+              </Text>
+              {/* track + fill */}
+              <View style={[sleepStyles.track, { height: chartH, width: barW }]}>
+                <View style={[sleepStyles.fill, { height: fillH, width: barW, backgroundColor: barColor }]} />
+              </View>
+              {/* day label */}
+              <Text style={[sleepStyles.dayLabel, isToday && sleepStyles.dayLabelToday]}>
+                {d.label}
+              </Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
 }
 
 const sleepStyles = StyleSheet.create({
-  chartArea: { flexDirection: 'row' },
-  yAxis: { width: 28, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 4, height: 100 },
-  yLabel: { fontSize: 10, color: AppColors.text.tertiary },
-  barsContainer: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', position: 'relative' },
-  barCol: { alignItems: 'center', flex: 1 },
-  barWrapper: { height: 100, justifyContent: 'flex-end', alignItems: 'center' },
-  bar: { minHeight: 4 },
-  barEmpty: { height: 4, backgroundColor: AppColors.border.soft },
-  barValue: { fontSize: 9, color: AppColors.text.tertiary, marginBottom: 2 },
-  xAxis: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 4, marginLeft: 28 },
-  xLabel: { fontSize: 10, color: AppColors.text.tertiary, textAlign: 'center', flex: 1 },
+  root: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  yAxis: { width: 26, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 4, paddingTop: 16 },
+  yLabel: { fontSize: 9, color: AppColors.text.tertiary },
+  barsArea: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
+  barCol: { alignItems: 'center', gap: 4 },
+  valueLabel: { fontSize: 10, fontWeight: '600', marginBottom: 2, minHeight: 14 },
+  track: {
+    backgroundColor: AppColors.border.soft,
+    borderRadius: 8,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  fill: {
+    borderRadius: 8,
+  },
+  dayLabel: { fontSize: 10, color: AppColors.text.tertiary, marginTop: 4 },
+  dayLabelToday: { color: AppColors.green.primary, fontWeight: '700' },
 });
 
 function MedicationChart({ data }: { data: { label: string; taken: boolean | null }[] }) {
@@ -450,16 +467,24 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
 
   const periodCheckIns = dateRange.map(d => checkInMap.get(d)).filter(Boolean) as DailyCheckIn[];
 
+  const todayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+  const DAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
   const sleepData = period === 'year' ? yearSleepData : dateRange.map(date => {
     const c = checkInMap.get(date);
-    const d = new Date(date);
-    return { label: ['日', '一', '二', '三', '四', '五', '六'][d.getDay()], value: c?.sleepHours ?? 0, hasData: !!c && c.sleepHours > 0 };
+    const d = new Date(date + 'T12:00:00');
+    return {
+      label: DAY_LABELS[d.getDay()],
+      value: c?.sleepHours ?? 0,
+      hasData: !!c && c.sleepHours > 0,
+      isToday: date === todayStr,
+    };
   });
 
   const medData = period === 'year' ? yearMedData : dateRange.map(date => {
     const c = checkInMap.get(date);
-    const d = new Date(date);
-    return { label: ['日', '一', '二', '三', '四', '五', '六'][d.getDay()], taken: c ? c.medicationTaken : null };
+    const d = new Date(date + 'T12:00:00');
+    return { label: DAY_LABELS[d.getDay()], taken: c ? c.medicationTaken : null };
   });
 
   const relevantCheckIns = period === 'year'
