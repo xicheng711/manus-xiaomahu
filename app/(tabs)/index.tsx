@@ -262,71 +262,41 @@ function EnhancedAICard({
     <TouchableOpacity onPress={handlePress} activeOpacity={0.88}>
       <Animated.View style={[styles.aiCard, { transform: [{ scale: scaleAnim }] }]}>
         <Animated.View style={[styles.aiGlow1, { transform: [{ scale: glowAnim1 }] }]} />
-        <Animated.View style={[styles.aiGlow2, { transform: [{ scale: glowAnim2 }] }]} />
 
-        <Text style={styles.aiDecorFigure}>📋</Text>
-
-        <View style={styles.aiHeader}>
-          <Animated.View style={{ transform: [{ scale: iconScale }, { rotate: iconRotation }] }}>
+        <View style={styles.aiRow}>
+          <Animated.View style={{ transform: [{ scale: iconScale }] }}>
             <LinearGradient
               colors={[...Gradients.purple, AppColors.purple.strong]}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.aiIconBox}
             >
-              <Text style={{ fontSize: 20, lineHeight: 24 }}>📊</Text>
+              <Text style={{ fontSize: 16, lineHeight: 20 }}>📊</Text>
             </LinearGradient>
           </Animated.View>
+
           <View style={{ flex: 1 }}>
-            <Text style={styles.aiLabel}>今日状态分析</Text>
-            <Text style={styles.aiSubLabel} numberOfLines={1}>基于打卡数据整理</Text>
-          </View>
-        </View>
-
-        <View style={styles.aiContentBox}>
-          {!morningDone ? (
-            <View style={styles.aiSkeletonWrap}>
-              <View style={styles.aiSkeletonLine} />
-              <View style={[styles.aiSkeletonLine, { width: '78%' }]} />
-              <View style={[styles.aiSkeletonLine, { width: '90%', marginTop: 8 }]} />
-              <View style={[styles.aiSkeletonLine, { width: '65%' }]} />
-              <View style={styles.aiSkeletonBadgeRow}>
-                <View style={styles.aiSkeletonBadge} />
-                <View style={[styles.aiSkeletonBadge, { width: 72 }]} />
-                <View style={[styles.aiSkeletonBadge, { width: 64 }]} />
-              </View>
-              <View style={styles.aiSkeletonOverlay}>
-                <View style={styles.aiSkeletonLockBox}>
-                  <Text style={{ fontSize: 20 }}>📋</Text>
-                  <Text style={styles.aiSkeletonLockText}>完成打卡后生成分析</Text>
-                  <Text style={styles.aiSkeletonLockSub}>记录今日数据，整理变化趋势</Text>
-                </View>
-              </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <Text style={styles.aiLabel}>今日状态分析</Text>
+              <Text style={styles.aiSubLabel}>· 基于打卡数据</Text>
             </View>
-          ) : (
-            <Text style={styles.aiMessage}>{encouragement}</Text>
-          )}
-        </View>
 
-        {morningDone && (
-          <View style={styles.aiBadgeRow}>
-            {[{ emoji: '📋', text: '状态总结' }, { emoji: '📈', text: '趋势变化' }, { emoji: '⚠️', text: '异常提醒' }].map((b, i) => (
-              <View key={i} style={styles.aiBadge}>
-                <Text style={styles.aiBadgeEmoji}>{b.emoji}</Text>
-                <Text style={styles.aiBadgeText}>{b.text}</Text>
-              </View>
-            ))}
+            {!morningDone ? (
+              <Text style={styles.aiMessage}>完成今日打卡后，自动整理状态摘要</Text>
+            ) : (
+              <Text style={styles.aiMessage} numberOfLines={2}>{encouragement}</Text>
+            )}
+
+            {morningDone ? (
+              <TouchableOpacity onPress={onPress} style={styles.aiDetailLink}>
+                <Text style={styles.aiDetailLinkText}>查看完整分析 ›</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={onCheckinPress} style={styles.aiDetailLink}>
+                <Text style={[styles.aiDetailLinkText, { color: AppColors.coral.primary }]}>去完成打卡 →</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        )}
-
-        {morningDone ? (
-          <TouchableOpacity onPress={onPress} style={styles.aiDetailLink}>
-            <Text style={styles.aiDetailLinkText}>查看完整分析 ›</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity onPress={onCheckinPress} style={styles.aiDetailLink}>
-            <Text style={[styles.aiDetailLinkText, { color: AppColors.coral.primary }]}>去完成打卡 →</Text>
-          </TouchableOpacity>
-        )}
+        </View>
       </Animated.View>
     </TouchableOpacity>
   );
@@ -901,30 +871,15 @@ const styles = StyleSheet.create({
   careScoreBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, backgroundColor: AppColors.peach.soft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
 
   // AI 卡片
-  aiCard: { marginBottom: 16, backgroundColor: AppColors.purple.soft, borderRadius: 24, padding: 18, borderWidth: 1, borderColor: AppColors.purple.primary, overflow: 'hidden', ...SHADOWS.sm },
-  aiGlow1: { position: 'absolute', top: 0, right: 0, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(167,139,250,0.15)', transform: [{ translateX: 60 }, { translateY: -60 }] },
-  aiGlow2: { position: 'absolute', bottom: 0, left: 0, width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(139,92,246,0.12)', transform: [{ translateX: -50 }, { translateY: 50 }] },
-  aiDecorFigure: { position: 'absolute', top: 8, right: 12, fontSize: 44, opacity: 0.18, transform: [{ scaleX: -1 }] },
-  aiHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  aiIconBox: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  aiLabel: { fontSize: 16, fontWeight: '800', color: AppColors.purple.strong, letterSpacing: -0.3 },
-  aiSubLabel: { fontSize: 12, color: AppColors.purple.strong, marginTop: 2 },
-  aiContentBox: { backgroundColor: AppColors.surface.whiteStrong, borderRadius: 16, padding: 14, marginBottom: 12 },
-  aiMessage: { fontSize: 14, color: AppColors.text.primary, lineHeight: 22 },
-  aiSkeletonWrap: { position: 'relative', overflow: 'hidden', gap: 8, paddingBottom: 4 },
-  aiSkeletonLine: { width: '100%', height: 13, borderRadius: 6, backgroundColor: AppColors.border.soft, opacity: 0.7 },
-  aiSkeletonBadgeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  aiSkeletonBadge: { width: 56, height: 24, borderRadius: 12, backgroundColor: AppColors.purple.soft, opacity: 0.6 },
-  aiSkeletonOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.82)', justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
-  aiSkeletonLockBox: { alignItems: 'center', gap: 6, backgroundColor: AppColors.purple.soft, borderRadius: 16, paddingHorizontal: 20, paddingVertical: 14, borderWidth: 1, borderColor: AppColors.purple.primary },
-  aiSkeletonLockText: { fontSize: 13, fontWeight: '700', color: AppColors.purple.strong },
-  aiSkeletonLockSub: { fontSize: 11, color: AppColors.purple.strong, textAlign: 'center' },
-  aiBadgeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 4 },
-  aiBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: AppColors.purple.soft, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  aiBadgeEmoji: { fontSize: 12 },
-  aiBadgeText: { fontSize: 12, color: AppColors.purple.strong, fontWeight: '600' },
-  aiDetailLink: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 10 },
-  aiDetailLinkText: { fontSize: 13, fontWeight: '700', color: AppColors.purple.strong },
+  aiCard: { marginBottom: 16, backgroundColor: AppColors.purple.soft, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: AppColors.purple.primary + '60', overflow: 'hidden', ...SHADOWS.sm },
+  aiGlow1: { position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(167,139,250,0.10)' },
+  aiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  aiIconBox: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  aiLabel: { fontSize: 14, fontWeight: '700', color: AppColors.purple.strong, letterSpacing: -0.2 },
+  aiSubLabel: { fontSize: 11, color: AppColors.purple.strong, opacity: 0.65 },
+  aiMessage: { fontSize: 13, color: AppColors.text.secondary, lineHeight: 19, marginTop: 4 },
+  aiDetailLink: { marginTop: 6 },
+  aiDetailLinkText: { fontSize: 12, fontWeight: '700', color: AppColors.purple.strong },
 
   // 护理贴士
 
