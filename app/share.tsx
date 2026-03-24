@@ -9,7 +9,7 @@ import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
@@ -657,6 +657,9 @@ export default function ShareScreen() {
           const { calculateCareScore } = await import('@/lib/ai-advice');
           const newScore = calculateCareScore(yesterday, null);
           setCareScore(newScore);
+          if (newScore != null) {
+            await upsertCheckIn({ date: ci.date, careScore: newScore });
+          }
           setBackfillNotice('昨晚记录已补充，今日简报已更新');
           setTimeout(() => setBackfillNotice(null), 4000);
           const profile = await getProfile();
@@ -728,7 +731,14 @@ export default function ShareScreen() {
 
       setCheckIn(ci);
       const yesterdayEveningDone = yesterday?.eveningDone ?? false;
-      const score = yesterdayEveningDone ? (ci.careScore ?? null) : null;
+      let score = yesterdayEveningDone ? (ci.careScore ?? null) : null;
+      if (score == null && yesterdayEveningDone && yesterday) {
+        const { calculateCareScore } = await import('@/lib/ai-advice');
+        score = calculateCareScore(yesterday, null);
+        if (score != null) {
+          await upsertCheckIn({ date: ci.date, careScore: score });
+        }
+      }
       setCareScore(score);
 
       loadSupplementaryData();

@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getWeatherByGPS, buildGreetingWithWeather, fetchWeather, GpsWeatherInfo, WeatherData } from '@/lib/weather';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getCurrentUserIsCreator, joinFamilyRoom, getDiaryEntries, DiaryEntry } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getCurrentUserIsCreator, joinFamilyRoom, getDiaryEntries, DiaryEntry, upsertCheckIn } from '@/lib/storage';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -502,7 +502,18 @@ function CreatorHomeScreen() {
     const today = await getTodayCheckIn();
     setTodayCheckIn(today);
     const yesterday = await getYesterdayCheckIn();
-    setLatestCheckIn(today ?? yesterday);
+    const latest = today ?? yesterday;
+    if (latest && yesterday?.eveningDone && latest.careScore == null) {
+      try {
+        const { calculateCareScore } = await import('@/lib/ai-advice');
+        const score = calculateCareScore(yesterday, null);
+        if (score != null) {
+          latest.careScore = score;
+          await upsertCheckIn({ date: latest.date, careScore: score });
+        }
+      } catch {}
+    }
+    setLatestCheckIn(latest);
     const all = await getAllCheckIns();
     setAllCheckIns(all);
     const diaries = await getDiaryEntries();
