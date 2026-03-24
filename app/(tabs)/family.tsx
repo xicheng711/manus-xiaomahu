@@ -444,74 +444,78 @@ export default function FamilyScreen() {
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {/* Header */}
-      <View style={[styles.pageHeaderWrap, { paddingTop: insets.top + 8 }]}>
-        <PageHeader
-          theme={PAGE_THEMES.family}
-          subtitle={`${room.elderName} 的家庭空间`}
-          right={
-            <TouchableOpacity
-              style={styles.roomCodeBadge}
-              onPress={() => setShowInviteModal(true)}
-            >
-              <Text style={styles.roomCodeText}>🔗 {room.roomCode}</Text>
-            </TouchableOpacity>
-          }
-        />
-      </View>
+      {/* Page background */}
+      <LinearGradient colors={['#F7F1F3', '#F4EEEF', '#F6F1EC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
 
-      {/* Members row */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.membersScroll} contentContainerStyle={styles.membersContent}>
-        {room.members.map(m => (
-          <TouchableOpacity
-            key={m.id}
-            style={styles.memberChip}
-            onPress={async () => {
-              if (!currentMember || currentMember.id !== m.id) return;
-              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (status !== 'granted') {
-                Alert.alert('需要权限', '请允许访问相册以上传头像');
-                return;
-              }
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: 'images',
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-              });
-              if (!result.canceled && result.assets[0]) {
-                await updateFamilyMemberPhoto(m.id, result.assets[0].uri);
-                loadData();
-              }
-            }}
-            activeOpacity={currentMember?.id === m.id ? 0.7 : 1}
-          >
-            <View style={[styles.memberAvatar, { backgroundColor: m.color + '20', borderColor: m.color }]}>
-              {m.photoUri ? (
-                <Image source={{ uri: m.photoUri }} style={styles.memberAvatarImg} />
-              ) : (
-                <Text style={styles.memberAvatarText}>{m.emoji}</Text>
-              )}
-              {currentMember?.id === m.id && (
-                <View style={styles.memberAvatarEdit}>
-                  <Text style={{ fontSize: 8, color: AppColors.surface.whiteStrong }}>编辑</Text>
-                </View>
-              )}
+      {/* ── Hero Header ── */}
+      <View style={[styles.heroSection, { paddingTop: insets.top }]}>
+        <LinearGradient colors={['#EDE4FC', '#F0EAFE', '#F8F4FF']} start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
+        {/* 背景装饰 sparkles */}
+        <Text style={styles.heroBgStar1}>✦</Text>
+        <Text style={styles.heroBgStar2}>✦</Text>
+        <Text style={styles.heroBgHeart}>♡</Text>
+
+        {/* Title + code row */}
+        <View style={styles.heroTitleRow}>
+          <View style={styles.heroLeft}>
+            <LinearGradient colors={['#C8B8F8', '#9B80EE']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroIconBox}>
+              <Text style={{ fontSize: 24 }}>👥</Text>
+            </LinearGradient>
+            <View>
+              <Text style={styles.heroTitle}>家人共享</Text>
+              <Text style={styles.heroSub}>{room.elderName} 的家庭空间</Text>
             </View>
-            <Text style={styles.memberName}>{m.name}</Text>
-            <Text style={styles.memberRole}>{m.roleLabel}</Text>
-          </TouchableOpacity>
-        ))}
-        <TouchableOpacity
-          style={styles.addMemberChip}
-          onPress={() => setShowInviteModal(true)}
-        >
-          <View style={styles.addMemberBtn}>
-            <Text style={styles.addMemberBtnText}>＋</Text>
           </View>
-          <Text style={styles.memberName}>邀请</Text>
-        </TouchableOpacity>
-      </ScrollView>
+
+          {/* 邀请码徽章 */}
+          <TouchableOpacity onPress={() => setShowInviteModal(true)} activeOpacity={0.8} style={styles.heroCodeWrap}>
+            <Text style={styles.heroCodeLabel}>邀请码</Text>
+            <View style={styles.heroCodePill}>
+              <Text style={styles.heroCodeIcon}>🔗</Text>
+              <Text style={styles.heroCodeText}>{room.roomCode}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Members row inside hero */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heroMembersContent}>
+          {room.members.map(m => (
+            <TouchableOpacity
+              key={m.id}
+              style={styles.memberChip}
+              onPress={async () => {
+                if (!currentMember || currentMember.id !== m.id) return;
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (status !== 'granted') { Alert.alert('需要权限', '请允许访问相册以上传头像'); return; }
+                const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+                if (!result.canceled && result.assets[0]) { await updateFamilyMemberPhoto(m.id, result.assets[0].uri); loadData(); }
+              }}
+              activeOpacity={currentMember?.id === m.id ? 0.7 : 1}
+            >
+              <View style={[styles.memberAvatar, { backgroundColor: m.color + '22', borderColor: m.color + '99' }]}>
+                {m.photoUri ? (
+                  <Image source={{ uri: m.photoUri }} style={styles.memberAvatarImg} />
+                ) : (
+                  <Text style={styles.memberAvatarText}>{m.emoji}</Text>
+                )}
+                {currentMember?.id === m.id && (
+                  <View style={styles.memberAvatarEdit}>
+                    <Text style={{ fontSize: 8, color: AppColors.surface.whiteStrong }}>编辑</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.memberName}>{m.name}</Text>
+              <Text style={styles.memberRole}>{m.roleLabel}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={styles.addMemberChip} onPress={() => setShowInviteModal(true)}>
+            <View style={styles.addMemberBtn}>
+              <Text style={styles.addMemberBtnText}>＋</Text>
+            </View>
+            <Text style={styles.memberName}>邀请</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
 
       {/* Section tabs */}
       <View style={styles.sectionTabs}>
@@ -1000,43 +1004,60 @@ function AnnouncementCard({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: AppColors.bg.warmCream },
+  container: { flex: 1, backgroundColor: 'transparent' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontSize: 18, color: AppColors.text.secondary },
-  pageHeaderWrap: {
-    paddingHorizontal: 20, paddingBottom: 4,
-    backgroundColor: AppColors.bg.warmCream,
+
+  // ── Hero Header ──
+  heroSection: {
+    paddingHorizontal: 20, paddingBottom: 14, overflow: 'hidden',
+    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
+    shadowColor: '#9B80EE', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 6,
   },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-    paddingHorizontal: 20, paddingBottom: 12,
-    backgroundColor: AppColors.bg.warmCream,
+  heroBgStar1: { position: 'absolute', top: 22, right: 54, fontSize: 11, color: '#B49EE0', opacity: 0.55 },
+  heroBgStar2: { position: 'absolute', top: 60, right: 160, fontSize: 7, color: '#C8B8F0', opacity: 0.45 },
+  heroBgHeart: { position: 'absolute', bottom: 30, right: 28, fontSize: 18, color: '#D0C0F0', opacity: 0.35 },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 18, paddingBottom: 16 },
+  heroLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  heroIconBox: {
+    width: 50, height: 50, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
   },
-  headerLeft: {},
-  headerTitle: { fontSize: 22, fontWeight: '800', color: AppColors.text.primary },
-  headerSub: { fontSize: 13, color: AppColors.text.secondary, marginTop: 2 },
-  headerRight: { alignItems: 'flex-end' },
-  roomCodeBadge: {
-    backgroundColor: AppColors.purple.soft, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 1, borderColor: AppColors.purple.primary,
+  heroTitle: { fontSize: 24, fontWeight: '800', color: AppColors.purple.strong, letterSpacing: -0.5 },
+  heroSub: { fontSize: 13, color: AppColors.purple.primary, marginTop: 2, opacity: 0.75 },
+  heroCodeWrap: { alignItems: 'flex-end', gap: 3 },
+  heroCodeLabel: { fontSize: 10, fontWeight: '600', color: AppColors.purple.strong, opacity: 0.6, letterSpacing: 0.3 },
+  heroCodePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1.5, borderColor: AppColors.purple.primary + '55',
   },
-  roomCodeText: { fontSize: 13, fontWeight: '700', color: AppColors.purple.strong },
-  membersScroll: { maxHeight: 110 },
-  membersContent: { paddingHorizontal: 20, gap: 14, paddingVertical: 8 },
+  heroCodeIcon: { fontSize: 13 },
+  heroCodeText: { fontSize: 14, fontWeight: '900', color: AppColors.purple.strong, letterSpacing: 1.5 },
+  heroMembersContent: { gap: 14, paddingVertical: 4, paddingBottom: 2 },
+
+  // ── Members ──
   memberChip: { alignItems: 'center', gap: 5, width: 62 },
-  memberAvatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, overflow: 'hidden', position: 'relative' },
+  memberAvatar: { width: 56, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 2, overflow: 'hidden', position: 'relative' },
   memberAvatarText: { fontSize: 28 },
-  memberAvatarImg: { width: 56, height: 56, borderRadius: 28 },
+  memberAvatarImg: { width: 56, height: 56, borderRadius: 20 },
   memberAvatarEdit: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)', paddingVertical: 2, alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.42)', paddingVertical: 2, alignItems: 'center',
   },
   memberName: { fontSize: 11, fontWeight: '700', color: AppColors.text.primary, textAlign: 'center' },
-  memberRole: { fontSize: 10, color: AppColors.purple.primary, textAlign: 'center', fontWeight: '500' },
+  memberRole: { fontSize: 10, color: AppColors.purple.primary, textAlign: 'center', fontWeight: '600', opacity: 0.8 },
   addMemberChip: { alignItems: 'center', gap: 5, width: 62 },
-  addMemberBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: AppColors.purple.soft, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: AppColors.purple.primary, borderStyle: 'dashed' },
+  addMemberBtn: {
+    width: 56, height: 56, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: AppColors.purple.primary + '60', borderStyle: 'dashed',
+  },
   addMemberBtnText: { fontSize: 22, color: AppColors.purple.strong },
-  sectionTabs: { flexDirection: 'row', marginHorizontal: 20, marginBottom: 10, backgroundColor: AppColors.purple.soft, borderRadius: 18, padding: 5, gap: 4 },
+
+  sectionTabs: { flexDirection: 'row', marginHorizontal: 20, marginTop: 14, marginBottom: 10, backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 20, padding: 5, gap: 4, borderWidth: 1, borderColor: AppColors.purple.primary + '30' },
   sectionTab: { flex: 1, alignItems: 'center', borderRadius: 14, overflow: 'hidden' },
   sectionTabActive: {},
   sectionTabGradient: { width: '100%', paddingVertical: 11, alignItems: 'center', borderRadius: 14 },
