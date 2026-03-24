@@ -279,9 +279,23 @@ export async function saveProfile(profile: Omit<ElderProfile, 'id'>): Promise<El
 
 // ─── Daily Check-ins ──────────────────────────────────────────────────────────
 
+// 权威 emoji→moodScore 映射（与 checkin.tsx 的 MOODS 数组保持同步）
+const MOOD_EMOJI_SCORE: Record<string, number> = {
+  '😄': 10, '😊': 9, '😌': 8, '😕': 5, '😢': 3, '😤': 2,
+};
+
+/** 用当前权威分值覆盖历史打卡里可能已过时的 moodScore */
+function normalizeMoodScore(c: DailyCheckIn): DailyCheckIn {
+  if (c.moodEmoji && MOOD_EMOJI_SCORE[c.moodEmoji] !== undefined) {
+    return { ...c, moodScore: MOOD_EMOJI_SCORE[c.moodEmoji] };
+  }
+  return c;
+}
+
 export async function getAllCheckIns(): Promise<DailyCheckIn[]> {
   const raw = await AsyncStorage.getItem(KEYS.CHECK_INS);
-  return raw ? JSON.parse(raw) : [];
+  const list: DailyCheckIn[] = raw ? JSON.parse(raw) : [];
+  return list.map(normalizeMoodScore);
 }
 
 export async function getTodayCheckIn(): Promise<DailyCheckIn | null> {
