@@ -1,0 +1,580 @@
+Please redesign the app UI while keeping the current warm, soft, premium, emotionally supportive style.
+The app should feel high-end, polished, warm, elegant, and visually refined.
+
+Do not make it look like:
+
+a cold medical app
+a generic minimalist productivity app
+a childish cartoon app
+a plain flat utility app
+
+The design should feel like a premium family-care / pet-care mobile app with:
+
+soft gradients
+warm emotional tone
+elegant rounded cards
+subtle depth
+premium visual hierarchy
+refined micro-animations
+Core Visual Direction
+
+The current home page already has the right emotional direction.
+Please keep its warm pink-beige background feeling as the main visual foundation of the app.
+
+The app should feel:
+
+warm
+polished
+premium
+soft
+comforting
+elegant
+gentle
+modern
+slightly playful, but controlled
+
+The goal is to make it feel more premium and high-end, not flatter or more boring.
+
+Important Direction About Gradients
+
+I like gradients because they make the app feel more premium.
+So please keep gradients in the design system, but use them in a restrained, elegant, high-end way.
+
+Gradient principles
+
+Use gradients for:
+
+background atmosphere
+key hero accents
+active states
+important buttons
+selected nav state
+featured cards
+
+Do not overuse harsh rainbow gradients or bright neon gradients.
+
+Gradients should feel:
+
+soft
+creamy
+layered
+premium
+light
+elegant
+modern
+
+They should create a refined glow, not visual noise.
+
+Global Design Rules
+Keep the current home page background family as the app-wide visual base
+Do not use pure white full-screen page backgrounds
+Use soft premium gradients throughout the app where appropriate
+Keep rounded cards and subtle soft shadows
+Improve hierarchy, spacing, typography, and consistency
+Reduce random decoration clutter
+Keep the app emotionally warm and cute, but make it more refined and premium
+Bottom Navigation should stay mostly the same visually, with only refinement-level updates
+Color & Gradient Tokens
+
+Use a premium warm palette based on the existing home page style.
+
+App Backgrounds
+Primary app background
+
+Use this as the main page background:
+
+appBgPrimary = #F7F1F3
+Secondary app background
+
+For subtle surface variation:
+
+appBgSecondary = #F6EEEF
+Soft warm alternative
+appBgSoft = #F8F2EE
+Background Gradient Suggestions
+Main background gradient
+
+Use a very soft full-screen gradient where needed:
+
+appBgGradient = linear-gradient(180deg, #F7F1F3 0%, #F4EEEF 55%, #F6F1EC 100%)
+
+This should feel like a warm blush-neutral premium background.
+
+Hero glow gradient
+
+Can be used behind hero content or featured areas:
+
+heroGlowGradient = linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(246,225,233,0.28) 45%, rgba(237,230,255,0.22) 100%)
+
+This should be subtle and atmospheric.
+
+Brand Colors
+Care Green
+
+Use for health, completion, positive states, and key CTA like share actions:
+
+greenPrimary = #8EB89A
+greenStrong = #6F9D7B
+greenSoft = #E8F3EA
+Green Gradient
+greenGradient = linear-gradient(180deg, #9CC9A7 0%, #79A986 100%)
+
+Use for:
+
+primary share buttons
+success emphasis
+positive action states
+Insight Lavender
+
+Use for analysis and supportive AI modules:
+
+purplePrimary = #CEC4F2
+purpleStrong = #7C67C8
+purpleSoft = #F2EDFB
+Purple Gradient
+purpleGradient = linear-gradient(135deg, #D9CFFD 0%, #BDA8F4 100%)
+
+Use for:
+
+analysis cards
+helper assistant cards
+insight chips
+recommendation modules
+Warm Coral Accent
+
+Use for premium active accents and emotional emphasis:
+
+coralPrimary = #F28C7C
+coralSoft = #FDEAE6
+Coral Gradient
+coralGradient = linear-gradient(180deg, #FFA28C 0%, #F47D96 100%)
+
+Use sparingly for:
+
+selected nav state
+tiny highlighted buttons
+emotional brand emphasis
+Warm Gold / Peach Accent
+
+For elegant chips or tiny highlights:
+
+peachPrimary = #E9C58F
+peachSoft = #FAF1E2
+Peach Gradient
+peachGradient = linear-gradient(180deg, #F2D6A5 0%, #E7BB86 100%)
+
+Use lightly only for:
+
+status tags
+tiny premium highlights
+badges
+Neutral Text / Borders / Surface
+textPrimary = #2F2A2E
+textSecondary = #7B7580
+textTertiary = #A49DA8
+borderSoft = #E8DDE5
+surfaceWhite = rgba(255,255,255,0.86)
+surfaceWhiteStrong = #FFFFFF
+shadowColor = rgba(88, 64, 78, 0.08)
+
+Rules:
+
+use dark gray instead of black
+use soft borders only
+use subtle soft shadows
+white should be used inside cards, not as the whole page background
+Typography Scale
+
+Use a premium mobile typography hierarchy.
+
+Main text styles
+heroTitle = 32 / 38 / bold
+pageTitle = 26 / 32 / semibold
+sectionTitle = 22 / 28 / semibold
+cardTitle = 18 / 24 / semibold
+metricNumber = 24 / 28 / semibold
+scoreNumber = 34 / 38 / bold
+body = 16 / 24 / regular
+bodySmall = 14 / 20 / regular
+caption = 12 / 18 / medium
+Typography rules
+keep clear hierarchy
+use limited font weights
+use high emphasis only for hero titles and important numbers
+support text should use textSecondary
+improve line-height for better readability
+avoid overcrowding too many font styles inside one card
+Spacing Tokens
+
+Use an 8pt layout system:
+
+space4 = 4
+space8 = 8
+space12 = 12
+space16 = 16
+space20 = 20
+space24 = 24
+space32 = 32
+Usage
+page horizontal padding: 20
+card padding: 16–20
+gap between cards: 20–24
+chip padding horizontal: 12
+chip padding vertical: 6–8
+icon/text gap: 8
+title/subtitle gap: 4–6
+
+The layout should feel airy and premium.
+
+Corner Radius & Shadow Rules
+Radius
+radiusCardLarge = 24
+radiusCardMedium = 20
+radiusCardSmall = 16
+radiusButton = 18
+radiusChip = 999
+radiusIconButton = 16
+Shadows
+
+Use soft premium shadows only:
+
+low opacity
+large blur
+shallow vertical offset
+very subtle floating effect
+
+The UI should feel elevated and polished, not heavy.
+
+Surface & Card Design Rules
+
+All cards should look premium and unified.
+
+Base card style
+use soft white or semi-translucent white surfaces
+keep warm-tinted contrast against the blush background
+use subtle border + soft shadow combination
+maintain elegant rounded corners
+
+Suggested card surface:
+
+backgroundColor: rgba(255,255,255,0.84) or #FFFFFF
+soft border using borderSoft
+subtle elevation
+Hero / Featured Cards
+
+Featured cards can use soft gradients.
+
+Examples:
+
+analysis card uses lavender gradient
+special summary card can use white + glow overlay
+CTA area can use green gradient
+
+But gradients should remain elegant and soft.
+
+Four Metrics Grid Rules
+
+For the four small cards:
+
+睡眠
+心情
+用药
+饮食
+
+Please keep them visually premium and consistent.
+
+Structure
+
+Each card should have:
+
+icon at top
+main metric or state in the middle
+label at bottom
+Style
+same height
+same width ratio
+same padding
+same radius
+same typography
+same icon sizing
+consistent shadows
+Surface
+
+Do not use four completely unrelated bright pastel backgrounds.
+
+Use one of these directions:
+
+mostly white cards with very subtle tint variations
+same warm-neutral card style with tiny accent cues
+very light tinted cards from the same palette family
+
+Preferred:
+
+soft white / warm neutral surfaces
+tiny accent icon background
+subtle premium feel
+Analysis Card Rules
+
+For cards like “今日记录分析”:
+
+keep lavender identity
+use gradient, but soften it
+reduce oversized decorative blobs
+simplify internal hierarchy
+keep it premium, intelligent, and warm
+
+The analysis card should feel:
+
+helpful
+elegant
+emotionally intelligent
+trustworthy
+not loud
+
+Use:
+
+lavender gradient background
+white translucent summary bubble
+minimal chips
+subtle icon block
+secondary CTA style
+Button Rules
+Primary Buttons
+
+Use elegant gradients for primary buttons.
+
+Share button style
+green gradient
+white text
+medium-large size
+premium rounded shape
+subtle shadow
+
+Suggested:
+
+greenGradient
+text white
+radius 18
+shadow soft
+Secondary Buttons
+use soft white or translucent white
+dark text
+subtle border
+no heavy gradients
+Press feedback
+
+Buttons should slightly scale on press.
+
+Bottom Navigation Specification
+
+Bottom Navigation is already close to the direction I want.
+Please do not redesign it heavily.
+
+Keep
+current overall layout
+current emotional vibe
+current active-state concept
+current warm colorful look
+Only refine
+size
+proportions
+spacing
+polish
+icon balance
+slightly improve color sophistication if needed
+What to adjust
+Slightly reduce the overall height if it feels oversized
+Slightly reduce icon bubble sizes
+Improve spacing between icon and label
+Make inactive items a bit more elegant and readable
+Keep the active tab visually attractive
+Keep the current gradient-like premium feeling for the active tab
+Slightly soften saturation if needed so it feels more premium and less loud
+Bottom nav active state
+
+Keep the current gradient concept, but refine it slightly.
+
+Suggested active gradient:
+
+linear-gradient(180deg, #FFA08A 0%, #F27796 100%)
+
+Or a softer premium version:
+
+linear-gradient(180deg, #F7A391 0%, #EB88A1 100%)
+
+Use this only for the active item.
+
+Inactive items
+keep soft neutral tone
+slightly improve readability
+do not make them look disabled
+use muted gray-lavender text/icon styling
+
+Suggested inactive color:
+
+#8D8792
+Bottom nav should feel
+cute
+premium
+polished
+soft
+intentional
+
+Do not flatten it into a boring minimal tab bar.
+
+Page Background Consistency
+
+This is important:
+
+The home page warm blush-beige-pink background is the correct app tone.
+Please use this as the baseline for all other menu pages too.
+
+Inner page background rule
+
+All pages should use one of these:
+
+#F7F1F3
+#F6EEEF
+#F8F2EE
+
+Or use a soft gradient within this same family.
+
+Do not switch inner pages to:
+
+pure white
+cold gray
+flat dark backgrounds
+unrelated green/purple backgrounds
+
+The whole app should feel visually unified and premium.
+
+Micro-animations
+
+Please add subtle micro-animations to make the UI feel alive, high-end, and polished.
+
+Use react-native-reanimated if possible.
+If not, use the native Animated API.
+
+Animation should feel:
+
+subtle
+elegant
+smooth
+premium
+soft
+warm
+never exaggerated
+
+Do not use bouncy cartoon-style motion.
+
+1. Four Metrics Grid Staggered Entrance
+
+Apply to the four small cards:
+
+睡眠
+心情
+用药
+饮食
+Animation
+
+On page load:
+
+each card fades in
+each card moves slightly upward into position
+each card enters with a 100ms stagger delay
+Motion spec
+opacity: 0 -> 1
+translateY: 12 -> 0
+duration: 350–450ms
+stagger delay: 100ms
+easing: ease-out
+
+This should feel polished and premium.
+
+2. Share Button Pulse Effect
+
+Apply to the green “一键分享到微信” button.
+
+Animation
+
+A very subtle infinite breathing effect:
+
+scale between 1 and 1.02
+slow and smooth
+infinite repeat
+reverse back and forth
+Motion spec
+scale min: 1
+scale max: 1.02
+duration one-way: 1200–1600ms
+easing: ease-in-out
+repeat forever
+
+This should gently attract attention without feeling aggressive.
+
+3. Optional Press Feedback
+
+For tappable cards and buttons:
+
+on press in: scale to 0.98
+on release: back to 1
+duration: about 120ms
+
+Apply to:
+
+share button
+cards
+bottom nav items
+segmented control
+arrow buttons
+4. Optional Soft Hero Fade-in
+
+For top hero area:
+
+opacity: 0 -> 1
+translateY: 8 -> 0
+duration: 400ms
+
+Keep it minimal.
+
+Component System Requirements
+
+Please refactor styles into reusable tokens and reusable components.
+
+Suggested theme files:
+
+colors.ts
+gradients.ts
+spacing.ts
+radius.ts
+typography.ts
+shadows.ts
+motion.ts
+
+Suggested reusable components:
+
+BaseCard
+GradientCard
+MetricCard
+Chip
+PrimaryButton
+SectionHeader
+BottomNavItem
+IconBadge
+
+Avoid hardcoding completely different styles on each screen.
+
+Quality Standard
+
+The final app should feel like:
+
+premium
+warm
+elegant
+gradient-rich but tasteful
+soft and emotionally caring
+visually unified
+calm and comfortable
+polished enough for a real production mobile app
+
+It should feel like a high-end companion care app, not a flat utility app and not a noisy cute app.
