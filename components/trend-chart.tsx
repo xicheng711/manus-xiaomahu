@@ -297,7 +297,7 @@ const curveStyles = StyleSheet.create({
   xLabel: { fontSize: 10, color: AppColors.text.tertiary, textAlign: 'center', flex: 1 },
 });
 
-function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean; isToday?: boolean }[] }) {
+function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean; isToday?: boolean; nightWakings?: number; nightAwakeShort?: string | null }[] }) {
   const chartH = 110;
   const maxVal = 12;
   const barW = 22;
@@ -325,10 +325,11 @@ function SleepChart({ data }: { data: { label: string; value: number; hasData: b
             : d.value >= 5 ? '#F0A500'
             : AppColors.coral.primary;
           const isToday = d.isToday ?? false;
+          const hasWaking = d.hasData && (d.nightWakings ?? 0) > 0;
 
           return (
             <View key={i} style={sleepStyles.barCol}>
-              {/* value label */}
+              {/* sleep value label */}
               <Text style={[sleepStyles.valueLabel, { color: labelColor, opacity: d.hasData ? 1 : 0 }]}>
                 {d.hasData ? `${d.value}h` : ''}
               </Text>
@@ -340,6 +341,16 @@ function SleepChart({ data }: { data: { label: string; value: number; hasData: b
               <Text style={[sleepStyles.dayLabel, isToday && sleepStyles.dayLabelToday]}>
                 {d.label}
               </Text>
+              {/* night waking indicator */}
+              <View style={sleepStyles.wakeRow}>
+                {hasWaking ? (
+                  <Text style={sleepStyles.wakeLabel}>
+                    {'🌙'}{d.nightWakings}{d.nightAwakeShort ? ` ${d.nightAwakeShort}` : '次'}
+                  </Text>
+                ) : (
+                  <Text style={sleepStyles.wakeEmpty}>{d.hasData ? '—' : ''}</Text>
+                )}
+              </View>
             </View>
           );
         })}
@@ -366,6 +377,9 @@ const sleepStyles = StyleSheet.create({
   },
   dayLabel: { fontSize: 10, color: AppColors.text.tertiary, marginTop: 4 },
   dayLabelToday: { color: AppColors.green.primary, fontWeight: '700' },
+  wakeRow: { alignItems: 'center', marginTop: 2, minHeight: 14 },
+  wakeLabel: { fontSize: 9, color: AppColors.purple.strong, fontWeight: '600' },
+  wakeEmpty: { fontSize: 9, color: AppColors.border.soft },
 });
 
 function MedicationChart({ data }: { data: { label: string; taken: boolean | null }[] }) {
@@ -473,11 +487,18 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   const sleepData = period === 'year' ? yearSleepData : dateRange.map(date => {
     const c = checkInMap.get(date);
     const d = new Date(date + 'T12:00:00');
+    const wakeTime = c?.nightAwakeTime;
+    const wakeShort = wakeTime === '10-30分钟' ? '<30分'
+      : wakeTime === '30-60分钟' ? '<1h'
+      : wakeTime === '1小时以上' ? '>1h'
+      : null;
     return {
       label: DAY_LABELS[d.getDay()],
       value: c?.sleepHours ?? 0,
       hasData: !!c && c.sleepHours > 0,
       isToday: date === todayStr,
+      nightWakings: c?.nightWakings ?? 0,
+      nightAwakeShort: wakeShort,
     };
   });
 
