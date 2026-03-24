@@ -588,7 +588,7 @@ function CreatorHomeScreen() {
 
             {/* 标题 + 问候 */}
             <View style={styles.appNameRow}>
-              <Text style={styles.appName}>今日照护总览</Text>
+              <Text style={styles.appName}>一起照顾好每一天</Text>
             </View>
             {memberships.length > 0 && (
               <TouchableOpacity
