@@ -875,7 +875,7 @@ const styles = StyleSheet.create({
   lunarText: { fontSize: 12, color: AppColors.peach.primary, fontWeight: '500' },
   weatherChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.90)',
+    backgroundColor: 'rgba(253,249,247,0.93)',
     paddingHorizontal: 12, paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)',

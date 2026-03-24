@@ -451,7 +451,7 @@ export default function AssistantScreen() {
 const s = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)', borderBottomWidth: 1, borderBottomColor: AppColors.border.soft,
+    backgroundColor: 'rgba(253,249,247,0.97)', borderBottomWidth: 1, borderBottomColor: AppColors.border.soft,
   },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center' },
   shareBtn: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
@@ -466,7 +466,7 @@ const s = StyleSheet.create({
   scoreCircle: {
     width: 110, height: 110, borderRadius: 55,
     borderWidth: 3, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(253,249,247,0.85)',
   },
   scoreNum: { fontSize: 36, fontWeight: '900', lineHeight: 40 },
   scoreMax: { fontSize: 12, color: AppColors.text.tertiary },
@@ -476,7 +476,7 @@ const s = StyleSheet.create({
   scoreSummary: { fontSize: 14, color: '#374151', lineHeight: 21 },
   encourageRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 14, padding: 12,
+    backgroundColor: 'rgba(253,249,247,0.75)', borderRadius: 14, padding: 12,
   },
   encourageText: { flex: 1, fontSize: 14, color: '#92400E', fontWeight: '600', lineHeight: 20 },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: AppColors.text.primary, marginBottom: 12 },
@@ -520,7 +520,7 @@ const s = StyleSheet.create({
   segmentBadge: { backgroundColor: AppColors.bg.secondary, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
   segmentDuration: { fontSize: 13, fontWeight: '700', color: '#4B5563' },
   bottomBar: {
-    backgroundColor: 'rgba(255,255,255,0.95)', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20,
+    backgroundColor: 'rgba(253,249,247,0.97)', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20,
     borderTopWidth: 1, borderTopColor: AppColors.border.soft,
   },
   bottomBtn: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 24 },

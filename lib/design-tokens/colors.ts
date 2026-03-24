@@ -41,9 +41,9 @@ export const AppColors = {
   },
 
   surface: {
-    white: 'rgba(255,255,255,0.86)',
-    whiteStrong: '#FFFFFF',
-    card: 'rgba(255,255,255,0.84)',
+    white: 'rgba(253,249,247,0.86)',
+    whiteStrong: '#FDF9F7',
+    card: 'rgba(253,249,247,0.84)',
   },
 
   shadow: {

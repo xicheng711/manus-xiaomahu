@@ -249,7 +249,7 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 8 },
 
   card: {
-    backgroundColor: '#FFFFFF', borderRadius: 18, padding: 18, marginBottom: 16,
+    backgroundColor: '#FDF9F7', borderRadius: 18, padding: 18, marginBottom: 16,
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
   },
   sectionLabel: { fontSize: 13, fontWeight: '700', color: AppColors.text.tertiary, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12 },
@@ -282,7 +282,7 @@ const s = StyleSheet.create({
   leaveBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.text.secondary },
 
   dialogOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  dialog: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, width: '100%', maxWidth: 380 },
+  dialog: { backgroundColor: '#FDF9F7', borderRadius: 20, padding: 24, width: '100%', maxWidth: 380 },
   dialogTitle: { fontSize: 18, fontWeight: '800', color: AppColors.text.primary, marginBottom: 12, textAlign: 'center' },
   dialogBody: { fontSize: 14, color: AppColors.text.secondary, lineHeight: 22, textAlign: 'center', marginBottom: 20 },
   dialogBtns: { flexDirection: 'row', gap: 10 },

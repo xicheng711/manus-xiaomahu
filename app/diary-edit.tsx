@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(253,249,247,0.95)',
     borderBottomWidth: 1, borderBottomColor: AppColors.border.soft,
     zIndex: 10,
   },
@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
   // Date pill
   datePillRow: { alignItems: 'center', marginBottom: 20 },
   datePill: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(253,249,247,0.90)',
     borderRadius: 999, paddingHorizontal: 16, paddingVertical: 7,
     borderWidth: 1, borderColor: AppColors.border.soft,
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 12, paddingVertical: 8,
     borderRadius: 999, borderWidth: 1.5, borderColor: AppColors.purple.primary,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(253,249,247,0.95)',
   },
   caregiverMoodChipSelected: { borderColor: AppColors.purple.strong, backgroundColor: AppColors.purple.soft },
   caregiverMoodEmoji: { fontSize: 18 },
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
   moodOption: {
     alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8,
     borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: AppColors.border.soft,
-    backgroundColor: 'rgba(255,255,255,0.9)', minWidth: 56,
+    backgroundColor: 'rgba(253,249,247,0.95)', minWidth: 56,
   },
   moodOptionEmoji: { fontSize: 22, marginBottom: 2 },
   moodOptionLabel: { fontSize: 11, color: AppColors.text.secondary, fontWeight: '500' },
@@ -773,14 +773,14 @@ const styles = StyleSheet.create({
   tagOption: {
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 999, borderWidth: 1.5, borderColor: AppColors.border.soft,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(253,249,247,0.95)',
   },
   tagOptionSelected: { borderColor: '#A07858', backgroundColor: '#F0EBE3' },
   tagOptionText: { fontSize: 13, color: AppColors.text.secondary, fontWeight: '500' },
   tagOptionTextSelected: { color: '#7A5C3E', fontWeight: '700' },
   noteLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   noteInput: {
-    backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 16,
+    backgroundColor: 'rgba(253,249,247,0.95)', borderRadius: 16,
     borderWidth: 1.5, borderColor: AppColors.border.soft,
     padding: 14, fontSize: 15, color: AppColors.text.primary,
     minHeight: 130, lineHeight: 22,
@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
 
   // Summary card
   summaryCard: {
-    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 20,
+    backgroundColor: 'rgba(253,249,247,0.98)', borderRadius: 20,
     padding: 16, marginBottom: 16,
     borderWidth: 1, borderColor: AppColors.border.soft,
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
@@ -878,7 +878,7 @@ const styles = StyleSheet.create({
 
   // Bottom bar
   bottomBar: {
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: 'rgba(253,249,247,0.97)',
     borderTopWidth: 1, borderTopColor: AppColors.border.soft,
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 24 : 16,
     gap: 10,
