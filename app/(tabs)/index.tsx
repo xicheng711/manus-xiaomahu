@@ -240,8 +240,6 @@ function EnhancedAICard({
 }) {
   const iconScale = useRef(new Animated.Value(1)).current;
   const iconRotate = useRef(new Animated.Value(0)).current;
-  const glowAnim1 = useRef(new Animated.Value(1)).current;
-  const glowAnim2 = useRef(new Animated.Value(1)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -252,15 +250,6 @@ function EnhancedAICard({
 
     Animated.loop(Animated.timing(iconRotate, { toValue: 1, duration: 4000, easing: Easing.inOut(Easing.ease), useNativeDriver: true })).start();
 
-    Animated.loop(Animated.sequence([
-      Animated.timing(glowAnim1, { toValue: 1.3, duration: 10000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(glowAnim1, { toValue: 1, duration: 10000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ])).start();
-
-    Animated.loop(Animated.sequence([
-      Animated.timing(glowAnim2, { toValue: 1.4, duration: 8000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(glowAnim2, { toValue: 1, duration: 8000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ])).start();
   }, []);
 
   const iconRotation = iconRotate.interpolate({
@@ -277,8 +266,6 @@ function EnhancedAICard({
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.88}>
       <Animated.View style={[styles.aiCard, { transform: [{ scale: scaleAnim }] }]}>
-        <Animated.View style={[styles.aiGlow1, { transform: [{ scale: glowAnim1 }] }]} />
-
         <View style={styles.aiRow}>
           <Animated.View style={{ transform: [{ scale: iconScale }] }}>
             <LinearGradient
@@ -913,7 +900,6 @@ const styles = StyleSheet.create({
 
   // AI 卡片
   aiCard: { marginBottom: 16, backgroundColor: AppColors.purple.soft, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: AppColors.purple.primary + '60', overflow: 'hidden', ...SHADOWS.sm },
-  aiGlow1: { position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(167,139,250,0.10)' },
   aiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   aiIconBox: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   aiLabel: { fontSize: 14, fontWeight: '700', color: AppColors.purple.strong, letterSpacing: -0.2 },
