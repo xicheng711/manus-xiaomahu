@@ -590,13 +590,19 @@ function CreatorHomeScreen() {
             {memberships.length > 0 && (
               <TouchableOpacity
                 onPress={() => setShowSwitcher(true)}
-                activeOpacity={0.7}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}
+                activeOpacity={0.75}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6,
+                  backgroundColor: AppColors.purple.soft,
+                  borderWidth: 1, borderColor: AppColors.purple.primary + '60',
+                  borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+                  alignSelf: 'flex-start',
+                }}
               >
-                <Text style={{ fontSize: 12, color: AppColors.text.secondary, fontWeight: '600' }}>
+                <Text style={{ fontSize: 13, color: AppColors.purple.strong, fontWeight: '700' }}>
                   🏠 {activeMembership?.room.elderName || elderNickname}的家庭
                 </Text>
-                <Text style={{ fontSize: 10, color: AppColors.text.tertiary }}>▼</Text>
+                <Text style={{ fontSize: 11, color: AppColors.purple.strong, fontWeight: '700' }}>⌄</Text>
               </TouchableOpacity>
             )}
             <Text style={styles.greeting}>{greeting}</Text>
