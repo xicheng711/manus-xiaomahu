@@ -426,24 +426,30 @@ function SleepDetailSection({ checkIn }: { checkIn: DailyCheckIn }) {
   );
 }
 
-function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sleepHours: number; nightWakings: number }> }) {
-  const barData = useMemo(() => {
+function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number }> }) {
+  const stackData = useMemo(() => {
     const reversed = [...weeklyData].reverse();
     return reversed.map((d) => {
       const dayOfWeek = new Date(d.date + 'T00:00:00').getDay();
       const label = WEEKDAY_LABELS[dayOfWeek];
-      const hours = d.sleepHours || 0;
-      const hasData = hours > 0;
-      const color = hasData
-        ? (hours >= 7 ? '#6EE7B7' : hours >= 5 ? '#FCD34D' : '#FCA5A5')
+      const sleep = d.sleepHours || 0;
+      const awake = d.awakeHours || 0;
+      const hasData = sleep > 0;
+      const sleepColor = hasData
+        ? (sleep >= 7 ? '#6EE7B7' : sleep >= 5 ? '#F59E0B' : '#FCA5A5')
         : AppColors.bg.secondary;
+      const stacks = hasData
+        ? [
+            { value: sleep, color: sleepColor },
+            ...(awake > 0 ? [{ value: awake, color: '#FCD34D', marginBottom: 0 }] : []),
+          ]
+        : [{ value: 0.15, color: AppColors.bg.secondary }];
       return {
-        value: hasData ? hours : 0.15,
+        stacks,
         label,
-        frontColor: color,
         topLabelComponent: () => (
           <Text style={{ fontSize: 10, color: AppColors.text.secondary, marginBottom: 2 }}>
-            {hasData ? `${hours}h` : ''}
+            {hasData ? `${sleep}h` : ''}
           </Text>
         ),
       };
@@ -458,20 +464,24 @@ function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sl
       <View style={sleepStyles.chartLegend}>
         <View style={sleepStyles.legendItem}>
           <View style={[sleepStyles.legendDot, { backgroundColor: '#6EE7B7' }]} />
-          <Text style={sleepStyles.legendText}>7h+</Text>
+          <Text style={sleepStyles.legendText}>睡眠 7h+</Text>
         </View>
         <View style={sleepStyles.legendItem}>
-          <View style={[sleepStyles.legendDot, { backgroundColor: '#FCD34D' }]} />
-          <Text style={sleepStyles.legendText}>5-7h</Text>
+          <View style={[sleepStyles.legendDot, { backgroundColor: '#F59E0B' }]} />
+          <Text style={sleepStyles.legendText}>睡眠 5-7h</Text>
         </View>
         <View style={sleepStyles.legendItem}>
           <View style={[sleepStyles.legendDot, { backgroundColor: '#FCA5A5' }]} />
-          <Text style={sleepStyles.legendText}>&lt;5h</Text>
+          <Text style={sleepStyles.legendText}>睡眠 &lt;5h</Text>
+        </View>
+        <View style={sleepStyles.legendItem}>
+          <View style={[sleepStyles.legendDot, { backgroundColor: '#FCD34D' }]} />
+          <Text style={sleepStyles.legendText}>清醒</Text>
         </View>
       </View>
       <View style={{ paddingRight: 20, paddingBottom: 10, width: '100%' }}>
         <BarChart
-          data={barData}
+          stackData={stackData}
           adjustToWidth
           width={CHART_W}
           height={130}
@@ -535,7 +545,7 @@ export default function ShareScreen() {
   const [shareText, setShareText] = useState('');
   const [copied, setCopied] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
-  const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; nightWakings: number }>>([]);
+  const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number }>>([]);
   const cardRef = useRef<View>(null);
   const sharePulse = useRef(new Animated.Value(1)).current;
 

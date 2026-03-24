@@ -802,7 +802,13 @@ function CheckinScreenContent() {
     }
     await upsertCheckIn(data);
     setSaving(false);
-    // 打卡完成震动反馈
+    if (mode === 'morning') {
+      if (Platform.OS !== 'web') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      router.replace('/share' as any);
+      return;
+    }
     if (Platform.OS !== 'web') {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200);

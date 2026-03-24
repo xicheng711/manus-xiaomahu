@@ -328,6 +328,7 @@ export async function getRecentCheckIns(days = 7): Promise<DailyCheckIn[]> {
 export async function getWeeklySleepData(days = 7): Promise<Array<{
   date: string;
   sleepHours: number;
+  awakeHours: number;
   sleepType: 'quick' | 'detailed' | undefined;
   sleepSegments: SleepSegment[];
   nightWakings: number;
@@ -338,6 +339,7 @@ export async function getWeeklySleepData(days = 7): Promise<Array<{
   const result: Array<{
     date: string;
     sleepHours: number;
+    awakeHours: number;
     sleepType: 'quick' | 'detailed' | undefined;
     sleepSegments: SleepSegment[];
     nightWakings: number;
@@ -350,9 +352,12 @@ export async function getWeeklySleepData(days = 7): Promise<Array<{
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
     const checkin = all.find(c => c.date === dateStr);
+    const sleepHours = checkin?.sleepHours ?? 0;
+    const awakeHours = checkin?.awakeHours ?? (sleepHours > 0 ? Math.max(0, 8 - sleepHours) : 0);
     result.push({
       date: dateStr,
-      sleepHours: checkin?.sleepHours ?? 0,
+      sleepHours,
+      awakeHours,
       sleepType: checkin?.sleepType,
       sleepSegments: checkin?.sleepSegments ?? [],
       nightWakings: checkin?.nightWakings ?? 0,
