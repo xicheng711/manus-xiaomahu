@@ -603,7 +603,7 @@ export default function ShareScreen() {
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [careScore, setCareScore] = useState<number | null>(null);
   const [backfillNotice, setBackfillNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!getCachedBriefing());
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elderNickname, setElderNickname] = useState('家人');
@@ -691,23 +691,23 @@ export default function ShareScreen() {
       }
     }
 
+    if (!forceRefresh) {
+      const persisted = await loadPersistedBriefing();
+      if (persisted) {
+        setBriefing(persisted.briefing);
+        setShareText(persisted.shareText);
+        if (persisted.checkIn) {
+          setCheckIn(persisted.checkIn);
+          setCareScore(persisted.checkIn.careScore ?? null);
+        }
+        setLoading(false);
+        loadSupplementaryData();
+        return;
+      }
+    }
+
     setLoading(true);
     try {
-      if (!forceRefresh) {
-        const persisted = await loadPersistedBriefing();
-        if (persisted) {
-          setBriefing(persisted.briefing);
-          setShareText(persisted.shareText);
-          if (persisted.checkIn) {
-            setCheckIn(persisted.checkIn);
-            setCareScore(persisted.checkIn.careScore ?? null);
-          }
-          setLoading(false);
-          loadSupplementaryData();
-          return;
-        }
-      }
-
       const profile = await getProfile();
       const nickname = profile?.nickname || profile?.name || '家人';
       const caregiver = profile?.caregiverName || '照顾者';
@@ -796,19 +796,21 @@ export default function ShareScreen() {
       });
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('AI timeout')), 15000));
       const result = await Promise.race([aiPromise, timeout]) as any;
+      const ciWithScore = { ...ci, careScore: score };
       if (result.success && result.briefing) {
         setBriefing(result.briefing);
         setShareText(result.briefing.shareText ?? '');
-        setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci);
+        setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ciWithScore);
       } else {
         const fallback = buildLocalBriefing(nickname, caregiver, ci, score ?? 50);
         setBriefing(fallback);
-        setCachedBriefing(fallback, fallback.shareText, ci);
+        setCachedBriefing(fallback, fallback.shareText, ciWithScore);
       }
     } catch (e) {
+      const ciWithScore = { ...ci, careScore: score };
       const fallback = buildLocalBriefing(nickname, caregiver, ci, score ?? 50);
       setBriefing(fallback);
-      setCachedBriefing(fallback, fallback.shareText, ci);
+      setCachedBriefing(fallback, fallback.shareText, ciWithScore);
     } finally {
       setGenerating(false);
     }
