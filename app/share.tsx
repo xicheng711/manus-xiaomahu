@@ -18,11 +18,20 @@ import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 const { width: SW } = Dimensions.get('window');
 
 
+// ─── emoji→moodScore 权威映射（与 storage.ts/checkin.tsx 同步）─────────────
+const MOOD_FIX: Record<string, number> = { '😄': 10, '😊': 9, '😌': 8, '😕': 5, '😢': 3, '😤': 2 };
+function fixMoodScore(ci: any): any {
+  if (!ci || !ci.moodEmoji || MOOD_FIX[ci.moodEmoji] === undefined) return ci;
+  return { ...ci, moodScore: MOOD_FIX[ci.moodEmoji] };
+}
+
 // ─── 当日简报缓存（内存 + AsyncStorage 双层）────────────────────────────────
 let _briefingCache: { date: string; briefing: any; shareText: string; checkIn: any } | null = null;
 function getTodayKey() { return new Date().toISOString().slice(0, 10); }
 function getCachedBriefing() {
-  if (_briefingCache && _briefingCache.date === getTodayKey()) return _briefingCache;
+  if (_briefingCache && _briefingCache.date === getTodayKey()) {
+    return { ..._briefingCache, checkIn: fixMoodScore(_briefingCache.checkIn) };
+  }
   return null;
 }
 function setCachedBriefing(briefing: any, shareText: string, checkIn?: any) {
@@ -31,14 +40,16 @@ function setCachedBriefing(briefing: any, shareText: string, checkIn?: any) {
   AsyncStorage.setItem('share_briefing_cache_v1', JSON.stringify(entry)).catch(() => {});
 }
 async function loadPersistedBriefing() {
-  if (_briefingCache && _briefingCache.date === getTodayKey()) return _briefingCache;
+  if (_briefingCache && _briefingCache.date === getTodayKey()) {
+    return { ..._briefingCache, checkIn: fixMoodScore(_briefingCache.checkIn) };
+  }
   try {
     const raw = await AsyncStorage.getItem('share_briefing_cache_v1');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.date === getTodayKey()) {
         _briefingCache = parsed;
-        return parsed;
+        return { ...parsed, checkIn: fixMoodScore(parsed.checkIn) };
       }
     }
   } catch {}
@@ -588,6 +599,9 @@ export default function ShareScreen() {
   const [copied, setCopied] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
   const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number }>>([]);
+  const [todayCi, setTodayCi] = useState<DailyCheckIn | null>(null);
+  const [yesterdayCi, setYesterdayCi] = useState<DailyCheckIn | null>(null);
+  const [viewMode, setViewMode] = useState<'today' | 'yesterday'>('today');
   const cardRef = useRef<View>(null);
   const sharePulse = useRef(new Animated.Value(1)).current;
 
@@ -659,7 +673,10 @@ export default function ShareScreen() {
 
       const today = await getTodayCheckIn();
       const yesterday = await getYesterdayCheckIn();
+      setTodayCi(today);
+      setYesterdayCi(yesterday);
       const ci = today || yesterday;
+      setViewMode(today ? 'today' : 'yesterday');
 
       if (!ci) {
         setError('请先完成今日打卡，再生成简报');
@@ -828,9 +845,33 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         {/* ── Header ── */}
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.title}>📋 今日记录分析</Text>
+          <Text style={styles.title}>📋 {viewMode === 'today' ? '今日' : '昨日'}记录分析</Text>
           <View style={{ width: 40 }} />
         </View>
+
+        {/* ── 日期切换 ── */}
+        {(todayCi || yesterdayCi) && (
+          <View style={styles.dateSwitchRow}>
+            <TouchableOpacity
+              style={[styles.dateSwitchBtn, viewMode === 'today' && styles.dateSwitchBtnActive]}
+              onPress={() => {
+                if (todayCi) { setViewMode('today'); setCheckIn(todayCi); setCareScore(todayCi.careScore || 70); }
+              }}
+              disabled={!todayCi}
+            >
+              <Text style={[styles.dateSwitchText, viewMode === 'today' && styles.dateSwitchTextActive, !todayCi && { opacity: 0.35 }]}>今日</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dateSwitchBtn, viewMode === 'yesterday' && styles.dateSwitchBtnActive]}
+              onPress={() => {
+                if (yesterdayCi) { setViewMode('yesterday'); setCheckIn(yesterdayCi); setCareScore(yesterdayCi.careScore || 70); }
+              }}
+              disabled={!yesterdayCi}
+            >
+              <Text style={[styles.dateSwitchText, viewMode === 'yesterday' && styles.dateSwitchTextActive, !yesterdayCi && { opacity: 0.35 }]}>昨日</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {error ? (
           <View style={styles.errorBox}>
@@ -919,6 +960,18 @@ const styles = StyleSheet.create({
   homeBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
 
   title: { flex: 1, fontSize: 17, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', letterSpacing: -0.3 },
+  dateSwitchRow: {
+    flexDirection: 'row', alignSelf: 'center', backgroundColor: AppColors.bg.secondary,
+    borderRadius: 12, padding: 3, marginBottom: 14, gap: 2,
+  },
+  dateSwitchBtn: { paddingHorizontal: 24, paddingVertical: 8, borderRadius: 10 },
+  dateSwitchBtnActive: {
+    backgroundColor: AppColors.surface.whiteStrong,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+  },
+  dateSwitchText: { fontSize: 14, fontWeight: '700', color: AppColors.text.tertiary },
+  dateSwitchTextActive: { color: AppColors.text.primary },
   refreshBtn: { padding: 8 },
   refreshBtnText: { fontSize: 20 },
   generatingBox: {
