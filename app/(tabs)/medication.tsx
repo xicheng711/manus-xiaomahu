@@ -374,8 +374,6 @@ function MedicationScreenContent() {
           </View>
         ) : null}
 
-        {/* Tips Card */}
-        <TipsCard careNeeds={careNeeds} elderNickname={elderNickname} />
       </ScrollView>
     </ScreenContainer>
   );
@@ -414,103 +412,6 @@ function EmptyMedState({ onAdd, elderNickname = '家人' }: { onAdd: () => void;
   );
 }
 
-// ─── Tips Data ────────────────────────────────────────────────────────────────
-const TIPS_BY_NEED: Record<CareNeedType, string[]> = {
-  memory: [
-    '认知类药物需长期规律服用，不可因状态好转自行停药',
-    '可使用分药盒按早中晚分装，避免漏服或重复',
-  ],
-  hypertension: [
-    '降压药请每天固定时间服用，血压正常也不可自行停药',
-    '漏服后不可加倍补服，按下次正常时间继续即可',
-  ],
-  diabetes: [
-    '降糖药应严格按饭前/饭后时间服用，时间影响效果',
-    '出现手抖、冒冷汗等低血糖症状，立即补充糖分并就医',
-  ],
-  cancer: [
-    '靶向药/化疗药服用时间要精确，请严格按医嘱执行',
-    '漏服处理方式因药物而异，请直接咨询主治医生',
-  ],
-  mood: [
-    '情绪类药物需稳定服用，突然停药可能引发严重不适',
-    '如感觉药物效果变化，告知医生，不要自行停药或换药',
-  ],
-  sleep: [
-    '助眠药物应在睡前固定时间服用，过早服用影响效果',
-    '不可自行增加剂量或频率，遵医嘱使用',
-  ],
-  fall: [
-    '某些药物（如降压药）可能引起头晕，服药后起身请缓慢',
-    '定期复查用药清单，评估是否有可减少的药物',
-  ],
-  nutrition: [
-    '多数营养补充剂随餐服用吸收效果更好',
-    '定期复查相关营养指标（如维生素D、B12），避免过量',
-  ],
-  surgery: [
-    '术后恢复期请严格按处方执行，不可提前停药',
-    '止痛药应按时服用而非等到疼痛难忍再服，效果更佳',
-  ],
-};
-
-const GENERAL_TIPS = [
-  '使用分药盒按早中晚分装，避免漏服或重复服药',
-  '所有在服药物（包括保健品）请告知医生，避免相互作用',
-];
-
-// ─── Tips Card ────────────────────────────────────────────────────────────────
-function TipsCard({ careNeeds = [], elderNickname = '家人' }: { careNeeds?: CareNeedType[]; elderNickname?: string }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-  useEffect(() => {
-    fadeInUp(fadeAnim, slideAnim, { duration: 500, delay: 300 });
-  }, []);
-
-  // Build tips: for each care need, show its specific tips; if none selected, show general tips
-  const tips: { label: string; items: string[] }[] = [];
-  if (careNeeds.length === 0) {
-    tips.push({ label: '用药小贴士', items: GENERAL_TIPS });
-  } else {
-    careNeeds.forEach(need => {
-      const needLabels: Record<CareNeedType, string> = {
-        memory: '认知/记忆用药',
-        hypertension: '血压用药',
-        diabetes: '血糖用药',
-        cancer: '抗癌用药',
-        mood: '情绪用药',
-        sleep: '睡眠用药',
-        fall: '跌倒风险用药',
-        nutrition: '营养补充',
-        surgery: '术后用药',
-      };
-      tips.push({ label: needLabels[need] || '用药小贴士', items: TIPS_BY_NEED[need] || GENERAL_TIPS });
-    });
-    // Always add one general tip at the end
-    tips.push({ label: '通用提醒', items: [GENERAL_TIPS[1]] });
-  }
-
-  return (
-    <Animated.View style={[styles.tipsCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-      <View style={styles.tipsHeader}>
-        <Text style={styles.tipsIcon}>💡</Text>
-        <Text style={styles.tipsTitle}>用药小贴士</Text>
-      </View>
-      {tips.map((section, si) => (
-        <View key={si} style={{ marginBottom: si < tips.length - 1 ? 14 : 0 }}>
-          {tips.length > 1 && (
-            <Text style={styles.tipsSectionLabel}>📌 {section.label}</Text>
-          )}
-          <View style={styles.tipsList}>
-            {section.items.map((item, ii) => (
-              <Text key={ii} style={styles.tipItem}>{item}</Text>
-            ))}
-          </View>
-        </View>
-      ))}
-    </Animated.View>
-  );
-}
 
 const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 40 },
@@ -675,18 +576,6 @@ const styles = StyleSheet.create({
   },
   startBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
 
-  // Tips
-  tipsCard: {
-    backgroundColor: AppColors.peach.soft, borderRadius: RADIUS.xxl, padding: 20,
-    borderWidth: 1, borderColor: AppColors.peach.primary, marginTop: 8,
-    ...SHADOWS.sm,
-  },
-  tipsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  tipsIcon: { fontSize: 20 },
-  tipsTitle: { fontSize: 16, fontWeight: '700', color: AppColors.text.primary },
-  tipsSectionLabel: { fontSize: 12, fontWeight: '700', color: AppColors.text.secondary, marginBottom: 8, letterSpacing: 0.3 },
-  tipsList: { gap: 10 },
-  tipItem: { fontSize: 13, color: AppColors.text.primary, lineHeight: 21, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: AppColors.peach.primary },
 });
 
 export default function MedicationScreen() {
