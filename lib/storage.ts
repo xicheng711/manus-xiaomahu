@@ -194,6 +194,11 @@ export interface FamilyMember {
   relationship?: string;     // 与被照顾者的关系，如「孙女」「女婿」
 }
 
+export interface AnnouncementReaction {
+  emoji: string;
+  members: { memberId: string; memberName: string; memberEmoji: string }[];
+}
+
 export interface FamilyAnnouncement {
   id: string;
   authorId: string;    // FamilyMember.id
@@ -205,6 +210,7 @@ export interface FamilyAnnouncement {
   type: 'news' | 'visit' | 'medical' | 'daily' | 'reminder';
   createdAt: string;
   date: string;        // YYYY-MM-DD
+  reactions?: AnnouncementReaction[];
 }
 
 export interface FamilyRoom {
@@ -602,6 +608,33 @@ export async function deleteFamilyAnnouncement(id: string): Promise<void> {
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
   const filtered = all.filter(a => a.id !== id);
   await AsyncStorage.setItem(KEYS.FAMILY_ANNOUNCEMENTS, JSON.stringify(filtered));
+}
+
+export async function toggleAnnouncementReaction(
+  announcementId: string,
+  emoji: string,
+  member: { memberId: string; memberName: string; memberEmoji: string }
+): Promise<void> {
+  const raw = await AsyncStorage.getItem(KEYS.FAMILY_ANNOUNCEMENTS);
+  const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+  const ann = all.find(a => a.id === announcementId);
+  if (!ann) return;
+  if (!ann.reactions) ann.reactions = [];
+  const group = ann.reactions.find(r => r.emoji === emoji);
+  if (group) {
+    const hasMe = group.members.some(m => m.memberId === member.memberId);
+    if (hasMe) {
+      group.members = group.members.filter(m => m.memberId !== member.memberId);
+      if (group.members.length === 0) {
+        ann.reactions = ann.reactions.filter(r => r.emoji !== emoji);
+      }
+    } else {
+      group.members.push(member);
+    }
+  } else {
+    ann.reactions.push({ emoji, members: [member] });
+  }
+  await AsyncStorage.setItem(KEYS.FAMILY_ANNOUNCEMENTS, JSON.stringify(all));
 }
 
 // ─── Multi-Family Support ─────────────────────────────────────────────────────

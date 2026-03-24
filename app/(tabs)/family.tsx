@@ -11,8 +11,8 @@ import {
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
   joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
   getAllCheckIns, getDiaryEntries,
-  getProfile, FamilyAnnouncement, FamilyMember, FamilyRoom, DailyCheckIn,
-  updateFamilyMemberPhoto, getCurrentUserIsCreator,
+  getProfile, FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
+  updateFamilyMemberPhoto, getCurrentUserIsCreator, toggleAnnouncementReaction,
 } from '@/lib/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
@@ -558,6 +558,15 @@ export default function FamilyScreen() {
                   isOwn={ann.authorId === currentMember.id}
                   onDelete={() => handleDeleteAnnouncement(ann.id)}
                   isNew={ann.id === newAnnouncementId}
+                  currentMember={currentMember}
+                  onReactionToggle={async (emoji) => {
+                    await toggleAnnouncementReaction(ann.id, emoji, {
+                      memberId: currentMember.id,
+                      memberName: currentMember.name,
+                      memberEmoji: currentMember.emoji,
+                    });
+                    await loadData();
+                  }}
                 />
               ))
             )}
@@ -575,6 +584,15 @@ export default function FamilyScreen() {
                     typeInfo={typeInfo(ann.type)}
                     isOwn={ann.authorId === currentMember.id}
                     onDelete={() => handleDeleteAnnouncement(ann.id)}
+                    currentMember={currentMember}
+                    onReactionToggle={async (emoji) => {
+                      await toggleAnnouncementReaction(ann.id, emoji, {
+                        memberId: currentMember.id,
+                        memberName: currentMember.name,
+                        memberEmoji: currentMember.emoji,
+                      });
+                      await loadData();
+                    }}
                   />
                 ))}
               </>
@@ -943,19 +961,37 @@ export default function FamilyScreen() {
 
 // ─── Announcement Card ────────────────────────────────────────────────────────
 
+const REACTION_EMOJIS = ['👍', '❤️', '👏', '🙏', '😢', '✨'];
+
 function AnnouncementCard({
-  ann, typeInfo, isOwn, onDelete, isNew,
+  ann, typeInfo, isOwn, onDelete, isNew, currentMember, onReactionToggle,
 }: {
   ann: FamilyAnnouncement;
   typeInfo: typeof ANNOUNCEMENT_TYPES[0];
   isOwn: boolean;
   onDelete: () => void;
   isNew?: boolean;
+  currentMember?: FamilyMember;
+  onReactionToggle?: (emoji: string) => Promise<void>;
 }) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [showReactorsFor, setShowReactorsFor] = useState<string | null>(null);
+
   const time = new Date(ann.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   const date = ann.date !== new Date().toISOString().split('T')[0]
     ? new Date(ann.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' '
     : '';
+
+  const reactions = ann.reactions ?? [];
+  const myId = currentMember?.id ?? '';
+
+  async function handleReact(emoji: string) {
+    if (!onReactionToggle) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowPicker(false);
+    setShowReactorsFor(null);
+    await onReactionToggle(emoji);
+  }
 
   return (
     <View style={[card.container, isNew && card.containerNew]}>
@@ -974,6 +1010,69 @@ function AnnouncementCard({
           <Text style={card.content}>
             {ann.emoji ? ann.emoji + ' ' : ''}{ann.content}
           </Text>
+
+          {/* ── Reactions row ── */}
+          <View style={card.reactionsRow}>
+            {reactions.map(r => {
+              const iMine = r.members.some(m => m.memberId === myId);
+              return (
+                <TouchableOpacity
+                  key={r.emoji}
+                  style={[card.reactionPill, iMine && card.reactionPillMine]}
+                  onPress={() => setShowReactorsFor(showReactorsFor === r.emoji ? null : r.emoji)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={card.reactionEmoji}>{r.emoji}</Text>
+                  <Text style={[card.reactionCount, iMine && card.reactionCountMine]}>{r.members.length}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            {/* "+ 反应" button */}
+            <TouchableOpacity
+              style={card.addReactionBtn}
+              onPress={() => { setShowPicker(p => !p); setShowReactorsFor(null); }}
+              activeOpacity={0.75}
+            >
+              <Text style={card.addReactionText}>{showPicker ? '✕' : '＋'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Emoji picker ── */}
+          {showPicker && (
+            <View style={card.pickerRow}>
+              {REACTION_EMOJIS.map(e => {
+                const alreadyMine = reactions.find(r => r.emoji === e)?.members.some(m => m.memberId === myId);
+                return (
+                  <TouchableOpacity
+                    key={e}
+                    style={[card.pickerBtn, alreadyMine && card.pickerBtnActive]}
+                    onPress={() => handleReact(e)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={card.pickerEmoji}>{e}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* ── Reactors list (who reacted) ── */}
+          {showReactorsFor && (() => {
+            const group = reactions.find(r => r.emoji === showReactorsFor);
+            if (!group) return null;
+            return (
+              <View style={card.reactorsList}>
+                <Text style={card.reactorsTitle}>{group.emoji} 的成员</Text>
+                {group.members.map(m => (
+                  <View key={m.memberId} style={card.reactorRow}>
+                    <Text style={card.reactorEmoji}>{m.memberEmoji}</Text>
+                    <Text style={card.reactorName}>{m.memberName}</Text>
+                    {m.memberId === myId && <Text style={card.reactorMe}>（我）</Text>}
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
         </View>
         {isOwn && (
           <TouchableOpacity onPress={onDelete} style={card.deleteBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1163,9 +1262,56 @@ const card = StyleSheet.create({
   authorName: { fontSize: 13, fontWeight: '700' },
   roleLabel: { fontSize: 10, color: AppColors.purple.strong, backgroundColor: AppColors.purple.soft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, fontWeight: '600' },
   time: { fontSize: 10, color: AppColors.text.tertiary, marginLeft: 'auto' },
-  content: { fontSize: 15, color: AppColors.text.primary, lineHeight: 22 },
+  content: { fontSize: 15, color: AppColors.text.primary, lineHeight: 22, marginBottom: 8 },
   deleteBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: AppColors.coral.soft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   deleteText: { fontSize: 12, color: AppColors.coral.primary, fontWeight: '700' },
+
+  // ── Reactions ──
+  reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
+  reactionPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: AppColors.bg.secondary, borderRadius: 20,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1, borderColor: AppColors.border.soft,
+  },
+  reactionPillMine: {
+    backgroundColor: AppColors.purple.soft,
+    borderColor: AppColors.purple.primary,
+  },
+  reactionEmoji: { fontSize: 14 },
+  reactionCount: { fontSize: 12, fontWeight: '700', color: AppColors.text.secondary },
+  reactionCountMine: { color: AppColors.purple.strong },
+  addReactionBtn: {
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+    backgroundColor: AppColors.bg.secondary,
+    borderWidth: 1, borderColor: AppColors.border.soft,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addReactionText: { fontSize: 14, color: AppColors.text.tertiary, fontWeight: '600' },
+  pickerRow: {
+    flexDirection: 'row', gap: 6, marginTop: 8,
+    backgroundColor: AppColors.surface.whiteStrong,
+    borderRadius: 16, padding: 8,
+    borderWidth: 1, borderColor: AppColors.border.soft,
+    flexWrap: 'wrap',
+  },
+  pickerBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: AppColors.bg.secondary,
+    borderWidth: 1.5, borderColor: 'transparent',
+  },
+  pickerBtnActive: { borderColor: AppColors.purple.primary, backgroundColor: AppColors.purple.soft },
+  pickerEmoji: { fontSize: 20 },
+  reactorsList: {
+    marginTop: 8, backgroundColor: AppColors.bg.secondary,
+    borderRadius: 12, padding: 10, gap: 6,
+  },
+  reactorsTitle: { fontSize: 11, fontWeight: '700', color: AppColors.text.tertiary, marginBottom: 2 },
+  reactorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  reactorEmoji: { fontSize: 14 },
+  reactorName: { fontSize: 13, fontWeight: '600', color: AppColors.text.primary },
+  reactorMe: { fontSize: 11, color: AppColors.purple.primary, fontWeight: '500' },
 });
 
 const setup = StyleSheet.create({
