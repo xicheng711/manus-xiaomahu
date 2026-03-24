@@ -202,22 +202,21 @@ const slStyles = StyleSheet.create({
 
 // ─── Score Ring (animated) ───────────────────────────────────────────────────
 function ScoreRing({ score, size = 100 }: { score: number; size?: number }) {
-  const color = score >= 80 ? '#16A34A' : score >= 60 ? '#3B82F6' : score >= 40 ? '#F59E0B' : '#EF4444';
-  const bgColor = score >= 80 ? '#F0FDF4' : score >= 60 ? '#EFF6FF' : score >= 40 ? '#FFFBEB' : '#FEF2F2';
-  const label = score >= 80 ? '状态极佳' : score >= 60 ? '状态良好' : score >= 40 ? '需要关注' : '需要照顾';
-  const emoji = score >= 80 ? '🌟' : score >= 60 ? '😊' : score >= 40 ? '🤗' : '💕';
+  const color = score >= 80 ? AppColors.green.strong : score >= 60 ? AppColors.green.muted : score >= 40 ? '#D97706' : AppColors.coral.primary;
+  const bgColor = score >= 80 ? AppColors.green.soft : score >= 60 ? '#F0F7F2' : score >= 40 ? '#FFF8EE' : '#FFF0EE';
+  const label = score >= 80 ? '状态稳定' : score >= 60 ? '状态良好' : score >= 40 ? '需关注' : '需照护';
   return (
     <View style={ringStyles.wrapper}>
-      <View style={[ringStyles.container, { width: size, height: size, borderRadius: size / 2, backgroundColor: bgColor, borderWidth: 4, borderColor: color }]}>
-        <Text style={[ringStyles.score, { color, fontSize: size * 0.36 }]}>{score}</Text>
+      <View style={[ringStyles.container, { width: size, height: size, borderRadius: size / 2, backgroundColor: bgColor, borderWidth: 3.5, borderColor: color }]}>
+        <Text style={[ringStyles.score, { color, fontSize: size * 0.34 }]}>{score}</Text>
         <Text style={[ringStyles.scoreUnit, { color }]}>分</Text>
       </View>
-      <Text style={[ringStyles.label, { color }]}>{emoji} {label}</Text>
+      <Text style={[ringStyles.label, { color }]}>{label}</Text>
     </View>
   );
 }
 const ringStyles = StyleSheet.create({
-  wrapper: { alignItems: 'center', gap: 6 },
+  wrapper: { alignItems: 'center', gap: 5 },
   container: { alignItems: 'center', justifyContent: 'center' },
   score: { fontWeight: '900', lineHeight: undefined },
   scoreUnit: { fontSize: 11, fontWeight: '700', marginTop: -2 },
@@ -227,18 +226,18 @@ const ringStyles = StyleSheet.create({
 // ─── Data Badge ──────────────────────────────────────────────────────────────
 function DataBadge({ emoji, label, value, color }: { emoji: string; label: string; value: string; color: string }) {
   return (
-    <View style={[badgeStyles.badge, { backgroundColor: color + '12' }]}>
+    <View style={[badgeStyles.badge, { backgroundColor: color + '14', borderColor: color + '25' }]}>
       <Text style={badgeStyles.emoji}>{emoji}</Text>
       <Text style={badgeStyles.value}>{value}</Text>
-      <Text style={badgeStyles.label}>{label}</Text>
+      <Text style={[badgeStyles.label, { color: color }]}>{label}</Text>
     </View>
   );
 }
 const badgeStyles = StyleSheet.create({
-  badge: { flex: 1, borderRadius: 16, padding: 14, alignItems: 'center', gap: 4, minWidth: 70 },
-  emoji: { fontSize: 24 },
-  value: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary },
-  label: { fontSize: 11, color: AppColors.text.tertiary, fontWeight: '500' },
+  badge: { flex: 1, borderRadius: 18, padding: 14, alignItems: 'center', gap: 4, minWidth: 70, borderWidth: 1 },
+  emoji: { fontSize: 22 },
+  value: { fontSize: 14, fontWeight: '800', color: AppColors.text.primary },
+  label: { fontSize: 11, fontWeight: '600' },
 });
 
 // ─── Beautiful Briefing Card ─────────────────────────────────────────────────
@@ -277,24 +276,26 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
 
   return (
     <Animated.View style={[cardStyles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-      {/* ── Header ── */}
-      <View style={cardStyles.header}>
+      {/* ── Header ribbon ── */}
+      <LinearGradient colors={[AppColors.green.soft, '#F0F7F2']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={cardStyles.headerRibbon}>
         <View style={cardStyles.headerLeft}>
           <Text style={cardStyles.appName}>🐴🐯 小马虎 · 每日护理简报</Text>
           <Text style={cardStyles.date}>{today}</Text>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* ── Elder Info + Score ── */}
       <View style={cardStyles.elderSection}>
         <View style={cardStyles.elderInfo}>
-          <Text style={cardStyles.elderEmoji}>{elderEmoji}</Text>
+          <View style={cardStyles.elderAvatarWrap}>
+            <Text style={cardStyles.elderEmoji}>{elderEmoji}</Text>
+          </View>
           <View>
             <Text style={cardStyles.elderName}>{elderNickname}</Text>
             <Text style={cardStyles.elderSub}>今日护理简报</Text>
           </View>
         </View>
-        <ScoreRing score={careScore} size={88} />
+        <ScoreRing score={careScore} size={82} />
       </View>
 
       {/* ── Data Grid (4 badges with staggered entrance) ── */}
@@ -309,12 +310,14 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
 
       {/* ── AI Summary ── */}
       <View style={cardStyles.summaryBox}>
-        <Text style={cardStyles.summaryIcon}>📋</Text>
-        <Text style={cardStyles.summaryTitle}>今日状态总结</Text>
+        <View style={cardStyles.summaryHeader}>
+          <Text style={cardStyles.summaryIcon}>📋</Text>
+          <Text style={cardStyles.summaryTitle}>今日状态总结</Text>
+        </View>
         <Text style={cardStyles.summaryText}>
           {briefing.summary && briefing.summary.trim().length > 0
             ? briefing.summary
-            : `${elderNickname}今日整体状态${careScore >= 80 ? '很好' : careScore >= 60 ? '良好' : careScore >= 40 ? '一般，需要多关注' : '欠佳，需要重点照护'}。睡眠${checkIn.sleepHours}小时，心情评分${checkIn.moodScore}/10，用药${checkIn.medicationTaken ? '按时完成' : '有漏服情况'}。${caregiverName}今天辛苦了！`}
+            : `${elderNickname}今日整体状态${careScore >= 80 ? '稳定' : careScore >= 60 ? '良好' : careScore >= 40 ? '一般，需多关注' : '欠佳，需重点照护'}。睡眠${checkIn.sleepHours}小时，心情评分${checkIn.moodScore}/10，用药${checkIn.medicationTaken ? '按时完成' : '有漏服情况'}。`}
         </Text>
       </View>
 
@@ -329,7 +332,7 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
       {/* ── Footer ── */}
       <View style={cardStyles.footer}>
         <Text style={cardStyles.footerLeft}>记录人：{caregiverName}</Text>
-        <Text style={cardStyles.footerRight}>✨ 小马虎</Text>
+        <Text style={cardStyles.footerRight}>小马虎</Text>
       </View>
     </Animated.View>
   );
@@ -337,31 +340,34 @@ function BriefingCard({ briefing, checkIn, careScore, elderNickname, caregiverNa
 
 const cardStyles = StyleSheet.create({
   card: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 22, marginBottom: 20,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2,
-    borderWidth: 1, borderColor: AppColors.border.light,
+    backgroundColor: '#FBF7F4', borderRadius: 24, padding: 0, marginBottom: 20,
+    shadowColor: '#8B7B75', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 3,
+    borderWidth: 1, borderColor: '#EDE4DF',
+    overflow: 'hidden',
   },
-  header: { marginBottom: 18 },
+  headerRibbon: { paddingHorizontal: 22, paddingTop: 18, paddingBottom: 14, marginBottom: 4 },
   headerLeft: {},
-  appName: { fontSize: 14, fontWeight: '800', color: AppColors.green.muted, letterSpacing: -0.3 },
+  appName: { fontSize: 14, fontWeight: '800', color: AppColors.green.strong, letterSpacing: -0.3 },
   date: { fontSize: 13, color: AppColors.text.tertiary, marginTop: 3 },
-  elderSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  elderSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingHorizontal: 22 },
   elderInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  elderEmoji: { fontSize: 40 },
+  elderAvatarWrap: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#F3EDE8', alignItems: 'center', justifyContent: 'center' },
+  elderEmoji: { fontSize: 32 },
   elderName: { fontSize: 20, fontWeight: '800', color: AppColors.text.primary },
   elderSub: { fontSize: 13, color: AppColors.text.tertiary, marginTop: 2 },
-  dataGrid: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  summaryBox: { backgroundColor: AppColors.green.soft, borderRadius: 16, padding: 16, marginTop: 6, marginBottom: 14 },
-  summaryIcon: { fontSize: 18, marginBottom: 6 },
-  summaryTitle: { fontSize: 14, fontWeight: '700', color: AppColors.green.strong, marginBottom: 8 },
-  summaryText: { fontSize: 14, color: AppColors.text.primary, lineHeight: 22 },
+  dataGrid: { flexDirection: 'row', gap: 10, marginBottom: 10, paddingHorizontal: 22 },
+  summaryBox: { backgroundColor: '#F0EDE8', borderRadius: 16, padding: 16, marginTop: 6, marginBottom: 14, marginHorizontal: 22 },
+  summaryHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  summaryIcon: { fontSize: 16 },
+  summaryTitle: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary },
+  summaryText: { fontSize: 14, color: AppColors.text.secondary, lineHeight: 22 },
   attentionBox: {
-    flexDirection: 'row', gap: 10, backgroundColor: '#FEF3C7', borderRadius: 14, padding: 14,
-    marginBottom: 16, alignItems: 'center', borderWidth: 1, borderColor: '#FDE68A',
+    flexDirection: 'row', gap: 10, backgroundColor: '#FFF6E8', borderRadius: 14, padding: 14,
+    marginBottom: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F5E6CC', marginHorizontal: 22,
   },
   attentionIcon: { fontSize: 18 },
-  attentionText: { flex: 1, fontSize: 13, color: '#92400E', lineHeight: 20, fontWeight: '600' },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: AppColors.border.soft, paddingTop: 14 },
+  attentionText: { flex: 1, fontSize: 13, color: '#8B6914', lineHeight: 20, fontWeight: '600' },
+  footer: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#EDE4DF', paddingTop: 14, paddingBottom: 18, paddingHorizontal: 22 },
   footerLeft: { fontSize: 12, color: AppColors.text.tertiary },
   footerRight: { fontSize: 12, color: AppColors.green.muted, fontWeight: '600' },
 });
@@ -535,9 +541,9 @@ function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sl
 
 const sleepStyles = StyleSheet.create({
   card: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, padding: 18, marginBottom: 16,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2,
-    borderWidth: 1, borderColor: AppColors.border.light,
+    backgroundColor: '#FBF7F4', borderRadius: 20, padding: 18, marginBottom: 16,
+    shadowColor: '#8B7B75', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+    borderWidth: 1, borderColor: '#EDE4DF',
   },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, marginBottom: 14 },
   donutRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
@@ -897,12 +903,12 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingBottom: 48 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  container: { padding: 18, paddingBottom: 48 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
   homeBtn: { borderRadius: 22, paddingHorizontal: 16, paddingVertical: 9 },
   homeBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
 
-  title: { flex: 1, fontSize: 18, fontWeight: '700', color: AppColors.text.primary, textAlign: 'center' },
+  title: { flex: 1, fontSize: 17, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', letterSpacing: -0.3 },
   refreshBtn: { padding: 8 },
   refreshBtnText: { fontSize: 20 },
   generatingBox: {
@@ -910,14 +916,15 @@ const styles = StyleSheet.create({
     padding: 24, backgroundColor: AppColors.green.soft, borderRadius: 16, marginBottom: 20,
   },
   generatingText: { fontSize: 15, color: AppColors.green.strong, fontWeight: '600' },
-  errorBox: { alignItems: 'center', padding: 32, backgroundColor: '#FEF2F2', borderRadius: 20 },
+  errorBox: { alignItems: 'center', padding: 32, backgroundColor: '#FBF7F4', borderRadius: 20, borderWidth: 1, borderColor: '#EDE4DF' },
   errorEmoji: { fontSize: 48, marginBottom: 12 },
   errorText: { fontSize: 15, color: '#DC2626', textAlign: 'center', marginBottom: 16 },
-  checkinBtn: { backgroundColor: AppColors.green.muted, borderRadius: 14, paddingHorizontal: 24, paddingVertical: 12 },
+  checkinBtn: { backgroundColor: AppColors.green.muted, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 12 },
   checkinBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
   shareWechatBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    backgroundColor: '#07C160', borderRadius: 20, padding: 16, marginBottom: 12,
+    backgroundColor: '#07C160', borderRadius: 18, padding: 15, marginBottom: 12,
+    shadowColor: '#07C160', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 8,
   },
   shareWechatIcon: { fontSize: 22 },
   shareWechatText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
