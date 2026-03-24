@@ -6,7 +6,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getRandomTip } from '@/lib/care-knowledge';
 import { getWeatherByGPS, buildGreetingWithWeather, fetchWeather, GpsWeatherInfo, WeatherData } from '@/lib/weather';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getCurrentUserIsCreator } from '@/lib/storage';
@@ -458,7 +457,6 @@ function CreatorHomeScreen() {
   const { memberships, activeMembership, switchFamily } = useFamilyContext();
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [greeting, setGreeting] = useState('');
-  const [tip, setTip] = useState<{ category: string; icon: string; tip: string } | null>(null);
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
   const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
@@ -497,7 +495,6 @@ function CreatorHomeScreen() {
     if (profileCity) {
       fetchWeather(profileCity).then(w => { if (w) setWeatherData(w); });
     }
-    setTip(getRandomTip());
     if (profile?.birthDate) {
       const { getZodiacFromDate } = require('@/lib/zodiac');
       const zodiac = getZodiacFromDate(profile.birthDate);
@@ -644,19 +641,6 @@ function CreatorHomeScreen() {
 
         {/* ── 趋势图 ── */}
         {allCheckIns.length > 0 && <TrendChart checkIns={allCheckIns} patientNickname={elderNickname} caregiverName={caregiverName} />}
-
-        {/* ── 护理贴士 ── */}
-        {tip && (
-          <View style={styles.tipCard}>
-            <View style={styles.tipHeader}>
-              <View style={styles.tipIconCircle}>
-                <Text style={{ fontSize: 14 }}>💡</Text>
-              </View>
-              <Text style={styles.tipCategory}>{tip.category}</Text>
-            </View>
-            <Text style={styles.tipText}>{tip.tip}</Text>
-          </View>
-        )}
 
         {/* ── 快捷入口 ── */}
         <View style={{ marginBottom: 4 }}>
@@ -848,11 +832,6 @@ const styles = StyleSheet.create({
   aiDetailLinkText: { fontSize: 13, fontWeight: '700', color: AppColors.purple.strong },
 
   // 护理贴士
-  tipCard: { backgroundColor: AppColors.peach.soft, borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: AppColors.peach.primary, ...SHADOWS.sm },
-  tipHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  tipIconCircle: { width: 36, height: 36, borderRadius: 12, backgroundColor: AppColors.peach.soft, alignItems: 'center', justifyContent: 'center' },
-  tipCategory: { fontSize: 12, fontWeight: '700', color: AppColors.peach.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  tipText: { fontSize: 14, color: AppColors.text.secondary, lineHeight: 22 },
 
   // 快捷入口标题
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
