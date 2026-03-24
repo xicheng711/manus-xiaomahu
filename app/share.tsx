@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
@@ -17,15 +18,31 @@ import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 const { width: SW } = Dimensions.get('window');
 
 
-// ─── 当日简报缓存（避免返回后重新生成）────────────────────────────────────────
-let _briefingCache: { date: string; briefing: any; shareText: string } | null = null;
+// ─── 当日简报缓存（内存 + AsyncStorage 双层）────────────────────────────────
+let _briefingCache: { date: string; briefing: any; shareText: string; checkIn: any } | null = null;
 function getTodayKey() { return new Date().toISOString().slice(0, 10); }
 function getCachedBriefing() {
   if (_briefingCache && _briefingCache.date === getTodayKey()) return _briefingCache;
   return null;
 }
-function setCachedBriefing(briefing: any, shareText: string) {
-  _briefingCache = { date: getTodayKey(), briefing, shareText };
+function setCachedBriefing(briefing: any, shareText: string, checkIn?: any) {
+  const entry = { date: getTodayKey(), briefing, shareText, checkIn: checkIn || null };
+  _briefingCache = entry;
+  AsyncStorage.setItem('share_briefing_cache_v1', JSON.stringify(entry)).catch(() => {});
+}
+async function loadPersistedBriefing() {
+  if (_briefingCache && _briefingCache.date === getTodayKey()) return _briefingCache;
+  try {
+    const raw = await AsyncStorage.getItem('share_briefing_cache_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.date === getTodayKey()) {
+        _briefingCache = parsed;
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
 }
 
 // ─── 简报生成加载屏 ──────────────────────────────────────────────────────────
@@ -570,9 +587,40 @@ export default function ShareScreen() {
   useFocusEffect(useCallback(() => { loadAndGenerate(false); }, []));
 
   async function loadAndGenerate(forceRefresh = false) {
-    setLoading(true);
     setError(null);
+
+    if (!forceRefresh) {
+      const memCached = getCachedBriefing();
+      if (memCached) {
+        setBriefing(memCached.briefing);
+        setShareText(memCached.shareText);
+        if (memCached.checkIn) {
+          setCheckIn(memCached.checkIn);
+          setCareScore(memCached.checkIn.careScore || 70);
+        }
+        setLoading(false);
+        loadSupplementaryData();
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
+      if (!forceRefresh) {
+        const persisted = await loadPersistedBriefing();
+        if (persisted) {
+          setBriefing(persisted.briefing);
+          setShareText(persisted.shareText);
+          if (persisted.checkIn) {
+            setCheckIn(persisted.checkIn);
+            setCareScore(persisted.checkIn.careScore || 70);
+          }
+          setLoading(false);
+          loadSupplementaryData();
+          return;
+        }
+      }
+
       const profile = await getProfile();
       const nickname = profile?.nickname || profile?.name || '家人';
       const caregiver = profile?.caregiverName || '照顾者';
@@ -595,26 +643,28 @@ export default function ShareScreen() {
       const score = ci.careScore || 70;
       setCareScore(score);
 
-      const weekly = await getWeeklySleepData(7);
-      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, nightWakings: d.nightWakings })));
-
-      // ── 命中缓存直接展示，无需重新调用 AI ──
-      if (!forceRefresh) {
-        const cached = getCachedBriefing();
-        if (cached) {
-          setBriefing(cached.briefing);
-          setShareText(cached.shareText);
-          setLoading(false);
-          return;
-        }
-      }
-
+      loadSupplementaryData();
       await doGenerate(nickname, caregiver, ci, score);
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadSupplementaryData() {
+    try {
+      const [profile, weekly] = await Promise.all([
+        getProfile(),
+        getWeeklySleepData(7),
+      ]);
+      if (profile) {
+        setElderNickname(profile.nickname || profile.name || '家人');
+        setCaregiverName(profile.caregiverName || '照顾者');
+        setElderEmoji(profile.zodiacEmoji || '🐯');
+      }
+      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings })));
+    } catch {}
   }
 
   async function doGenerate(nickname: string, caregiver: string, ci: DailyCheckIn, score: number) {
@@ -639,17 +689,16 @@ export default function ShareScreen() {
       if (result.success && result.briefing) {
         setBriefing(result.briefing);
         setShareText(result.briefing.shareText ?? '');
-        setCachedBriefing(result.briefing, result.briefing.shareText ?? '');
+        setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci);
       } else {
-        // 生成失败时构建本地 fallback 并缓存
         const fallback = buildLocalBriefing(nickname, caregiver, ci, score);
         setBriefing(fallback);
-        setCachedBriefing(fallback, fallback.shareText);
+        setCachedBriefing(fallback, fallback.shareText, ci);
       }
     } catch (e) {
       const fallback = buildLocalBriefing(nickname, caregiver, ci, score);
       setBriefing(fallback);
-      setCachedBriefing(fallback, fallback.shareText);
+      setCachedBriefing(fallback, fallback.shareText, ci);
     } finally {
       setGenerating(false);
     }
