@@ -200,3 +200,31 @@ The `users` table stores authentication data. The schema is in `drizzle/schema.t
 ### New Dependencies
 - `react-native-gifted-charts` — chart library for sleep visualization
 - `react-native-svg` — SVG rendering for charts
+
+## Design System (v6.0 — Premium Warm Redesign)
+
+### Design Token Files (`lib/design-tokens/`)
+- **colors.ts** — `AppColors`: bg (primary/secondary/soft), green, purple, coral, peach palettes + text/border/surface/shadow
+- **gradients.ts** — `Gradients`: appBg, heroGlow, green, purple, coral, peach, navActive gradient arrays
+- **typography.ts** — `Typography`: heroTitle/pageTitle/sectionTitle/cardTitle/metricNumber/scoreNumber/body/bodySmall/caption
+- **spacing.ts** — `Spacing`: 8pt system (space4–space32) + semantic tokens (pageHorizontal, cardPadding, cardGap, chipPadding)
+- **radius.ts** — `Radius`: cardLarge(24)/cardMedium(20)/cardSmall(16)/button(18)/chip(999)/iconButton(16)
+- **shadows.ts** — `Shadows`: soft/card/elevated presets + glow(color) factory
+- **motion.ts** — `Motion`: stagger(100ms), entrance(400ms/12px), pulse(1–1.02/1400ms), press(0.98/120ms) + helper factories
+- **index.ts** — barrel export for all tokens
+
+### Reusable UI Components (`components/ui/`)
+- **BaseCard** — white card with soft shadow + light border, configurable padding/radius
+- **GradientCard** — LinearGradient card wrapper with shadow
+- **MetricCard** — animated metric display (emoji + value + label) with staggered entrance
+- **PrimaryButton** — gradient button with press animation, loading state, icon support
+- **SectionHeader** — title + optional subtitle with consistent typography
+- **Chip** — pill-shaped tag with selected/unselected states
+
+### Theme Config (`theme.config.js`)
+- Updated to premium warm palette: primary=#8EB89A, background=#F7F1F3, foreground=#2F2A2E
+- Feeds into NativeWind CSS variables via `lib/theme-provider.tsx`
+
+### Color Migration (`lib/animations.ts`)
+- COLORS updated from old coral/cream palette to new premium warm palette
+- bg=#F7F1F3, primary=#F28C7C, secondary=#8EB89A, text=#2F2A2E, shadow=rgba(88,64,78,0.08)

@@ -5,52 +5,44 @@
 import { Animated, Easing, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
-// ─── Color Palette (Warm Pastel Healthcare) ──────────────────────────────────
+// ─── Color Palette (Premium Warm Care) ──────────────────────────────────────
 export const COLORS = {
-  // Backgrounds
-  bg: '#FFF9F5',           // Warm cream
-  bgCard: '#FFFFFF',       // Pure white cards
-  bgSoft: '#FFF5EE',      // Soft peach tint
-  bgMint: '#F0F7EE',      // Mint green (AI)
-  bgPink: '#FFF0F0',      // Soft pink
-  bgBlue: '#EEF4FF',      // Soft blue
+  bg: '#F7F1F3',
+  bgCard: '#FFFFFF',
+  bgSoft: '#F8F2EE',
+  bgMint: '#E8F3EA',
+  bgPink: '#FDEAE6',
+  bgBlue: '#F2EDFB',
 
-  // Primary
-  primary: '#FF6B6B',      // Coral
-  primaryLight: '#FF8A8A',
-  primaryDark: '#E85555',
-  primaryBg: '#FFF0F0',
+  primary: '#F28C7C',
+  primaryLight: '#FFA28C',
+  primaryDark: '#E07060',
+  primaryBg: '#FDEAE6',
 
-  // Secondary (Teal/Green)
-  secondary: '#81B29A',    // Muted teal
-  secondaryLight: '#A3D4B9',
-  secondaryDark: '#5C8F73',
-  secondaryBg: '#ECF5EC',
+  secondary: '#8EB89A',
+  secondaryLight: '#9CC9A7',
+  secondaryDark: '#6F9D7B',
+  secondaryBg: '#E8F3EA',
 
-  // Accent
-  accent: '#F2CC8F',       // Apricot cream
-  accentPink: '#FFCAD4',   // Soft pink
-  accentPeach: '#FFE5D9',  // Peach cream
+  accent: '#E9C58F',
+  accentPink: '#F28C7C',
+  accentPeach: '#FAF1E2',
 
-  // Text
-  text: '#1A1A2E',         // Deep navy-black
-  textSecondary: '#6B7280',
-  textMuted: '#6B7280',   // WCAG AA 合规（4.6:1 on white）
-  textLight: '#9CA3AF',   // 仅用于装饰性/非文本用途（图标、分隔线）
+  text: '#2F2A2E',
+  textSecondary: '#7B7580',
+  textMuted: '#7B7580',
+  textLight: '#A49DA8',
 
-  // Status
   success: '#4ADE80',
   successDark: '#22C55E',
   warning: '#F59E0B',
   error: '#EF4444',
 
-  // Borders
-  border: '#F0F0F0',
-  borderLight: '#F8F8F8',
-  borderAccent: '#FFD4D4',
+  border: '#E8DDE5',
+  borderLight: '#F5F5F5',
+  borderAccent: '#FDEAE6',
 
-  // Shadows
-  shadow: '#000000',
+  shadow: 'rgba(88, 64, 78, 0.08)',
 };
 
 // ─── Spacing ─────────────────────────────────────────────────────────────────
