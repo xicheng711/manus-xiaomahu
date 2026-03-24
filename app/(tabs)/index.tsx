@@ -813,7 +813,7 @@ function CreatorHomeScreen() {
       {/* Join Family Sheet */}
       <Modal visible={showJoinSheet} transparent animationType="slide" onRequestClose={() => setShowJoinSheet(false)}>
         <TouchableOpacity style={switStyles.overlay} activeOpacity={1} onPress={() => setShowJoinSheet(false)}>
-          <View style={[switStyles.sheet, { paddingBottom: 48 }]}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[switStyles.sheet, { paddingBottom: 48 }]}>
             <Text style={switStyles.title}>加入已有家庭</Text>
             <Text style={{ fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 }}>
               请输入家庭管理员分享的邀请码
@@ -861,7 +861,7 @@ function CreatorHomeScreen() {
             <TouchableOpacity onPress={() => setShowJoinSheet(false)} style={{ marginTop: 12, alignItems: 'center' }}>
               <Text style={{ fontSize: 14, color: AppColors.text.tertiary }}>取消</Text>
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </View>
