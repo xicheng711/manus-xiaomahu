@@ -658,6 +658,35 @@ export async function syncMembershipRoom(familyId: string): Promise<void> {
   }
 }
 
+// Remove a membership (joiner leaves, or any cleanup)
+export async function removeMembership(familyId: string): Promise<void> {
+  const all = await getAllMemberships();
+  const filtered = all.filter(m => m.familyId !== familyId);
+  await AsyncStorage.setItem(KEYS.MEMBERSHIPS, JSON.stringify(filtered));
+  // If this was active family, switch to first remaining or clear
+  const activeId = await getActiveFamilyId();
+  if (activeId === familyId) {
+    if (filtered.length > 0) {
+      await setActiveFamilyId(filtered[0].familyId);
+      await saveFamilyRoom(filtered[0].room);
+      const myMember = filtered[0].room.members.find(m => m.id === filtered[0].myMemberId);
+      if (myMember) await setCurrentMember(myMember);
+    } else {
+      await AsyncStorage.removeItem(KEYS.ACTIVE_FAMILY_ID);
+      await AsyncStorage.removeItem(KEYS.FAMILY_ROOM);
+      await AsyncStorage.removeItem(KEYS.CURRENT_MEMBER);
+    }
+  }
+}
+
+// Delete a family and all associated data (creator only)
+export async function deleteFamilyAndData(familyId: string): Promise<void> {
+  // Remove announcements
+  await AsyncStorage.removeItem(KEYS.FAMILY_ANNOUNCEMENTS);
+  // Remove membership
+  await removeMembership(familyId);
+}
+
 // ─── Care Briefings ──────────────────────────────────────────────────────────
 
 export async function saveBriefing(briefing: CareBriefing): Promise<void> {

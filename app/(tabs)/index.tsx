@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
-  ScrollView, View, Text, TouchableOpacity, Modal,
+  ScrollView, View, Text, TouchableOpacity, Modal, TextInput,
   StyleSheet, Dimensions, Animated, Easing, Platform, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getWeatherByGPS, buildGreetingWithWeather, fetchWeather, GpsWeatherInfo, WeatherData } from '@/lib/weather';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getCurrentUserIsCreator } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getCurrentUserIsCreator, joinFamilyRoom } from '@/lib/storage';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -454,8 +454,13 @@ export default function HomeScreen() {
 function CreatorHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { memberships, activeMembership, switchFamily } = useFamilyContext();
+  const { memberships, activeMembership, switchFamily, refresh: refreshFamily } = useFamilyContext();
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [showJoinSheet, setShowJoinSheet] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinName, setJoinName] = useState('');
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState('');
   const [greeting, setGreeting] = useState('');
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
   const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
@@ -589,14 +594,14 @@ function CreatorHomeScreen() {
             </View>
             {memberships.length > 0 && (
               <TouchableOpacity
-                onPress={() => memberships.length > 1 && setShowSwitcher(true)}
-                activeOpacity={memberships.length > 1 ? 0.7 : 1}
+                onPress={() => setShowSwitcher(true)}
+                activeOpacity={0.7}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}
               >
                 <Text style={{ fontSize: 12, color: AppColors.text.secondary, fontWeight: '600' }}>
                   🏠 {activeMembership?.room.elderName || elderNickname}的家庭
                 </Text>
-                {memberships.length > 1 && <Text style={{ fontSize: 10, color: AppColors.text.tertiary }}>▼</Text>}
+                <Text style={{ fontSize: 10, color: AppColors.text.tertiary }}>▼</Text>
               </TouchableOpacity>
             )}
             <Text style={styles.greeting}>{greeting}</Text>
@@ -713,28 +718,109 @@ function CreatorHomeScreen() {
         <TouchableOpacity style={switStyles.overlay} activeOpacity={1} onPress={() => setShowSwitcher(false)}>
           <View style={switStyles.sheet}>
             <Text style={switStyles.title}>切换家庭</Text>
-            {memberships.map(m => (
+            {memberships.map(m => {
+              const isActive = activeMembership?.familyId === m.familyId;
+              const roleLabel = m.role === 'creator' ? '主照顾者' : '家庭成员';
+              const myMember = m.room.members.find(mem => mem.id === m.myMemberId);
+              const avatarEmoji = myMember?.emoji || m.room.members[0]?.emoji || '🏠';
+              return (
+                <TouchableOpacity
+                  key={m.familyId}
+                  style={[switStyles.row, isActive && switStyles.rowActive]}
+                  onPress={async () => { await switchFamily(m.familyId); setShowSwitcher(false); }}
+                >
+                  <Text style={{ fontSize: 22, marginRight: 12 }}>{avatarEmoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={switStyles.name}>{m.room.elderName}</Text>
+                    <View style={[switStyles.rolePill, m.role === 'creator' ? switStyles.rolePillCreator : switStyles.rolePillJoiner]}>
+                      <Text style={[switStyles.rolePillText, m.role === 'creator' ? switStyles.rolePillTextCreator : switStyles.rolePillTextJoiner]}>{roleLabel}</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {isActive && <Text style={{ fontSize: 16, color: AppColors.green.strong }}>✓</Text>}
+                    {isActive && (
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() => {
+                          setShowSwitcher(false);
+                          setTimeout(() => router.push({ pathname: '/(modals)/family-settings' as any, params: { familyId: m.familyId } }), 200);
+                        }}
+                      >
+                        <Text style={{ fontSize: 16, color: AppColors.text.tertiary }}>⚙️</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
               <TouchableOpacity
-                key={m.familyId}
-                style={[switStyles.row, activeMembership?.familyId === m.familyId && switStyles.rowActive]}
-                onPress={async () => {
-                  await switchFamily(m.familyId);
-                  setShowSwitcher(false);
-                }}
+                style={[switStyles.addBtn, { flex: 1 }]}
+                onPress={() => { setShowSwitcher(false); setTimeout(() => router.push('/(modals)/create-family' as any), 200); }}
               >
-                <Text style={{ fontSize: 22, marginRight: 12 }}>{m.room.members[0]?.emoji || '🏠'}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={switStyles.name}>{m.room.elderName}</Text>
-                  <Text style={switStyles.role}>{m.role === 'creator' ? '📋 主要照顾者' : '👁️ 家庭成员'}</Text>
-                </View>
-                {activeMembership?.familyId === m.familyId && <Text style={{ fontSize: 16, color: AppColors.green.muted }}>✓</Text>}
+                <Text style={switStyles.addText}>＋ 创建新家庭</Text>
               </TouchableOpacity>
-            ))}
+              <TouchableOpacity
+                style={[switStyles.addBtn, { flex: 1 }]}
+                onPress={() => { setShowSwitcher(false); setJoinCode(''); setJoinName(''); setJoinError(''); setTimeout(() => setShowJoinSheet(true), 200); }}
+              >
+                <Text style={switStyles.addText}>🔗 加入已有家庭</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Join Family Sheet */}
+      <Modal visible={showJoinSheet} transparent animationType="slide" onRequestClose={() => setShowJoinSheet(false)}>
+        <TouchableOpacity style={switStyles.overlay} activeOpacity={1} onPress={() => setShowJoinSheet(false)}>
+          <View style={[switStyles.sheet, { paddingBottom: 48 }]}>
+            <Text style={switStyles.title}>加入已有家庭</Text>
+            <Text style={{ fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 }}>
+              请输入家庭管理员分享的邀请码
+            </Text>
+            <View style={{ marginBottom: 14 }}>
+              <Text style={switStyles.joinLabel}>邀请码</Text>
+              <TextInput
+                style={switStyles.joinInput}
+                placeholder="输入6位邀请码"
+                value={joinCode}
+                onChangeText={t => { setJoinCode(t.toUpperCase()); setJoinError(''); }}
+                maxLength={6}
+                autoCapitalize="characters"
+                placeholderTextColor={AppColors.text.tertiary}
+              />
+            </View>
+            <View style={{ marginBottom: 14 }}>
+              <Text style={switStyles.joinLabel}>您的昵称</Text>
+              <TextInput
+                style={switStyles.joinInput}
+                placeholder="如：小红、大明..."
+                value={joinName}
+                onChangeText={t => { setJoinName(t); setJoinError(''); }}
+                placeholderTextColor={AppColors.text.tertiary}
+              />
+            </View>
+            {joinError ? <Text style={{ color: AppColors.coral.primary, fontSize: 13, textAlign: 'center', marginBottom: 10 }}>{joinError}</Text> : null}
             <TouchableOpacity
-              style={switStyles.addBtn}
-              onPress={() => { setShowSwitcher(false); setTimeout(() => router.push('/(modals)/create-family' as any), 200); }}
+              style={[switStyles.joinSubmitBtn, (joinCode.length < 6 || !joinName.trim() || joinLoading) && { opacity: 0.5 }]}
+              disabled={joinCode.length < 6 || !joinName.trim() || joinLoading}
+              onPress={async () => {
+                setJoinLoading(true);
+                try {
+                  const result = await joinFamilyRoom(joinCode, { name: joinName.trim(), role: 'family', roleLabel: '家庭成员', emoji: '👤', color: AppColors.purple.primary });
+                  if (!result) { setJoinError('邀请码不正确，请检查后重试'); return; }
+                  await refreshFamily();
+                  setShowJoinSheet(false);
+                } finally {
+                  setJoinLoading(false);
+                }
+              }}
             >
-              <Text style={switStyles.addText}>＋ 创建新家庭</Text>
+              <Text style={switStyles.joinSubmitText}>{joinLoading ? '加入中...' : '确认加入'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowJoinSheet(false)} style={{ marginTop: 12, alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, color: AppColors.text.tertiary }}>取消</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -747,12 +833,21 @@ const switStyles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: AppColors.surface.whiteStrong, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 36, ...SHADOWS.lg },
   title: { fontSize: 17, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', marginBottom: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, marginBottom: 8, backgroundColor: AppColors.bg.secondary },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 14, marginBottom: 8, backgroundColor: AppColors.bg.secondary },
   rowActive: { backgroundColor: AppColors.green.soft, borderWidth: 1.5, borderColor: AppColors.green.muted },
-  name: { fontSize: 15, fontWeight: '700', color: AppColors.text.primary, marginBottom: 2 },
-  role: { fontSize: 12, color: AppColors.text.secondary },
-  addBtn: { marginTop: 8, paddingVertical: 14, alignItems: 'center', borderRadius: 14, borderWidth: 1.5, borderColor: AppColors.border.soft, borderStyle: 'dashed' },
-  addText: { fontSize: 14, fontWeight: '700', color: AppColors.text.tertiary },
+  name: { fontSize: 15, fontWeight: '700', color: AppColors.text.primary, marginBottom: 4 },
+  rolePill: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  rolePillCreator: { backgroundColor: AppColors.green.muted + '30' },
+  rolePillJoiner: { backgroundColor: AppColors.purple.soft },
+  rolePillText: { fontSize: 11, fontWeight: '600' },
+  rolePillTextCreator: { color: AppColors.green.strong },
+  rolePillTextJoiner: { color: AppColors.purple.strong },
+  addBtn: { paddingVertical: 14, alignItems: 'center', borderRadius: 14, borderWidth: 1.5, borderColor: AppColors.border.soft, borderStyle: 'dashed' },
+  addText: { fontSize: 13, fontWeight: '600', color: AppColors.text.tertiary },
+  joinLabel: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary, marginBottom: 6 },
+  joinInput: { borderWidth: 1.5, borderColor: AppColors.border.soft, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: AppColors.text.primary, backgroundColor: AppColors.bg.secondary },
+  joinSubmitBtn: { backgroundColor: AppColors.green.strong, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 4 },
+  joinSubmitText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
 
 const styles = StyleSheet.create({

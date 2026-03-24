@@ -1,0 +1,247 @@
+Family Switcher / Family Management Logic Update
+
+Please update the current “切换家庭” flow into a more complete and professional family management logic.
+
+Product model
+
+There are two user roles in the app:
+
+主照顾者 (Primary Caregiver)
+家庭成员 (Joiner / Viewer)
+
+A user can belong to multiple families.
+In different families, the same user may have different roles.
+
+Each family is a separate care space with its own:
+
+records
+reports
+trends
+reminders
+members
+1. Update the current bottom sheet
+
+The current “切换家庭” bottom sheet should not only support switching.
+It should also provide entry points for family creation and joining.
+
+Keep:
+family list
+current selected family state
+Add:
+role label for each family item
+“创建新家庭” action
+“加入已有家庭” action
+Family item content
+
+Each family item should show:
+
+family name
+current user role in that family
+selected state
+
+Use these role labels in UI:
+
+主照顾者
+家庭成员
+
+Do not show only “主要照顾者” for every item.
+
+2. Add “加入已有家庭” flow
+
+There must be a dedicated flow for users who want to join an existing family instead of creating one.
+
+Entry point
+
+Bottom of the family switcher sheet:
+
+创建新家庭
+加入已有家庭
+Join flow
+
+Support at least:
+
+enter invitation code
+optional future support for invite link
+Join confirmation screen should show:
+family name
+inviter / primary caregiver info if available
+role after joining: 家庭成员
+
+CTA:
+
+确认加入
+3. Keep “创建新家庭” as a separate flow
+
+Creating a new family means:
+
+create a new care space
+current user becomes 主照顾者 by default
+
+Keep this flow simple:
+
+input family name
+create family
+optional invite members afterward
+4. Add family settings page
+
+Each family should have a “家庭设置” page.
+
+Suggested content:
+
+family name
+current user role
+invitation code / invite entry (for primary caregiver)
+member list
+danger zone actions
+
+Access:
+
+from current selected family screen, or from each family item via more button
+5. Separate “Delete Family” and “Leave Family”
+
+These are different actions and must not be mixed.
+
+For 主照顾者
+
+Show:
+
+删除这个家庭
+
+Meaning:
+
+permanently delete this whole family and all related data
+For 家庭成员
+
+Show:
+
+退出这个家庭
+
+Meaning:
+
+current user leaves the family
+family and data remain for others
+6. Delete family logic
+
+Only the 主照顾者 can delete a family.
+
+Deleting a family means permanently deleting:
+
+records
+reports
+trends
+notes
+access for all members
+
+This is destructive and irreversible.
+
+Required deletion flow
+
+Use a 2-step confirmation:
+
+Step 1
+
+Dialog title:
+
+删除这个家庭？
+
+Body:
+
+删除后，这个家庭中的所有照护记录、日报、趋势和备注都将被永久清除，且无法恢复。
+所有家庭成员也将失去访问权限。
+
+Buttons:
+
+取消
+继续删除
+Step 2
+
+Require final confirmation by typing the family name
+
+Example:
+
+请输入“dd的家庭”以确认删除
+
+Only after exact match:
+
+enable final delete button
+
+Final button:
+
+永久删除
+7. Leave family logic
+
+If current user role is 家庭成员, do not show delete.
+
+Show only:
+
+退出这个家庭
+
+Confirmation dialog:
+Title:
+
+退出这个家庭？
+
+Body:
+
+退出后，你将无法继续查看这个家庭中的记录和日报，但其他成员和数据不会受到影响。
+
+Buttons:
+
+取消
+确认退出
+8. Member list display
+
+In family settings, show all members with role labels.
+
+Example:
+
+欢欢｜主照顾者
+小雨｜家庭成员
+
+This improves clarity.
+
+9. UI copy updates
+
+Use these user-facing labels:
+
+切换家庭
+创建新家庭
+加入已有家庭
+家庭设置
+主照顾者
+家庭成员
+删除这个家庭
+退出这个家庭
+
+Avoid internal/technical wording such as:
+
+删除主照顾者档案
+加入 as joiner
+切换用户档案
+10. UX principles
+
+The family switcher should become:
+
+a switching entry
+a family creation entry
+a family joining entry
+a management entry
+
+But destructive actions like delete must live inside family settings, not directly in the switcher sheet.
+
+Please keep the UI clean, mobile-friendly, and aligned with the current soft premium app style.
+
+我再补一个更实际的建议
+
+从产品成熟度来说，你现在最稳的做法是：
+
+当前版本先做这 4 个
+切换家庭列表里显示身份标签
+底部加“加入已有家庭”
+增加家庭设置页
+主照顾者支持“删除这个家庭”，家庭成员支持“退出这个家庭”
+
+这四个一做，逻辑就完整很多了。
+
+暂时不用做的
+多主照顾者

@@ -9,6 +9,8 @@ import {
   getCurrentMember,
   setCurrentMember,
   migrateToMultiFamily,
+  removeMembership,
+  deleteFamilyAndData,
 } from './storage';
 
 export interface FamilyContextValue {
@@ -17,6 +19,8 @@ export interface FamilyContextValue {
   isCreator: boolean;
   hasFamilies: boolean;
   switchFamily: (familyId: string) => Promise<void>;
+  leaveFamily: (familyId: string) => Promise<void>;
+  deleteFamily: (familyId: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -26,6 +30,8 @@ const FamilyContext = createContext<FamilyContextValue>({
   isCreator: false,
   hasFamilies: false,
   switchFamily: async () => {},
+  leaveFamily: async () => {},
+  deleteFamily: async () => {},
   refresh: async () => {},
 });
 
@@ -54,21 +60,28 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     const all = await getAllMemberships();
     const target = all.find(m => m.familyId === familyId);
     if (!target) return;
-    // Save the active family ID
     await setActiveFamilyId(familyId);
-    // Update the main family_room_v1 key to point to this family's room
     await saveFamilyRoom(target.room);
-    // Update current member to my member in that room
     const myMember = target.room.members.find(m => m.id === target.myMemberId);
     if (myMember) await setCurrentMember(myMember);
     setActiveMembership(target);
   }, []);
 
+  const leaveFamily = useCallback(async (familyId: string) => {
+    await removeMembership(familyId);
+    await refresh();
+  }, [refresh]);
+
+  const deleteFamily = useCallback(async (familyId: string) => {
+    await deleteFamilyAndData(familyId);
+    await refresh();
+  }, [refresh]);
+
   const isCreator = activeMembership?.role === 'creator';
   const hasFamilies = memberships.length > 0;
 
   return (
-    <FamilyContext.Provider value={{ memberships, activeMembership, isCreator, hasFamilies, switchFamily, refresh }}>
+    <FamilyContext.Provider value={{ memberships, activeMembership, isCreator, hasFamilies, switchFamily, leaveFamily, deleteFamily, refresh }}>
       {children}
     </FamilyContext.Provider>
   );
