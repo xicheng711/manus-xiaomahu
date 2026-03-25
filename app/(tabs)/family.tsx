@@ -37,7 +37,7 @@ const ANNOUNCEMENT_TYPES = [
 ];
 
 const MEMBER_EMOJIS = ['👩', '👨', '👧', '👦', '👴', '👵', '🧑', '👩‍⚕️', '👨‍⚕️', '🧓'];
-const MEMBER_COLORS = [AppColors.coral.primary, '#4ADE80', '#60A5FA', '#FBBF24', AppColors.purple.primary, '#F472B6', '#34D399', '#FB923C'];
+const MEMBER_COLORS = [AppColors.coral.primary, '#4ADE80', '#60A5FA', '#FBBF24', '#EDAABB', '#F472B6', '#34D399', '#FB923C'];
 const MEMBER_ROLES = [
   { role: 'caregiver' as const, label: '主要照顾者' },
   { role: 'family' as const, label: '家庭成员' },
@@ -497,7 +497,7 @@ export default function FamilyScreen() {
           activeOpacity={0.85}
         >
           {activeSection === 'broadcast' ? (
-            <LinearGradient colors={[Gradients.purple[0], Gradients.purple[1], AppColors.purple.strong]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sectionTabGradient}>
+            <LinearGradient colors={[Gradients.navActive[0], Gradients.navActive[1], '#B8426A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sectionTabGradient}>
               <Text style={styles.sectionTabTextActive}>📢 公告</Text>
             </LinearGradient>
           ) : (
@@ -510,7 +510,7 @@ export default function FamilyScreen() {
           activeOpacity={0.85}
         >
           {activeSection === 'briefing' ? (
-            <LinearGradient colors={[Gradients.purple[0], Gradients.purple[1], AppColors.purple.strong]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sectionTabGradient}>
+            <LinearGradient colors={[Gradients.navActive[0], Gradients.navActive[1], '#B8426A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sectionTabGradient}>
               <Text style={styles.sectionTabTextActive}>📋 简报</Text>
             </LinearGradient>
           ) : (
@@ -886,7 +886,7 @@ export default function FamilyScreen() {
 
             {/* Diary */}
             {selectedItem.diary && (
-              <View style={{ backgroundColor: AppColors.surface.whiteStrong, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: AppColors.purple.soft }}>
+              <View style={{ backgroundColor: AppColors.surface.whiteStrong, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#FEF0F4' }}>
                 <Text style={{ fontSize: 15, fontWeight: '700', color: AppColors.text.primary, marginBottom: 8 }}>📔 护理日记</Text>
                 <Text style={{ fontSize: 13, color: AppColors.text.secondary, lineHeight: 20 }}>
                   {selectedItem.diary.moodEmoji ? selectedItem.diary.moodEmoji + ' ' : ''}{selectedItem.diary.content || '无内容'}
@@ -1105,15 +1105,15 @@ const styles = StyleSheet.create({
 
   // ── 邀请码徽章 ──
   heroCodeWrap: { alignItems: 'flex-end', gap: 3 },
-  heroCodeLabel: { fontSize: 10, fontWeight: '600', color: AppColors.purple.strong, opacity: 0.6, letterSpacing: 0.3 },
+  heroCodeLabel: { fontSize: 10, fontWeight: '600', color: '#B8426A', opacity: 0.6, letterSpacing: 0.3 },
   heroCodePill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: AppColors.purple.soft, borderRadius: 14,
+    backgroundColor: '#FEF0F4', borderRadius: 14,
     paddingHorizontal: 12, paddingVertical: 7,
-    borderWidth: 1.5, borderColor: AppColors.purple.primary + '60',
+    borderWidth: 1.5, borderColor: '#EDAABB' + '60',
   },
   heroCodeIcon: { fontSize: 13 },
-  heroCodeText: { fontSize: 14, fontWeight: '900', color: AppColors.purple.strong, letterSpacing: 1.5 },
+  heroCodeText: { fontSize: 14, fontWeight: '900', color: '#B8426A', letterSpacing: 1.5 },
 
   // ── Members ──
   membersScroll: { maxHeight: 116 },
@@ -1127,31 +1127,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.42)', paddingVertical: 2, alignItems: 'center',
   },
   memberName: { fontSize: 11, fontWeight: '700', color: AppColors.text.primary, textAlign: 'center' },
-  memberRole: { fontSize: 10, color: AppColors.purple.primary, textAlign: 'center', fontWeight: '600', opacity: 0.8 },
+  memberRole: { fontSize: 10, color: '#EDAABB', textAlign: 'center', fontWeight: '600', opacity: 0.8 },
   addMemberChip: { alignItems: 'center', gap: 5, width: 62 },
   addMemberBtn: {
     width: 56, height: 56, borderRadius: 20,
-    backgroundColor: AppColors.purple.soft,
+    backgroundColor: '#FEF0F4',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: AppColors.purple.primary, borderStyle: 'dashed',
+    borderWidth: 2, borderColor: '#EDAABB', borderStyle: 'dashed',
   },
-  addMemberBtnText: { fontSize: 22, color: AppColors.purple.strong },
+  addMemberBtnText: { fontSize: 22, color: '#B8426A' },
 
-  sectionTabs: { flexDirection: 'row', marginHorizontal: 20, marginBottom: 10, backgroundColor: AppColors.purple.soft, borderRadius: 18, padding: 5, gap: 4 },
+  sectionTabs: { flexDirection: 'row', marginHorizontal: 20, marginBottom: 10, backgroundColor: '#FEF0F4', borderRadius: 18, padding: 5, gap: 4 },
   sectionTab: { flex: 1, alignItems: 'center', borderRadius: 14, overflow: 'hidden' },
   sectionTabActive: {},
   sectionTabGradient: { width: '100%', paddingVertical: 11, alignItems: 'center', borderRadius: 14 },
-  sectionTabText: { fontSize: 14, fontWeight: '600', color: AppColors.purple.strong, paddingVertical: 11 },
+  sectionTabText: { fontSize: 14, fontWeight: '600', color: '#B8426A', paddingVertical: 11 },
   sectionTabTextActive: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
   content: { flex: 1 },
   section: { paddingHorizontal: 20, paddingTop: 8 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: AppColors.text.primary },
   sectionCount: { fontSize: 13, color: AppColors.text.secondary, backgroundColor: AppColors.bg.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  emptyCard: { alignItems: 'center', padding: 36, backgroundColor: AppColors.purple.soft, borderRadius: 24, gap: 8, borderWidth: 1.5, borderColor: AppColors.purple.primary },
+  emptyCard: { alignItems: 'center', padding: 36, backgroundColor: '#FEF0F4', borderRadius: 24, gap: 8, borderWidth: 1.5, borderColor: '#EDAABB' },
   emptyEmoji: { fontSize: 44 },
-  emptyText: { fontSize: 16, fontWeight: '800', color: AppColors.purple.strong },
-  emptySubText: { fontSize: 13, color: AppColors.purple.primary, textAlign: 'center', lineHeight: 20 },
+  emptyText: { fontSize: 16, fontWeight: '800', color: '#B8426A' },
+  emptySubText: { fontSize: 13, color: '#C8607A', textAlign: 'center', lineHeight: 20 },
   briefingCard: {
     backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 20, marginBottom: 16,
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 5,
@@ -1192,18 +1192,18 @@ const styles = StyleSheet.create({
   briefingDiaryText: { fontSize: 13, color: AppColors.text.secondary, lineHeight: 20 },
   briefingEmpty: { alignItems: 'center', padding: 24, gap: 8 },
   briefingActions: { flexDirection: 'row', gap: 12 },
-  shareBtn: { flex: 1, backgroundColor: AppColors.purple.strong, borderRadius: 16, padding: 14, alignItems: 'center', shadowColor: AppColors.purple.strong, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
+  shareBtn: { flex: 1, backgroundColor: '#B8426A', borderRadius: 16, padding: 14, alignItems: 'center', shadowColor: '#B8426A', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
   shareBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
-  exportBtn: { flex: 1, backgroundColor: AppColors.purple.soft, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: AppColors.purple.primary },
-  exportBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.purple.strong },
-  goCheckinBtn: { backgroundColor: AppColors.purple.strong, borderRadius: 14, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
+  exportBtn: { flex: 1, backgroundColor: '#FEF0F4', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#EDAABB' },
+  exportBtnText: { fontSize: 14, fontWeight: '700', color: '#B8426A' },
+  goCheckinBtn: { backgroundColor: '#B8426A', borderRadius: 14, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
   goCheckinBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
   fabWrap: { position: 'absolute', right: 24 },
   fabBtn: {
     width: 58, height: 58, borderRadius: 29,
-    backgroundColor: AppColors.purple.strong,
+    backgroundColor: '#B8426A',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: AppColors.purple.strong, shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#B8426A', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
   },
   fabIcon: { fontSize: 26 },
@@ -1227,7 +1227,7 @@ const styles = StyleSheet.create({
   typeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: AppColors.bg.secondary, borderWidth: 1.5, borderColor: AppColors.border.soft },
   typeChipEmoji: { fontSize: 16 },
   typeChipLabel: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary },
-  composeInput: { backgroundColor: AppColors.surface.whiteStrong, borderRadius: 16, padding: 16, fontSize: 16, color: AppColors.text.primary, minHeight: 120, borderWidth: 2, borderColor: AppColors.purple.primary, marginBottom: 16 },
+  composeInput: { backgroundColor: AppColors.surface.whiteStrong, borderRadius: 16, padding: 16, fontSize: 16, color: AppColors.text.primary, minHeight: 120, borderWidth: 2, borderColor: '#EDAABB', marginBottom: 16 },
   emojiDecRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   emojiDecBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: AppColors.bg.secondary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: AppColors.border.soft },
   emojiDecBtnSelected: { borderColor: AppColors.coral.primary, backgroundColor: AppColors.coral.soft },
@@ -1244,23 +1244,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
     backgroundColor: AppColors.bg.secondary, borderWidth: 1.5, borderColor: AppColors.border.soft,
   },
-  briefingDateTabActive: { backgroundColor: AppColors.purple.strong, borderColor: AppColors.purple.strong },
+  briefingDateTabActive: { backgroundColor: '#B8426A', borderColor: '#B8426A' },
   briefingDateTabText: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary },
   briefingDateTabTextActive: { color: AppColors.surface.whiteStrong },
   inviteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   inviteCard: { width: '100%', backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 28, alignItems: 'center', shadowColor: AppColors.shadow.dark, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 16 },
   inviteTitle: { fontSize: 18, fontWeight: '800', color: AppColors.text.primary, marginBottom: 10, textAlign: 'center' },
   inviteDesc: { fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  inviteCodeBox: { backgroundColor: AppColors.purple.soft, borderRadius: 16, borderWidth: 2, borderColor: AppColors.purple.primary, borderStyle: 'dashed', paddingHorizontal: 32, paddingVertical: 18, marginBottom: 16, alignItems: 'center' },
-  inviteCode: { fontSize: 32, fontWeight: '900', color: AppColors.purple.strong, letterSpacing: 8 },
+  inviteCodeBox: { backgroundColor: '#FEF0F4', borderRadius: 16, borderWidth: 2, borderColor: '#EDAABB', borderStyle: 'dashed', paddingHorizontal: 32, paddingVertical: 18, marginBottom: 16, alignItems: 'center' },
+  inviteCode: { fontSize: 32, fontWeight: '900', color: '#B8426A', letterSpacing: 8 },
   inviteHint: { fontSize: 12, color: AppColors.text.tertiary, textAlign: 'center', marginBottom: 24, lineHeight: 18 },
-  inviteCloseBtn: { backgroundColor: AppColors.purple.strong, borderRadius: 20, paddingHorizontal: 40, paddingVertical: 14, alignItems: 'center' },
+  inviteCloseBtn: { backgroundColor: '#B8426A', borderRadius: 20, paddingHorizontal: 40, paddingVertical: 14, alignItems: 'center' },
   inviteCloseBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
 });
 
 const card = StyleSheet.create({
-  container: { flexDirection: 'row', backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, marginBottom: 10, gap: 0, shadowColor: AppColors.purple.strong, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 3, overflow: 'hidden' },
-  containerNew: { borderWidth: 2, borderColor: AppColors.purple.primary, backgroundColor: AppColors.purple.soft },
+  container: { flexDirection: 'row', backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, marginBottom: 10, gap: 0, shadowColor: '#B8426A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 3, overflow: 'hidden' },
+  containerNew: { borderWidth: 2, borderColor: '#EDAABB', backgroundColor: '#FEF0F4' },
   colorStrip: { width: 5, flexShrink: 0, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
   cardInner: { flex: 1, flexDirection: 'row', padding: 14, gap: 12 },
   typeBadge: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
@@ -1269,7 +1269,7 @@ const card = StyleSheet.create({
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5, flexWrap: 'wrap' },
   authorEmoji: { fontSize: 15 },
   authorName: { fontSize: 13, fontWeight: '700' },
-  roleLabel: { fontSize: 10, color: AppColors.purple.strong, backgroundColor: AppColors.purple.soft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, fontWeight: '600' },
+  roleLabel: { fontSize: 10, color: '#B8426A', backgroundColor: '#FEF0F4', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, fontWeight: '600' },
   time: { fontSize: 10, color: AppColors.text.tertiary, marginLeft: 'auto' },
   content: { fontSize: 15, color: AppColors.text.primary, lineHeight: 22, marginBottom: 8 },
   deleteBtn: { minWidth: 30, height: 30, borderRadius: 15, paddingHorizontal: 8, backgroundColor: AppColors.coral.soft, alignItems: 'center', justifyContent: 'center', flexShrink: 0, alignSelf: 'flex-start', marginTop: 2 },
@@ -1286,12 +1286,12 @@ const card = StyleSheet.create({
     borderWidth: 1, borderColor: AppColors.border.soft,
   },
   reactionPillMine: {
-    backgroundColor: AppColors.purple.soft,
-    borderColor: AppColors.purple.primary,
+    backgroundColor: '#FEF0F4',
+    borderColor: '#EDAABB',
   },
   reactionEmoji: { fontSize: 14 },
   reactionCount: { fontSize: 12, fontWeight: '700', color: AppColors.text.secondary },
-  reactionCountMine: { color: AppColors.purple.strong },
+  reactionCountMine: { color: '#B8426A' },
   addReactionBtn: {
     paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
     backgroundColor: AppColors.bg.secondary,
@@ -1312,7 +1312,7 @@ const card = StyleSheet.create({
     backgroundColor: AppColors.bg.secondary,
     borderWidth: 1.5, borderColor: 'transparent',
   },
-  pickerBtnActive: { borderColor: AppColors.purple.primary, backgroundColor: AppColors.purple.soft },
+  pickerBtnActive: { borderColor: '#EDAABB', backgroundColor: '#FEF0F4' },
   pickerEmoji: { fontSize: 20 },
   reactorsList: {
     marginTop: 8, backgroundColor: AppColors.bg.secondary,
@@ -1322,7 +1322,7 @@ const card = StyleSheet.create({
   reactorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   reactorEmoji: { fontSize: 14 },
   reactorName: { fontSize: 13, fontWeight: '600', color: AppColors.text.primary },
-  reactorMe: { fontSize: 11, color: AppColors.purple.primary, fontWeight: '500' },
+  reactorMe: { fontSize: 11, color: '#EDAABB', fontWeight: '500' },
 });
 
 const setup = StyleSheet.create({
