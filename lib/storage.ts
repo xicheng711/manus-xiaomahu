@@ -760,6 +760,13 @@ export async function getLatestBriefing(): Promise<CareBriefing | null> {
   return all.length > 0 ? all[0] : null;
 }
 
+export async function getBriefingByDate(date: string): Promise<CareBriefing | null> {
+  const raw = await AsyncStorage.getItem(KEYS.BRIEFINGS);
+  if (!raw) return null;
+  const all: CareBriefing[] = JSON.parse(raw);
+  return all.find(b => b.date === date) ?? null;
+}
+
 let _migrated = false;
 export async function migrateToMultiFamily(): Promise<void> {
   if (_migrated) return;

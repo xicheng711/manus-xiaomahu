@@ -9,7 +9,7 @@ import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getAllCheckIns, getProfile, DailyCheckIn, SleepInput, todayStr, getCurrentUserIsCreator } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getAllCheckIns, getProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -248,12 +248,16 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<DailyCheckIn | null>(null);
+  const [selectedBriefing, setSelectedBriefing] = useState<CareBriefing | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
   const popupScale = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const [showModal, setShowModal] = useState(false);
 
-  function openDayDetail(checkIn: DailyCheckIn) {
+  async function openDayDetail(checkIn: DailyCheckIn) {
     setSelectedDay(checkIn);
+    setSelectedBriefing(null);
+    setBriefingLoading(true);
     setShowModal(true);
     overlayOpacity.setValue(0);
     popupScale.setValue(0.85);
@@ -261,6 +265,11 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
       Animated.timing(overlayOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
       Animated.spring(popupScale, { toValue: 1, friction: 8, tension: 65, useNativeDriver: true }),
     ]).start();
+    const briefing = await getBriefingByDate(checkIn.date);
+    if (mountedRef.current) {
+      setSelectedBriefing(briefing);
+      setBriefingLoading(false);
+    }
   }
 
   const mountedRef = useRef(true);
@@ -274,6 +283,7 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
       if (mountedRef.current) {
         setShowModal(false);
         setSelectedDay(null);
+        setSelectedBriefing(null);
       }
     });
   }
@@ -367,42 +377,101 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
         <View style={calStyles.legendItem}><View style={[calStyles.legendDot, calStyles.dotEvening]} /><Text style={calStyles.legendText}>晚间</Text></View>
       </View>
 
-      {/* Day detail modal with spring animation */}
+      {/* Day detail modal — shows briefing or fallback check-in data */}
       <Modal visible={showModal} transparent animationType="none" onRequestClose={closeDayDetail}>
         <Animated.View style={[calStyles.overlay, { opacity: overlayOpacity }]}>
-          <TouchableOpacity style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', padding: 24 }} activeOpacity={1} onPress={closeDayDetail}>
+          <TouchableOpacity style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', padding: 20 }} activeOpacity={1} onPress={closeDayDetail}>
             <Animated.View style={[calStyles.popup, { transform: [{ scale: popupScale }] }]}>
               <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+                {/* ── Date header ── */}
                 <View style={calStyles.popupDateRow}>
                   <Text style={calStyles.popupDateEmoji}>📅</Text>
                   <Text style={calStyles.popupDate}>{selectedDay?.date}</Text>
+                  {selectedBriefing && (
+                    <View style={[calStyles.scoreBadge, {
+                      backgroundColor: selectedBriefing.careScore >= 80 ? '#F0FDF4' : selectedBriefing.careScore >= 60 ? '#EFF6FF' : '#FFFBEB',
+                    }]}>
+                      <Text style={[calStyles.scoreBadgeText, {
+                        color: selectedBriefing.careScore >= 80 ? '#16A34A' : selectedBriefing.careScore >= 60 ? '#3B82F6' : '#F59E0B',
+                      }]}>{selectedBriefing.careScore}分</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={calStyles.popupDivider} />
-                {selectedDay?.morningDone && (
-                  <View style={calStyles.popupSection}>
-                    <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
-                    <Text style={calStyles.popupItem}>
-                      💤 睡眠：{selectedDay.sleepRange ?? `${selectedDay.sleepHours}小时`}
-                      {selectedDay.nightAwakenings ? ` · 夜醒${selectedDay.nightAwakenings}` : ` · ${selectedDay.sleepQuality === 'good' ? '良好' : selectedDay.sleepQuality === 'fair' ? '一般' : '较差'}`}
-                    </Text>
-                    {selectedDay.napDuration && selectedDay.napDuration !== '没有' && (
-                      <Text style={calStyles.popupItem}>☀️ 白天小睡：{selectedDay.napDuration}</Text>
-                    )}
-                    {selectedDay.caregiverMoodEmoji && (
-                      <Text style={calStyles.popupItem}>{selectedDay.caregiverMoodEmoji} {caregiverName}心情已记录</Text>
-                    )}
-                    {selectedDay.morningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.morningNotes}</Text> : null}
+
+                {/* ── Loading state ── */}
+                {briefingLoading && (
+                  <View style={calStyles.briefingLoadingRow}>
+                    <Text style={calStyles.briefingLoadingText}>加载简报中…</Text>
                   </View>
                 )}
-                {selectedDay?.eveningDone && (
-                  <View style={calStyles.popupSection}>
-                    <Text style={calStyles.popupSectionTitle}>🌙 晚间记录</Text>
-                    <Text style={calStyles.popupItem}>{selectedDay.moodEmoji} 心情：{selectedDay.moodScore}/10</Text>
-                    <Text style={calStyles.popupItem}>💊 用药：{selectedDay.medicationTaken ? '✅ 已按时服药' : '❌ 未服药'}</Text>
-                    {selectedDay.mealNotes ? <Text style={calStyles.popupItem}>🍽️ {selectedDay.mealNotes}</Text> : null}
-                    {selectedDay.eveningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.eveningNotes}</Text> : null}
+
+                {/* ── Briefing content (primary) ── */}
+                {!briefingLoading && selectedBriefing && (
+                  <View style={calStyles.briefingContent}>
+                    <View style={calStyles.briefingSummaryBox}>
+                      <Text style={calStyles.briefingSummaryLabel}>📋 今日简报</Text>
+                      <Text style={calStyles.briefingSummaryText}>{selectedBriefing.summary}</Text>
+                    </View>
+                    <View style={calStyles.briefingEncouragementBox}>
+                      <Text style={calStyles.briefingEncouragementText}>💜 {selectedBriefing.encouragement}</Text>
+                    </View>
+                    {/* Key stats row */}
+                    <View style={calStyles.briefingStatsRow}>
+                      {selectedDay?.eveningDone && (
+                        <>
+                          <View style={calStyles.briefingStat}>
+                            <Text style={calStyles.briefingStatEmoji}>{selectedDay.moodEmoji || '😊'}</Text>
+                            <Text style={calStyles.briefingStatLabel}>心情 {selectedDay.moodScore}/10</Text>
+                          </View>
+                          <View style={calStyles.briefingStat}>
+                            <Text style={calStyles.briefingStatEmoji}>{selectedDay.medicationTaken ? '✅' : '❌'}</Text>
+                            <Text style={calStyles.briefingStatLabel}>{selectedDay.medicationTaken ? '已服药' : '未服药'}</Text>
+                          </View>
+                        </>
+                      )}
+                      {selectedDay?.morningDone && (
+                        <View style={calStyles.briefingStat}>
+                          <Text style={calStyles.briefingStatEmoji}>💤</Text>
+                          <Text style={calStyles.briefingStatLabel}>{selectedDay.sleepRange ?? `${selectedDay.sleepHours}h`}</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 )}
+
+                {/* ── Fallback: no briefing, show raw check-in data ── */}
+                {!briefingLoading && !selectedBriefing && (
+                  <View>
+                    <Text style={calStyles.noBriefingHint}>当天未生成 AI 简报</Text>
+                    {selectedDay?.morningDone && (
+                      <View style={calStyles.popupSection}>
+                        <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
+                        <Text style={calStyles.popupItem}>
+                          💤 睡眠：{selectedDay.sleepRange ?? `${selectedDay.sleepHours}小时`}
+                          {selectedDay.nightAwakenings ? ` · 夜醒${selectedDay.nightAwakenings}` : ` · ${selectedDay.sleepQuality === 'good' ? '良好' : selectedDay.sleepQuality === 'fair' ? '一般' : '较差'}`}
+                        </Text>
+                        {selectedDay.napDuration && selectedDay.napDuration !== '没有' && (
+                          <Text style={calStyles.popupItem}>☀️ 白天小睡：{selectedDay.napDuration}</Text>
+                        )}
+                        {selectedDay.caregiverMoodEmoji && (
+                          <Text style={calStyles.popupItem}>{selectedDay.caregiverMoodEmoji} {caregiverName}心情已记录</Text>
+                        )}
+                        {selectedDay.morningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.morningNotes}</Text> : null}
+                      </View>
+                    )}
+                    {selectedDay?.eveningDone && (
+                      <View style={calStyles.popupSection}>
+                        <Text style={calStyles.popupSectionTitle}>🌙 晚间记录</Text>
+                        <Text style={calStyles.popupItem}>{selectedDay.moodEmoji} 心情：{selectedDay.moodScore}/10</Text>
+                        <Text style={calStyles.popupItem}>💊 用药：{selectedDay.medicationTaken ? '✅ 已按时服药' : '❌ 未服药'}</Text>
+                        {selectedDay.mealNotes ? <Text style={calStyles.popupItem}>🍽️ {selectedDay.mealNotes}</Text> : null}
+                        {selectedDay.eveningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.eveningNotes}</Text> : null}
+                      </View>
+                    )}
+                  </View>
+                )}
+
                 <TouchableOpacity style={calStyles.popupClose} onPress={closeDayDetail}>
                   <Text style={calStyles.popupCloseText}>关闭</Text>
                 </TouchableOpacity>
@@ -1955,10 +2024,91 @@ const calStyles = StyleSheet.create({
   popupItem: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 3 },
   popupNote: { fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic', marginTop: 4 },
   popupClose: {
-    marginTop: 8, paddingVertical: 10, borderRadius: RADIUS.xl,
+    marginTop: 12, paddingVertical: 10, borderRadius: RADIUS.xl,
     backgroundColor: COLORS.primaryBg, alignItems: 'center',
   },
   popupCloseText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+
+  scoreBadge: {
+    marginLeft: 'auto',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  scoreBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  briefingLoadingRow: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  briefingLoadingText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+  },
+
+  briefingContent: {
+    gap: 10,
+  },
+  briefingSummaryBox: {
+    backgroundColor: '#F7F3FF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(124,103,200,0.15)',
+  },
+  briefingSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: AppColors.purple.strong,
+    marginBottom: 6,
+    letterSpacing: 0.3,
+  },
+  briefingSummaryText: {
+    fontSize: 13,
+    color: COLORS.text,
+    lineHeight: 20,
+  },
+  briefingEncouragementBox: {
+    backgroundColor: '#FDF9F0',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(233,197,143,0.3)',
+  },
+  briefingEncouragementText: {
+    fontSize: 12,
+    color: '#7A6040',
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  briefingStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  briefingStat: {
+    flex: 1,
+    backgroundColor: '#F9F6FF',
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(206,196,242,0.3)',
+  },
+  briefingStatEmoji: { fontSize: 18 },
+  briefingStatLabel: { fontSize: 11, color: COLORS.textSecondary, fontWeight: '600' },
+
+  noBriefingHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    paddingVertical: 8,
+    fontStyle: 'italic',
+    marginBottom: 4,
+  },
 });
 
 export default function CheckinScreen() {
