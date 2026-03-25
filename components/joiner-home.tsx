@@ -554,24 +554,25 @@ export function JoinerHomeScreen() {
 
       <Modal visible={showSwitcher} transparent animationType="fade" onRequestClose={() => setShowSwitcher(false)}>
         <TouchableOpacity style={styles.switcherOverlay} activeOpacity={1} onPress={() => setShowSwitcher(false)}>
-          <View style={styles.switcherSheet}>
-            <Text style={styles.switcherTitle}>切换家庭</Text>
-            {memberships.map(m => (
-              <TouchableOpacity
-                key={m.familyId}
-                style={[styles.switcherRow, activeMembership?.familyId === m.familyId && styles.switcherRowActive]}
-                onPress={async () => {
-                  await switchFamily(m.familyId);
-                  setShowSwitcher(false);
-                }}
-              >
-                <Text style={{ fontSize: 22, marginRight: 12 }}>{m.room.members[0]?.emoji || '🏠'}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.switcherName}>{m.room.elderName}</Text>
-                  <Text style={styles.switcherRole}>{m.role === 'creator' ? '📋 主要照顾者' : '👁️ 家庭成员'}</Text>
-                </View>
-                {activeMembership?.familyId === m.familyId && <Text style={{ fontSize: 16 }}>✓</Text>}
-              </TouchableOpacity>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={styles.switcherSheet}>
+              <Text style={styles.switcherTitle}>切换家庭</Text>
+              {memberships.map(m => (
+                <TouchableOpacity
+                  key={m.familyId}
+                  style={[styles.switcherRow, activeMembership?.familyId === m.familyId && styles.switcherRowActive]}
+                  onPress={async () => {
+                    await switchFamily(m.familyId);
+                    setShowSwitcher(false);
+                  }}
+                >
+                  <Text style={{ fontSize: 22, marginRight: 12 }}>{m.room.members[0]?.emoji || '🏠'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.switcherName}>{m.room.elderName}</Text>
+                    <Text style={styles.switcherRole}>{m.role === 'creator' ? '📋 主要照顾者' : '👁️ 家庭成员'}</Text>
+                  </View>
+                  {activeMembership?.familyId === m.familyId && <Text style={{ fontSize: 16 }}>✓</Text>}
+                </TouchableOpacity>
             ))}
             <TouchableOpacity
               style={styles.switcherAddBtn}
@@ -579,7 +580,8 @@ export function JoinerHomeScreen() {
             >
               <Text style={styles.switcherAddText}>＋ 创建新家庭</Text>
             </TouchableOpacity>
-          </View>
+            </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </View>

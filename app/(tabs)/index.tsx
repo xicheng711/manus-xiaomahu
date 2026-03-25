@@ -758,6 +758,7 @@ function CreatorHomeScreen() {
       {/* Family Switcher Modal */}
       <Modal visible={showSwitcher} transparent animationType="fade" onRequestClose={() => setShowSwitcher(false)}>
         <TouchableOpacity style={switStyles.overlay} activeOpacity={1} onPress={() => setShowSwitcher(false)}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
           <View style={switStyles.sheet}>
             <Text style={switStyles.title}>切换家庭</Text>
             {memberships.map(m => {
@@ -810,6 +811,7 @@ function CreatorHomeScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
