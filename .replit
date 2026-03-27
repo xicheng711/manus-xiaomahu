@@ -37,12 +37,12 @@ outputType = "webview"
 name = "Expo Go (手机预览)"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "concurrently -k \"pnpm dev:proxy\" \"pnpm dev:server\" \"bash scripts/expo-go.sh\""
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/expo-go.sh"
 
 [[ports]]
 localPort = 3000
