@@ -451,12 +451,24 @@ export default function OnboardingScreen() {
             <Text style={styles.welcomeCta}>让我们先认识一下吧 😊</Text>
             <View style={styles.featureGrid}>
               {[
-                { icon: '🌅', label: '每日护理', desc: '贴心建议', color: '#FEF3C7', border: '#FDE68A' },
-                { icon: '💊', label: '用药管理', desc: '按时提醒', color: '#DBEAFE', border: '#93C5FD' },
-                { icon: '📔', label: '护理日记', desc: '智能陪伴', color: '#FCE7F3', border: '#F9A8D4' },
-                { icon: '🤝', label: '家庭共享', desc: '全家守护', color: '#D1FAE5', border: '#6EE7B7' },
+                { icon: '🌅', label: '每日护理', desc: '贴心建议', gradient: ['rgba(255,237,213,0.7)', 'rgba(255,228,196,0.4)'] as const },
+                { icon: '💊', label: '用药管理', desc: '按时提醒', gradient: ['rgba(219,234,254,0.7)', 'rgba(191,219,254,0.4)'] as const },
+                { icon: '📔', label: '护理日记', desc: '智能陪伴', gradient: ['rgba(243,232,255,0.7)', 'rgba(233,213,255,0.4)'] as const },
+                { icon: '🤝', label: '家庭共享', desc: '全家守护', gradient: ['rgba(209,250,229,0.7)', 'rgba(187,247,208,0.4)'] as const },
               ].map(f => (
-                <View key={f.icon} style={[styles.featureCard, { backgroundColor: f.color, borderColor: f.border }]}>
+                <View key={f.icon} style={styles.featureCard}>
+                  <LinearGradient
+                    colors={[...f.gradient]}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
+                      start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }}
+                      style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
+                    />
+                  </View>
                   <Text style={styles.featureCardIcon}>{f.icon}</Text>
                   <Text style={styles.featureCardLabel}>{f.label}</Text>
                   <Text style={styles.featureCardDesc}>{f.desc}</Text>
@@ -1209,11 +1221,17 @@ const styles = StyleSheet.create({
   welcomeTitle: { fontSize: 28, fontWeight: '900', color: AppColors.text.primary, textAlign: 'center', marginBottom: 8, letterSpacing: -0.5 },
   welcomeSub: { fontSize: 15, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: 6 },
   welcomeCta: { fontSize: 15, color: AppColors.purple.strong, fontWeight: '600', textAlign: 'center', marginBottom: 28 },
-  featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, width: '100%' },
-  featureCard: { width: '47%', alignItems: 'center', justifyContent: 'center', borderRadius: 20, paddingVertical: 18, paddingHorizontal: 10, gap: 6, borderWidth: 1.5 },
-  featureCardIcon: { fontSize: 32 },
-  featureCardLabel: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center' },
-  featureCardDesc: { fontSize: 12, color: AppColors.text.secondary, textAlign: 'center', fontWeight: '500' },
+  featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, width: '100%' },
+  featureCard: {
+    width: '47%', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 20, paddingVertical: 20, paddingHorizontal: 12, gap: 5,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)',
+    overflow: 'hidden',
+    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 3,
+  },
+  featureCardIcon: { fontSize: 30, marginBottom: 2 },
+  featureCardLabel: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', letterSpacing: -0.2 },
+  featureCardDesc: { fontSize: 11, color: AppColors.text.tertiary, textAlign: 'center', fontWeight: '500' },
   inputGroup: { width: '100%', marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '600', color: '#687076', marginBottom: 8 },
   zodiacHint: { fontSize: 16, fontWeight: '700', color: AppColors.coral.primary, marginBottom: 8, textAlign: 'center' },
