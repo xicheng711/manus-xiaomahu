@@ -747,7 +747,7 @@ function CreatorHomeScreen() {
                 <View style={styles.summaryCardDivider} />
                 <View style={styles.summaryCardItem}>
                   <Text style={styles.summaryCardEmoji}>⭐</Text>
-                  <Text style={styles.summaryCardLabel}>照护评分</Text>
+                  <Text style={styles.summaryCardLabel}>护理指数</Text>
                   {(yCheckIn?.eveningDone ?? false) && latestCheckIn.careScore != null ? (
                     <Text style={[styles.summaryCardValue, { color: '#F59E0B' }]}>{latestCheckIn.careScore}分</Text>
                   ) : (
