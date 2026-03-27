@@ -14,6 +14,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   todayStr, getProfile, generateId, DiaryEntry, ConversationMessage,
+  getTodayCheckIn, DailyCheckIn,
 } from '@/lib/storage';
 import { VoiceInput } from '@/components/voice-input';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -223,6 +224,7 @@ export default function DiaryEditScreen() {
   const [caregiverName, setCaregiverName] = useState('照顾者');
   const [loadingEntry, setLoadingEntry] = useState(!!existingId);
   const [diaryCount, setDiaryCount] = useState(0);
+  const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
 
   const entryRef = useRef<DiaryEntry | null>(null);
   const formFade = useRef(new Animated.Value(0)).current;
@@ -242,12 +244,13 @@ export default function DiaryEditScreen() {
   }, []);
 
   async function loadProfile() {
-    const [profile, entries] = await Promise.all([getProfile(), getDiaryEntries()]);
+    const [profile, entries, checkIn] = await Promise.all([getProfile(), getDiaryEntries(), getTodayCheckIn()]);
     if (profile) {
       setElderNickname(profile.nickname || profile.name || '家人');
       setCaregiverName(profile.caregiverName || '照顾者');
     }
     setDiaryCount(entries.length);
+    if (checkIn) setTodayCheckIn(checkIn);
   }
 
   async function loadExistingEntry(id: string) {
@@ -323,7 +326,25 @@ export default function DiaryEditScreen() {
     let aiText = `${caregiverName}，辛苦了！您的每一份记录都是对${elderNickname}最好的关爱。照顾好自己，才能更好地照顾家人 💕`;
     let aiTip = '';
     try {
-      const result = await replyMutation.mutateAsync({ elderNickname, caregiverName, moodEmoji: mood.emoji, moodLabel: mood.label, tags: selectedTags, content: content.trim() });
+      const result = await replyMutation.mutateAsync({
+        elderNickname, caregiverName,
+        moodEmoji: mood.emoji, moodLabel: mood.label,
+        tags: selectedTags, content: content.trim(),
+        checkIn: todayCheckIn ? {
+          morningDone: todayCheckIn.morningDone,
+          eveningDone: todayCheckIn.eveningDone,
+          sleepHours: todayCheckIn.sleepHours,
+          sleepRange: todayCheckIn.sleepRange,
+          sleepQuality: todayCheckIn.sleepQuality,
+          nightAwakenings: todayCheckIn.nightAwakenings,
+          napDuration: todayCheckIn.napDuration,
+          moodScore: todayCheckIn.moodScore,
+          medicationTaken: todayCheckIn.medicationTaken,
+          mealNotes: todayCheckIn.mealNotes,
+          morningNotes: todayCheckIn.morningNotes,
+          eveningNotes: todayCheckIn.eveningNotes,
+        } : undefined,
+      });
       aiText = result.reply ?? aiText;
       aiTip = result.tip ?? '';
     } catch { }
@@ -348,8 +369,19 @@ export default function DiaryEditScreen() {
     await persistConversation(conv1);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
     const historyForApi = conversation.slice(2).map(m => ({ role: m.role as 'user' | 'ai', text: m.text }));
+    // Build a compact check-in summary string for context
+    const checkInSummaryParts: string[] = [];
+    if (todayCheckIn?.morningDone) {
+      const sleep = todayCheckIn.sleepRange ?? (todayCheckIn.sleepHours ? `${todayCheckIn.sleepHours}小时` : null);
+      if (sleep) checkInSummaryParts.push(`睡眠${sleep}`);
+      if (todayCheckIn.medicationTaken !== undefined) checkInSummaryParts.push(todayCheckIn.medicationTaken ? '已服药' : '未服药');
+    }
+    if (todayCheckIn?.eveningDone && todayCheckIn.moodScore !== undefined) {
+      checkInSummaryParts.push(`心情${todayCheckIn.moodScore}/10`);
+    }
+    const checkInSummary = checkInSummaryParts.length > 0 ? checkInSummaryParts.join('，') : undefined;
     try {
-      const result = await followUpMutation.mutateAsync({ elderNickname, caregiverName, originalContent: entryRef.current.content ?? '', originalMood: entryRef.current.moodEmoji ?? '', originalAiReply: entryRef.current.aiReply ?? '', history: historyForApi, question: q });
+      const result = await followUpMutation.mutateAsync({ elderNickname, caregiverName, originalContent: entryRef.current.content ?? '', originalMood: entryRef.current.moodEmoji ?? '', originalAiReply: entryRef.current.aiReply ?? '', checkInSummary, history: historyForApi, question: q });
       const aiMsg: ConversationMessage = { id: generateId(), role: 'ai', text: result.reply, createdAt: new Date().toISOString() };
       const conv2 = [...conv1, aiMsg];
       setConversation(conv2);

@@ -382,32 +382,66 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
       moodLabel: z.string(),
       tags: z.array(z.string()),
       content: z.string(),
+      checkIn: z.object({
+        morningDone: z.boolean().optional(),
+        eveningDone: z.boolean().optional(),
+        sleepHours: z.number().optional(),
+        sleepRange: z.string().optional(),
+        sleepQuality: z.string().optional(),
+        nightAwakenings: z.string().optional(),
+        napDuration: z.string().optional(),
+        moodScore: z.number().optional(),
+        medicationTaken: z.boolean().optional(),
+        mealNotes: z.string().optional(),
+        morningNotes: z.string().optional(),
+        eveningNotes: z.string().optional(),
+      }).optional(),
     }))
     .mutation(async ({ input }) => {
-      const { elderNickname, caregiverName, moodEmoji, moodLabel, tags, content } = input;
+      const { elderNickname, caregiverName, moodEmoji, moodLabel, tags, content, checkIn } = input;
       const nickname = elderNickname || "家人";
 
-      const prompt = `你是${caregiverName}的好朋友，也有多年照顾失智老人的实际经验。你刚看完他们写的护理日记，要回复一段话。
+      // Build check-in summary only from available fields
+      const checkInLines: string[] = [];
+      if (checkIn?.morningDone) {
+        const sleep = checkIn.sleepRange ?? (checkIn.sleepHours ? `${checkIn.sleepHours}小时` : null);
+        const quality = checkIn.sleepQuality === 'good' ? '睡眠质量良好' : checkIn.sleepQuality === 'fair' ? '睡眠质量一般' : checkIn.sleepQuality === 'poor' ? '睡眠质量较差' : null;
+        if (sleep) checkInLines.push(`夜间睡眠：${sleep}${checkIn.nightAwakenings ? `，夜醒${checkIn.nightAwakenings}` : ''}${quality ? `，${quality}` : ''}`);
+        if (checkIn.napDuration && checkIn.napDuration !== '没有') checkInLines.push(`白天小睡：${checkIn.napDuration}`);
+        if (checkIn.morningNotes) checkInLines.push(`早间备注：${checkIn.morningNotes}`);
+      }
+      if (checkIn?.eveningDone) {
+        if (checkIn.moodScore !== undefined) checkInLines.push(`${nickname}今日心情评分：${checkIn.moodScore}/10`);
+        if (checkIn.medicationTaken !== undefined) checkInLines.push(`用药情况：${checkIn.medicationTaken ? '已按时服药' : '今日未服药'}`);
+        if (checkIn.mealNotes) checkInLines.push(`饮食：${checkIn.mealNotes}`);
+        if (checkIn.eveningNotes) checkInLines.push(`晚间备注：${checkIn.eveningNotes}`);
+      }
+      const checkInSummary = checkInLines.length > 0 ? checkInLines.join('\n') : '（今日暂无打卡数据）';
 
-日记信息：
-- ${nickname}今日心情：${moodEmoji} ${moodLabel}
-- 今日标签：${tags.length > 0 ? tags.join('、') : '无'}
-- 详细内容：${content || '（没有写详细内容）'}
+      const prompt = `你是一名有多年失智症照护经验的专业护理员，也很关心照顾者的状态。${caregiverName}刚写完了今天的护理日记，请基于以下真实数据回复一段话。
+
+【今日打卡数据】
+${checkInSummary}
+
+【今日日记】
+- ${nickname}心情：${moodEmoji} ${moodLabel}
+- 标签：${tags.length > 0 ? tags.join('、') : '无'}
+- 记录内容：${content || '（未填写详细内容）'}
 
 回复要求：
-- 只针对日记里实际写到的内容回应，不要脑补或想象没提到的场景
-- 语气像发微信给朋友，自然、直接、真实，不要排比句，不要文学化
-- 如果日记里有具体情况（比如老人做了什么、出现了什么问题），就具体回应那件事
-- 如果有实用的建议，直接说，不要绕弯子
-- 不要用"你一定"、"你心里"之类猜测对方感受的话
-- 字数控制在120字以内
-- 结尾如果有护理小贴士，另起一段，用💡开头，25字以内
+- 语气温和自然，像一个靠谱的护理同事，不要过于正式，也不要太热情夸张
+- 严格基于上面提供的数据和日记内容来回应，不要臆想或补充没有写到的情节
+- 可以对今天记录的具体情况作出回应（比如睡眠、用药、老人心情）
+- 如果有需要关注的地方，给1条简单直接的建议
+- 不要用"你一定"、"你心里"这类揣测性表达
+- 字数控制在130字以内
+- 如有护理小贴士，结尾另起一段，💡开头，20字以内
 
 返回JSON格式（不要包含任何代码块标记）：
 {
-  "reply": "<回复正文，结尾可带💡小贴士>",
-  "emoji": "<1个emoji>",
-  "tip": "<同样的小贴士文字，25字以内>"
+  "reply": "<回复正文>",
+  "emoji": "<1个合适的emoji>",
+  "tip": "<护理小贴士，20字以内，无则留空字符串>"
 }`;
 
       try {
@@ -432,6 +466,7 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
       originalContent: z.string(),
       originalMood: z.string(),
       originalAiReply: z.string(),
+      checkInSummary: z.string().optional(),
       history: z.array(z.object({
         role: z.enum(['user', 'ai']),
         text: z.string(),
@@ -439,24 +474,25 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
       question: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const { elderNickname, caregiverName, originalContent, originalMood, originalAiReply, history, question } = input;
+      const { elderNickname, caregiverName, originalContent, originalMood, originalAiReply, checkInSummary, history, question } = input;
       const nickname = elderNickname || '家人';
       const historyText = history.length > 0
-        ? history.map(m => m.role === 'user' ? `照顾者问：${m.text}` : `AI回复：${m.text}`).join('\n')
+        ? history.map(m => m.role === 'user' ? `${caregiverName}：${m.text}` : `护理员：${m.text}`).join('\n')
         : '';
-      const prompt = `你是${caregiverName}有经验的朋友，了解失智照护，正在通过消息聊天。
+      const prompt = `你是一名有多年失智症照护经验的专业护理员，正在和照顾者${caregiverName}进行对话。
 
-背景：
-- 日记内容：${originalContent || '未写详细内容'}
-- 心情：${originalMood}
+背景信息：
+- 今日日记：${originalContent || '未填写详细内容'}（${nickname}心情：${originalMood}）
+${checkInSummary ? `- 今日打卡数据：${checkInSummary}` : ''}
 ${historyText ? `\n对话记录：\n${historyText}\n` : ''}
-${caregiverName}现在问你：${question}
+${caregiverName}问：${question}
 
-要求：
-- 直接回答问题，不要绕
-- 语气像朋友发消息，口语自然，不要正式文体
-- 如果不知道或不确定，就说"不太确定，建议问下医生"
-- 100字以内
+回复要求：
+- 基于上下文直接回答问题，保持对话连贯性
+- 语气温和、平实，像一个靠谱的专业护理同事
+- 如果涉及医疗判断，说"建议咨询主治医生"
+- 严禁补充或臆想日记和打卡数据中没有的情节
+- 120字以内
 
 返回JSON（不要任何代码块标记）：
 {
