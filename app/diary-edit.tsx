@@ -6,8 +6,9 @@ import { useRef, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Platform, Animated, ActivityIndicator,
-  Easing, KeyboardAvoidingView,
+  Easing, KeyboardAvoidingView, Dimensions,
 } from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
@@ -23,6 +24,8 @@ import * as Haptics from 'expo-haptics';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const SW = Dimensions.get('window').width;
 
 const MOOD_OPTIONS = [
   { emoji: '😄', label: '很开心', color: '#22C55E' },
@@ -316,7 +319,7 @@ export default function DiaryEditScreen() {
     setSubmitting(false);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    const userText = mood.emoji + (content.trim() ? ' ' + content.trim().slice(0, 80) + (content.length > 80 ? '…' : '') : ' 已记录今日护理情况 📖');
+    const userText = mood.emoji + (content.trim() ? ' ' + content.trim() : ' 已记录今日护理情况 📖');
     const userMsg: ConversationMessage = { id: generateId(), role: 'user', text: userText, createdAt: new Date().toISOString() };
     const conv1 = [userMsg];
     setConversation(conv1);
@@ -852,10 +855,10 @@ const styles = StyleSheet.create({
   userBubbleDecor: { position: 'absolute', top: -10, left: -14, fontSize: 18, zIndex: 2 },
   bubbleGreen: {
     borderRadius: 24, borderTopRightRadius: 6,
-    paddingHorizontal: 18, paddingVertical: 12, maxWidth: '100%',
+    paddingHorizontal: 18, paddingVertical: 12, maxWidth: SW * 0.72,
     shadowColor: '#34D399', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 3,
   },
-  bubbleGreenText: { fontSize: 15, color: AppColors.surface.whiteStrong, lineHeight: 22, fontWeight: '500' },
+  bubbleGreenText: { fontSize: 15, color: AppColors.surface.whiteStrong, lineHeight: 22, fontWeight: '500', flexWrap: 'wrap' },
 
   // AI bubble
   aiBubbleWrap: { position: 'relative', marginBottom: 4 },
