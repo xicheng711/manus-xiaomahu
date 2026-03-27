@@ -1,54 +1,57 @@
 export const AppColors = {
   bg: {
-    primary: '#F7F1F3',
-    secondary: '#F6EEEF',
-    soft: '#F8F2EE',
-    warmCream: '#FFF9F5',
+    primary: '#F5F0F2',
+    secondary: '#F0EAEC',
+    soft: '#F5EFEB',
+    warmCream: '#FBF7F4',
   },
 
   green: {
-    primary: '#8EB89A',
-    strong: '#6F9D7B',
-    soft: '#E8F3EA',
-    muted: '#6C9E6C',
+    primary: '#8DB496',
+    strong: '#6B9876',
+    soft: '#EAF2EC',
+    muted: '#7A9F7A',
   },
 
   purple: {
-    primary: '#CEC4F2',
-    strong: '#7C67C8',
-    soft: '#F2EDFB',
+    primary: '#C4BBE6',
+    strong: '#7768B5',
+    soft: '#F0ECF8',
   },
 
   coral: {
-    primary: '#F28C7C',
-    soft: '#FDEAE6',
+    primary: '#E8897B',
+    soft: '#FAE8E4',
   },
 
   peach: {
-    primary: '#E9C58F',
-    soft: '#FAF1E2',
+    primary: '#D9B882',
+    soft: '#F6EDE0',
   },
 
   text: {
-    primary: '#2F2A2E',
-    secondary: '#7B7580',
-    tertiary: '#A49DA8',
+    primary: '#2A2528',
+    secondary: '#6E6873',
+    tertiary: '#9C96A0',
   },
 
   border: {
-    soft: '#E8DDE5',
-    light: '#F5F5F5',
+    soft: '#E4DAE1',
+    light: '#F0F0F0',
+    glass: 'rgba(255,255,255,0.55)',
   },
 
   surface: {
-    white: 'rgba(253,249,247,0.86)',
-    whiteStrong: '#FDF9F7',
-    card: 'rgba(253,249,247,0.84)',
+    white: 'rgba(255,252,250,0.82)',
+    whiteStrong: '#FDFAF8',
+    card: 'rgba(255,252,250,0.72)',
+    glass: 'rgba(255,255,255,0.45)',
   },
 
   shadow: {
-    default: 'rgba(88, 64, 78, 0.08)',
+    default: 'rgba(80, 58, 72, 0.10)',
     dark: '#000000',
+    soft: 'rgba(80, 58, 72, 0.05)',
   },
 
   status: {

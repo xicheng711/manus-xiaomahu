@@ -171,7 +171,7 @@ function EnhancedCheckinBanner({
         <TouchableOpacity onPress={handlePress} activeOpacity={0.88}>
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <LinearGradient
-              colors={['#FFBBA5', '#F4907E', '#EB79A5']}
+              colors={['#F0B5A0', '#E8988A', '#D98BA0']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.checkinBanner}
             >
@@ -272,6 +272,18 @@ function EnhancedAICard({
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.88}>
       <Animated.View style={[styles.aiCard, { transform: [{ scale: scaleAnim }] }]}>
+        <LinearGradient
+          colors={['rgba(240,236,248,0.75)', 'rgba(232,226,244,0.45)']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <LinearGradient
+            colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}
+          />
+        </View>
         <View style={styles.aiRow}>
           <Animated.View style={{ transform: [{ scale: iconScale }] }}>
             <LinearGradient
@@ -362,12 +374,11 @@ function QuickActionCard({
       <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
           <TouchableOpacity style={[styles.quickCard, { backgroundColor: bgColor }]} onPress={handlePress} activeOpacity={0.85}>
-            {/* 软白光晕覆盖层 */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               <LinearGradient
-                colors={['rgba(255,255,255,0.48)', 'rgba(255,255,255,0)']}
-                start={{ x: 0.05, y: 0 }} end={{ x: 1, y: 1 }}
-                style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}
+                colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
               />
             </View>
             <LinearGradient colors={[gradientStart, gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.quickIconBox}>
@@ -615,17 +626,17 @@ function CreatorHomeScreen() {
                 onPress={() => setShowSwitcher(true)}
                 activeOpacity={0.75}
                 style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6,
-                  backgroundColor: AppColors.green.soft,
-                  borderWidth: 1.5, borderColor: AppColors.green.primary,
-                  borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+                  flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6,
+                  backgroundColor: AppColors.surface.glass,
+                  borderWidth: 1, borderColor: AppColors.border.glass,
+                  borderRadius: 14, paddingHorizontal: 9, paddingVertical: 4,
                   alignSelf: 'flex-start',
                 }}
               >
-                <Text style={{ fontSize: 13, color: AppColors.green.strong, fontWeight: '700' }}>
+                <Text style={{ fontSize: 12, color: AppColors.green.strong, fontWeight: '600' }}>
                   🏠 {activeMembership?.room.elderName || elderNickname}的家庭
                 </Text>
-                <Text style={{ fontSize: 12, color: AppColors.green.strong, fontWeight: '800' }}>⌄</Text>
+                <Text style={{ fontSize: 11, color: AppColors.text.tertiary, fontWeight: '600' }}>⌄</Text>
               </TouchableOpacity>
             )}
             <Text style={styles.greeting}>{greeting}</Text>
@@ -847,115 +858,125 @@ const switStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { paddingHorizontal: 20, paddingBottom: 24 },
+  content: { paddingHorizontal: 22, paddingBottom: 28 },
 
   bgDecorLayer: { position: 'absolute', top: 0, left: 0, right: 0, height: 220, overflow: 'hidden' },
 
   // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 24, paddingBottom: 20 },
-  // 日期天气行
-  dateWeatherRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingRight: 14 },
-  dateBlock: { flexDirection: 'column', gap: 4 },
-  dateText: { fontSize: 14, fontWeight: '600', color: AppColors.text.secondary, letterSpacing: 0.3 },
-  lunarText: { fontSize: 12, color: AppColors.peach.primary, fontWeight: '500' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 20, paddingBottom: 18 },
+  dateWeatherRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingRight: 14 },
+  dateBlock: { flexDirection: 'column', gap: 3 },
+  dateText: { fontSize: 13, fontWeight: '600', color: AppColors.text.tertiary, letterSpacing: 0.2 },
+  lunarText: { fontSize: 11, color: AppColors.peach.primary, fontWeight: '500' },
   weatherChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(253,249,247,0.93)',
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)',
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 3,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: AppColors.surface.glass,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1, borderColor: AppColors.border.glass,
   },
-  weatherIcon: { fontSize: 20 },
-  weatherTemp: { fontSize: 14, fontWeight: '800', color: AppColors.text.primary, lineHeight: 17 },
-  weatherDesc: { fontSize: 11, color: AppColors.text.tertiary, lineHeight: 14 },
-  // 标题行
-  appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  appName: { fontSize: 22, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.4 },
-  greeting: { fontSize: 14, color: AppColors.text.tertiary, fontWeight: '500', lineHeight: 21 },
-  profileBtn: { width: 56, height: 56, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', ...SHADOWS.md },
-  profileGradient: { width: 56, height: 56, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  profilePhoto: { width: 56, height: 56, borderRadius: 20 },
+  weatherIcon: { fontSize: 17 },
+  weatherTemp: { fontSize: 13, fontWeight: '700', color: AppColors.text.primary, lineHeight: 16 },
+  weatherDesc: { fontSize: 10, color: AppColors.text.tertiary, lineHeight: 13 },
+  appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  appName: { fontSize: 24, fontWeight: '900', color: AppColors.text.primary, letterSpacing: -0.5 },
+  greeting: { fontSize: 13, color: AppColors.text.tertiary, fontWeight: '500', lineHeight: 20 },
+  profileBtn: { width: 50, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 },
+  profileGradient: { width: 50, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  profilePhoto: { width: 50, height: 50, borderRadius: 18 },
 
   // 打卡横幅
-  checkinBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 28, padding: 20, overflow: 'hidden', ...SHADOWS.md },
-  bannerDecor1: { position: 'absolute', top: -24, right: -24, width: 110, height: 110, borderRadius: 55, backgroundColor: 'rgba(255,255,255,0.14)' },
-  bannerDecor2: { position: 'absolute', bottom: -18, left: 55, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.09)' },
-  bannerSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '55%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: 'rgba(255,255,255,0.08)' },
-  bannerHeart: { position: 'absolute', bottom: 14, right: 58, fontSize: 15, color: 'rgba(255,255,255,0.38)' },
+  checkinBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 24, padding: 18, overflow: 'hidden', shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 14, elevation: 4 },
+  bannerDecor1: { position: 'absolute', top: -24, right: -24, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.12)' },
+  bannerDecor2: { position: 'absolute', bottom: -18, left: 55, width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.07)' },
+  bannerSheen: { position: 'absolute', top: 0, left: 0, right: 0, height: '55%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: 'rgba(255,255,255,0.10)' },
+  bannerHeart: { position: 'absolute', bottom: 12, right: 50, fontSize: 14, color: 'rgba(255,255,255,0.30)' },
   starDecor: { position: 'absolute' },
-  checkinLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
-  checkinIconBox: { width: 54, height: 54, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.28)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' },
-  checkinIconBoxDone: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: AppColors.green.soft },
-  checkinTitle: { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.4 },
-  checkinTitleDone: { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  checkinSub: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 3, lineHeight: 18 },
-  checkinSubDone: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
-  checkinDone: { flexDirection: 'row', alignItems: 'center', backgroundColor: AppColors.green.soft, borderWidth: 1.5, borderColor: AppColors.green.primary + '80', borderRadius: 28, padding: 18, marginBottom: 16, ...SHADOWS.sm },
-  chevronCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.30)', alignItems: 'center', justifyContent: 'center' },
-  chevronCircleDone: { width: 32, height: 32, borderRadius: 16, backgroundColor: AppColors.green.primary + '30', alignItems: 'center', justifyContent: 'center' },
-  careScoreBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, backgroundColor: AppColors.green.primary + '25', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start' },
+  checkinLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  checkinIconBox: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.40)' },
+  checkinIconBoxDone: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: AppColors.green.soft },
+  checkinTitle: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  checkinTitleDone: { fontSize: 15, fontWeight: '700', color: AppColors.text.primary },
+  checkinSub: { fontSize: 12, color: 'rgba(255,255,255,0.82)', marginTop: 3, lineHeight: 17 },
+  checkinSubDone: { fontSize: 12, color: AppColors.text.secondary, marginTop: 2 },
+  checkinDone: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: AppColors.surface.card,
+    borderWidth: 1, borderColor: AppColors.border.glass,
+    borderRadius: 24, padding: 16, marginBottom: 16,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2,
+  },
+  chevronCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' },
+  chevronCircleDone: { width: 30, height: 30, borderRadius: 15, backgroundColor: AppColors.green.primary + '25', alignItems: 'center', justifyContent: 'center' },
+  careScoreBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, backgroundColor: AppColors.green.primary + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start' },
 
   // AI 卡片
-  aiCard: { marginBottom: 16, backgroundColor: AppColors.purple.soft, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: AppColors.purple.primary + '60', overflow: 'hidden', ...SHADOWS.sm },
+  aiCard: {
+    marginBottom: 18, backgroundColor: 'transparent', borderRadius: 22,
+    padding: 16, borderWidth: 1, borderColor: AppColors.border.glass,
+    overflow: 'hidden',
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2,
+  },
   aiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  aiIconBox: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  aiLabel: { fontSize: 14, fontWeight: '700', color: AppColors.purple.strong, letterSpacing: -0.2 },
-  aiSubLabel: { fontSize: 11, color: AppColors.purple.strong, opacity: 0.65 },
+  aiIconBox: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  aiLabel: { fontSize: 14, fontWeight: '800', color: AppColors.purple.strong, letterSpacing: -0.2 },
+  aiSubLabel: { fontSize: 10, color: AppColors.text.tertiary },
   aiMessage: { fontSize: 13, color: AppColors.text.secondary, lineHeight: 19, marginTop: 4 },
   aiDetailLink: {
     marginTop: 10, alignSelf: 'flex-start',
-    backgroundColor: AppColors.purple.primary,
-    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6,
+    backgroundColor: AppColors.purple.strong,
+    borderRadius: 16, paddingHorizontal: 14, paddingVertical: 6,
     flexDirection: 'row', alignItems: 'center',
   },
-  aiDetailLinkText: { fontSize: 12, fontWeight: '800', color: AppColors.surface.whiteStrong, letterSpacing: 0.2 },
-
-  // 护理贴士
+  aiDetailLinkText: { fontSize: 11, fontWeight: '700', color: '#fff', letterSpacing: 0.1 },
 
   // 快捷入口标题
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  sectionDot: { width: 4, height: 18, borderRadius: 2, backgroundColor: AppColors.green.primary },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.3 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, marginTop: 4 },
+  sectionDot: { width: 3, height: 16, borderRadius: 2, backgroundColor: AppColors.green.primary },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.2 },
 
   // 快捷入口网格
-  quickGrid: { marginTop: 2 },
-  quickRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  quickGrid: { marginTop: 0 },
+  quickRow: { flexDirection: 'row', gap: 14, marginBottom: 14 },
   quickItem: { flex: 1 },
   quickCard: {
-    borderRadius: 20, padding: 14, paddingBottom: 12, height: 108,
+    borderRadius: 24, padding: 16, paddingBottom: 14, height: 112,
     flexDirection: 'column', alignItems: 'flex-start', overflow: 'hidden',
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)',
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    borderWidth: 1, borderColor: AppColors.border.glass,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
   },
-  quickIconBox: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  quickEmoji: { fontSize: 22, lineHeight: 26 },
+  quickIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  quickEmoji: { fontSize: 20, lineHeight: 24 },
   quickLabel: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary, letterSpacing: -0.2, lineHeight: 19 },
 
   // 数据摘要卡片
-  summaryCard: { backgroundColor: '#FEFAF7', borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: AppColors.border.soft, ...SHADOWS.sm },
+  summaryCard: {
+    backgroundColor: AppColors.surface.card, borderRadius: 24, padding: 18, marginBottom: 16,
+    borderWidth: 1, borderColor: AppColors.border.glass,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2,
+  },
   summaryCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  summaryCardTitle: { fontSize: 15, fontWeight: '800', color: COLORS.text },
+  summaryCardTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary },
   summaryCardEdit: { fontSize: 13, color: AppColors.purple.strong, fontWeight: '600' },
   summaryCardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   summaryCardItem: { flex: 1, alignItems: 'center', gap: 4 },
-  summaryCardEmoji: { fontSize: 24 },
-  summaryCardLabel: { fontSize: 11, color: COLORS.textMuted, fontWeight: '500' },
-  summaryCardValue: { fontSize: 13, fontWeight: '700', color: COLORS.text },
-  summaryCardDivider: { width: 1, height: 40, backgroundColor: AppColors.border.soft },
+  summaryCardEmoji: { fontSize: 22 },
+  summaryCardLabel: { fontSize: 10, color: AppColors.text.tertiary, fontWeight: '500' },
+  summaryCardValue: { fontSize: 13, fontWeight: '700', color: AppColors.text.primary },
+  summaryCardDivider: { width: 1, height: 36, backgroundColor: AppColors.border.soft },
 
   warmFooter: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: 'rgba(255,253,250,0.92)', borderRadius: 18,
-    paddingHorizontal: 18, paddingVertical: 16,
-    marginTop: 8, marginBottom: 8,
-    borderWidth: 1, borderColor: AppColors.border.soft,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+    backgroundColor: AppColors.surface.card, borderRadius: 20,
+    paddingHorizontal: 18, paddingVertical: 14,
+    marginTop: 10, marginBottom: 8,
+    borderWidth: 1, borderColor: AppColors.border.glass,
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 1,
   },
   warmFooterIcon: {
-    width: 40, height: 40, borderRadius: 20,
-    borderWidth: 2, borderColor: AppColors.green.primary + '30',
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 1.5, borderColor: AppColors.green.primary + '28',
   },
-  warmFooterText: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary, lineHeight: 19 },
-  warmFooterSub: { fontSize: 11, color: AppColors.text.tertiary, marginTop: 1, fontStyle: 'italic' },
+  warmFooterText: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary, lineHeight: 18 },
+  warmFooterSub: { fontSize: 11, color: AppColors.text.tertiary, marginTop: 1 },
 });
