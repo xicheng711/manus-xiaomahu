@@ -650,8 +650,9 @@ export default function ShareScreen() {
       const yesterday = await getYesterdayCheckIn();
       setTodayCi(today);
       setYesterdayCi(yesterday);
-      if (careScore == null && yesterday?.eveningDone) {
-        const ci = viewMode === 'today' ? (today || yesterday) : yesterday;
+      const ci = today || yesterday;
+      const storedScore = ci?.careScore ?? null;
+      if (storedScore == null && yesterday?.eveningDone) {
         if (ci) {
           setCheckIn(ci);
           const { calculateCareScore } = await import('@/lib/ai-advice');
@@ -687,6 +688,7 @@ export default function ShareScreen() {
         }
         setLoading(false);
         loadSupplementaryData();
+        recheckBackfill();
         return;
       }
     }
@@ -702,6 +704,7 @@ export default function ShareScreen() {
         }
         setLoading(false);
         loadSupplementaryData();
+        recheckBackfill();
         return;
       }
     }
@@ -762,9 +765,11 @@ export default function ShareScreen() {
 
   async function loadSupplementaryData() {
     try {
-      const [profile, weekly] = await Promise.all([
+      const [profile, weekly, today, yesterday] = await Promise.all([
         getProfile(),
         getWeeklySleepData(7),
+        getTodayCheckIn(),
+        getYesterdayCheckIn(),
       ]);
       if (profile) {
         setElderNickname(profile.nickname || profile.name || '家人');
@@ -772,6 +777,8 @@ export default function ShareScreen() {
         setElderEmoji(profile.zodiacEmoji || '🐯');
       }
       setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings })));
+      setTodayCi(today);
+      setYesterdayCi(yesterday);
     } catch {}
   }
 
