@@ -6,7 +6,7 @@ import { useRef, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Platform, Animated, ActivityIndicator,
-  Easing, KeyboardAvoidingView, Dimensions,
+  Easing, KeyboardAvoidingView, Dimensions, Modal,
 } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,7 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
-  todayStr, getProfile, generateId, DiaryEntry, ConversationMessage,
+  deleteDiaryEntry, todayStr, getProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn,
 } from '@/lib/storage';
 import { VoiceInput } from '@/components/voice-input';
@@ -228,6 +228,7 @@ export default function DiaryEditScreen() {
   const [loadingEntry, setLoadingEntry] = useState(!!existingId);
   const [diaryCount, setDiaryCount] = useState(0);
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const entryRef = useRef<DiaryEntry | null>(null);
   const formFade = useRef(new Animated.Value(0)).current;
@@ -282,6 +283,14 @@ export default function DiaryEditScreen() {
       }
     }
     setLoadingEntry(false);
+  }
+
+  async function handleDeleteEntry() {
+    if (!entryId) return;
+    await deleteDiaryEntry(entryId);
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setShowDeleteModal(false);
+    router.replace('/(tabs)/diary' as any);
   }
 
   function toggleTag(tag: string) {
@@ -442,6 +451,10 @@ export default function DiaryEditScreen() {
               <LinearGradient colors={['#B07858', '#8B5E3C']} style={styles.headerSaveBtn}>
                 <Text style={styles.headerSaveBtnText}>❤️ 保存</Text>
               </LinearGradient>
+            </TouchableOpacity>
+          ) : existingId && finished ? (
+            <TouchableOpacity style={styles.headerDeleteBtn} onPress={() => setShowDeleteModal(true)} activeOpacity={0.8}>
+              <Text style={styles.headerDeleteBtnText}>🗑️ 删除</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={styles.headerHomeBtn} onPress={() => router.replace('/(tabs)/diary' as any)} activeOpacity={0.7}>
@@ -705,6 +718,31 @@ export default function DiaryEditScreen() {
           </View>
         </KeyboardAvoidingView>
       </LinearGradient>
+
+      {/* ── 删除确认弹窗 ── */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View style={styles.deleteModalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setShowDeleteModal(false)} activeOpacity={1} />
+          <View style={styles.deleteModalBox}>
+            <Text style={styles.deleteModalIcon}>🗑️</Text>
+            <Text style={styles.deleteModalTitle}>删除这篇日记？</Text>
+            <Text style={styles.deleteModalMsg}>删除后无法恢复，确定要删除这篇日记吗？</Text>
+            <View style={styles.deleteModalBtns}>
+              <TouchableOpacity style={styles.deleteModalCancelBtn} onPress={() => setShowDeleteModal(false)} activeOpacity={0.8}>
+                <Text style={styles.deleteModalCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteModalConfirmBtn} onPress={handleDeleteEntry} activeOpacity={0.8}>
+                <Text style={styles.deleteModalConfirmText}>确定删除</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -743,6 +781,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 7,
   },
   headerHomeBtnText: { fontSize: 13, color: AppColors.text.secondary, fontWeight: '600' },
+  headerDeleteBtn: {
+    backgroundColor: '#FEF2F2', borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1.5, borderColor: '#FECACA',
+  },
+  headerDeleteBtnText: { fontSize: 13, color: '#DC2626', fontWeight: '600' },
+
+  // Delete modal
+  deleteModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 32,
+  },
+  deleteModalBox: {
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20,
+    padding: 24, width: '100%', maxWidth: 320, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18, shadowRadius: 24, elevation: 12,
+  },
+  deleteModalIcon: { fontSize: 36, marginBottom: 10 },
+  deleteModalTitle: { fontSize: 18, fontWeight: '800', color: AppColors.text.primary, marginBottom: 8 },
+  deleteModalMsg: { fontSize: 14, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  deleteModalBtns: { flexDirection: 'row', gap: 10, width: '100%' },
+  deleteModalCancelBtn: {
+    flex: 1, borderRadius: 12, paddingVertical: 12,
+    backgroundColor: AppColors.bg.secondary, borderWidth: 1.5, borderColor: AppColors.border.soft,
+    alignItems: 'center',
+  },
+  deleteModalCancelText: { fontSize: 15, fontWeight: '600', color: AppColors.text.secondary },
+  deleteModalConfirmBtn: {
+    flex: 1, borderRadius: 12, paddingVertical: 12,
+    backgroundColor: '#DC2626', alignItems: 'center',
+  },
+  deleteModalConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
   // Loading
   loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },

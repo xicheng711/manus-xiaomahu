@@ -419,13 +419,13 @@ function DiaryScreenContent() {
               <Text style={styles.selfCareText}>照顾好自己，才能更好地照顾家人 ❤️</Text>
             </View>
 
-            {/* ── 最近7条 ── */}
+            {/* ── 日记列表 ── */}
             <View style={styles.entriesList}>
               <View style={styles.listTitleRow}>
-                <Text style={styles.listTitle}>📅 最近记录</Text>
+                <Text style={styles.listTitle}>{editMode ? '🗑️ 选择要删除的日记' : '📅 最近记录'}</Text>
                 <Text style={styles.listCount}>共 {entries.length} 篇</Text>
               </View>
-              {entries.slice(0, 7).map((entry, i) => (
+              {(editMode ? entries : entries.slice(0, 7)).map((entry, i) => (
                 <DiaryCard
                   key={entry.id}
                   entry={entry}
