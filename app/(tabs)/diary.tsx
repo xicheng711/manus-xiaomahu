@@ -425,7 +425,7 @@ function DiaryScreenContent() {
                 <Text style={styles.listTitle}>{editMode ? '🗑️ 选择要删除的日记' : '📅 最近记录'}</Text>
                 <Text style={styles.listCount}>共 {entries.length} 篇</Text>
               </View>
-              {(editMode ? entries : entries.slice(0, 7)).map((entry, i) => (
+              {(editMode ? entries : entries.slice(0, 3)).map((entry, i) => (
                 <DiaryCard
                   key={entry.id}
                   entry={entry}
@@ -435,6 +435,11 @@ function DiaryScreenContent() {
                   editMode={editMode}
                 />
               ))}
+              {!editMode && entries.length > 3 && (
+                <View style={styles.moreHint}>
+                  <Text style={styles.moreHintText}>📅 还有 {entries.length - 3} 篇日记，可在下方日历中选择日期查看</Text>
+                </View>
+              )}
             </View>
 
             {/* ── 日历回顾 ── */}
@@ -532,6 +537,15 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#FECACA',
   },
   editHintText: { fontSize: 13, color: '#B91C1C', textAlign: 'center', fontWeight: '500' },
+
+  moreHint: {
+    marginTop: 6, marginBottom: 4,
+    backgroundColor: AppColors.bg.secondary, borderRadius: RADIUS.md,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: AppColors.border.soft,
+    alignItems: 'center',
+  },
+  moreHintText: { fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 18 },
 
   selfCareBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
