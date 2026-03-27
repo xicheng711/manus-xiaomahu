@@ -692,6 +692,16 @@ function CreatorHomeScreen() {
         </View>
 
         <WeeklyEcho caregiverName={caregiverName} elderNickname={elderNickname} />
+
+        {/* ── 暖心底部签名 ── */}
+        <View style={styles.warmFooter}>
+          <Image source={require('@/assets/images/app-icon.png')} style={styles.warmFooterIcon} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.warmFooterText}>小马虎陪您一起，照顾好每一天 ❤️</Text>
+            <Text style={styles.warmFooterSub}>您的用心，家人都感受得到</Text>
+          </View>
+        </View>
+
         <View style={{ height: 32 }} />
       </ScrollView>
 
@@ -928,4 +938,15 @@ const styles = StyleSheet.create({
   summaryCardLabel: { fontSize: 11, color: COLORS.textMuted, fontWeight: '500' },
   summaryCardValue: { fontSize: 13, fontWeight: '700', color: COLORS.text },
   summaryCardDivider: { width: 1, height: 40, backgroundColor: AppColors.border.soft },
+
+  warmFooter: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FFF5F0', borderRadius: 20,
+    paddingHorizontal: 16, paddingVertical: 14,
+    marginTop: 4, marginBottom: 8,
+    borderWidth: 1, borderColor: '#FFCBB8',
+  },
+  warmFooterIcon: { width: 44, height: 44, borderRadius: 12 },
+  warmFooterText: { fontSize: 14, fontWeight: '700', color: '#C0553A', lineHeight: 20 },
+  warmFooterSub: { fontSize: 12, color: '#D98070', marginTop: 2 },
 });
