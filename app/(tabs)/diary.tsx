@@ -311,6 +311,7 @@ function DiaryScreenContent() {
   const router = useRouter();
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [editMode, setEditMode] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; date: string } | null>(null);
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
@@ -330,11 +331,12 @@ function DiaryScreenContent() {
   useFocusEffect(useCallback(() => {
     loadEntries();
     setEditMode(false);
+    setShowAll(false);
   }, []));
 
   async function loadEntries() {
     const e = await getDiaryEntries();
-    setEntries(e.slice(0, 30));
+    setEntries(e);
   }
 
   function openDetail(entryId: string) {
@@ -423,7 +425,12 @@ function DiaryScreenContent() {
             <View style={styles.entriesList}>
               <View style={styles.listTitleRow}>
                 <Text style={styles.listTitle}>{editMode ? '🗑️ 选择要删除的日记' : '📅 最近记录'}</Text>
-                <Text style={styles.listCount}>共 {entries.length} 篇</Text>
+                {editMode
+                  ? <Text style={styles.listCount}>共 {entries.length} 篇</Text>
+                  : entries.length > 3
+                    ? <Text style={styles.listCount}>↓ 下方日历查看更多</Text>
+                    : null
+                }
               </View>
               {(editMode ? entries : entries.slice(0, 3)).map((entry, i) => (
                 <DiaryCard
@@ -435,11 +442,47 @@ function DiaryScreenContent() {
                   editMode={editMode}
                 />
               ))}
+
+              {/* 查看更多按钮 */}
               {!editMode && entries.length > 3 && (
-                <View style={styles.moreHint}>
-                  <Text style={styles.moreHintText}>📅 还有 {entries.length - 3} 篇日记，可在下方日历中选择日期查看</Text>
-                </View>
+                <TouchableOpacity
+                  style={styles.moreBtn}
+                  onPress={() => setShowAll(v => !v)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.moreBtnText}>
+                    {showAll ? '收起 ↑' : `查看更多日记（共 ${entries.length} 篇）↓`}
+                  </Text>
+                </TouchableOpacity>
               )}
+
+              {/* 展开：全部日记按月分组 */}
+              {!editMode && showAll && (() => {
+                const grouped: Record<string, DiaryEntry[]> = {};
+                entries.slice(3).forEach(e => {
+                  const d = new Date(e.createdAt);
+                  const key = `${d.getFullYear()}年${d.getMonth() + 1}月`;
+                  if (!grouped[key]) grouped[key] = [];
+                  grouped[key].push(e);
+                });
+                return Object.entries(grouped).map(([month, monthEntries]) => (
+                  <View key={month}>
+                    <View style={styles.monthDivider}>
+                      <Text style={styles.monthDividerText}>{month}</Text>
+                    </View>
+                    {monthEntries.map((entry, i) => (
+                      <DiaryCard
+                        key={entry.id}
+                        entry={entry}
+                        onPress={() => openDetail(entry.id)}
+                        onDelete={() => confirmDelete(entry.id, entry.date)}
+                        index={i}
+                        editMode={false}
+                      />
+                    ))}
+                  </View>
+                ));
+              })()}
             </View>
 
             {/* ── 日历回顾 ── */}
@@ -538,14 +581,22 @@ const styles = StyleSheet.create({
   },
   editHintText: { fontSize: 13, color: '#B91C1C', textAlign: 'center', fontWeight: '500' },
 
-  moreHint: {
-    marginTop: 6, marginBottom: 4,
-    backgroundColor: AppColors.bg.secondary, borderRadius: RADIUS.md,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 1, borderColor: AppColors.border.soft,
+  moreBtn: {
+    marginTop: 4, borderRadius: RADIUS.md,
+    paddingHorizontal: 14, paddingVertical: 11,
+    borderWidth: 1.5, borderColor: AppColors.green.primary,
+    backgroundColor: AppColors.green.soft,
     alignItems: 'center',
   },
-  moreHintText: { fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 18 },
+  moreBtnText: { fontSize: 13, color: AppColors.green.strong, fontWeight: '600' },
+
+  monthDivider: {
+    marginTop: 16, marginBottom: 6,
+    paddingHorizontal: 4,
+    borderLeftWidth: 3, borderLeftColor: AppColors.green.primary,
+    paddingLeft: 8,
+  },
+  monthDividerText: { fontSize: 13, fontWeight: '700', color: AppColors.text.secondary },
 
   selfCareBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
