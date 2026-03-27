@@ -674,8 +674,8 @@ function CreatorHomeScreen() {
         {/* ── 快捷入口 ── */}
         <View style={{ marginBottom: 4 }}>
           <View style={styles.sectionHeader}>
+            <View style={styles.sectionDot} />
             <Text style={styles.sectionTitle}>快捷入口</Text>
-            <Text style={{ fontSize: 11, color: AppColors.peach.primary, marginBottom: 2, marginLeft: 2 }}>✦</Text>
           </View>
           <View style={styles.quickGrid}>
             <View style={styles.quickRow}>
@@ -697,8 +697,8 @@ function CreatorHomeScreen() {
         <View style={styles.warmFooter}>
           <Image source={require('@/assets/images/app-icon.png')} style={styles.warmFooterIcon} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.warmFooterText}>小马虎陪您一起，照顾好每一天 ❤️</Text>
-            <Text style={styles.warmFooterSub}>您的用心，家人都感受得到</Text>
+            <Text style={styles.warmFooterText}>小马虎陪您一起，照顾好每一天</Text>
+            <Text style={styles.warmFooterSub}>您的每一份用心，家人都感受得到 ♡</Text>
           </View>
         </View>
 
@@ -870,9 +870,9 @@ const styles = StyleSheet.create({
   weatherTemp: { fontSize: 14, fontWeight: '800', color: AppColors.text.primary, lineHeight: 17 },
   weatherDesc: { fontSize: 11, color: AppColors.text.tertiary, lineHeight: 14 },
   // 标题行
-  appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  appName: { fontSize: 24, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.5 },
-  greeting: { fontSize: 15, color: AppColors.text.tertiary, fontWeight: '500', lineHeight: 22 },
+  appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  appName: { fontSize: 22, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.4 },
+  greeting: { fontSize: 14, color: AppColors.text.tertiary, fontWeight: '500', lineHeight: 21 },
   profileBtn: { width: 56, height: 56, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', ...SHADOWS.md },
   profileGradient: { width: 56, height: 56, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   profilePhoto: { width: 56, height: 56, borderRadius: 20 },
@@ -914,18 +914,23 @@ const styles = StyleSheet.create({
   // 护理贴士
 
   // 快捷入口标题
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  sectionTitleEmoji: { fontSize: 18 },
-  sectionTitle: { fontSize: 18, fontWeight: '900', color: COLORS.text, letterSpacing: -0.5 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  sectionDot: { width: 4, height: 18, borderRadius: 2, backgroundColor: AppColors.green.primary },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.3 },
 
   // 快捷入口网格
-  quickGrid: { marginTop: 4 },
-  quickRow: { flexDirection: 'row', gap: 14, marginBottom: 14 },
+  quickGrid: { marginTop: 2 },
+  quickRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   quickItem: { flex: 1 },
-  quickCard: { borderRadius: 22, padding: 16, paddingBottom: 14, height: 140, flexDirection: 'column', alignItems: 'flex-start', overflow: 'hidden', ...SHADOWS.sm },
-  quickIconBox: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  quickEmoji: { fontSize: 26, lineHeight: 30 },
-  quickLabel: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.3, lineHeight: 20 },
+  quickCard: {
+    borderRadius: 20, padding: 14, paddingBottom: 12, height: 108,
+    flexDirection: 'column', alignItems: 'flex-start', overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)',
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+  },
+  quickIconBox: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  quickEmoji: { fontSize: 22, lineHeight: 26 },
+  quickLabel: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary, letterSpacing: -0.2, lineHeight: 19 },
 
   // 数据摘要卡片
   summaryCard: { backgroundColor: '#FEFAF7', borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: AppColors.border.soft, ...SHADOWS.sm },
@@ -940,13 +945,17 @@ const styles = StyleSheet.create({
   summaryCardDivider: { width: 1, height: 40, backgroundColor: AppColors.border.soft },
 
   warmFooter: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#FFF5F0', borderRadius: 20,
-    paddingHorizontal: 16, paddingVertical: 14,
-    marginTop: 4, marginBottom: 8,
-    borderWidth: 1, borderColor: '#FFCBB8',
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: 'rgba(255,253,250,0.92)', borderRadius: 18,
+    paddingHorizontal: 18, paddingVertical: 16,
+    marginTop: 8, marginBottom: 8,
+    borderWidth: 1, borderColor: AppColors.border.soft,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
   },
-  warmFooterIcon: { width: 44, height: 44, borderRadius: 12 },
-  warmFooterText: { fontSize: 14, fontWeight: '700', color: '#C0553A', lineHeight: 20 },
-  warmFooterSub: { fontSize: 12, color: '#D98070', marginTop: 2 },
+  warmFooterIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    borderWidth: 2, borderColor: AppColors.green.primary + '30',
+  },
+  warmFooterText: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary, lineHeight: 19 },
+  warmFooterSub: { fontSize: 11, color: AppColors.text.tertiary, marginTop: 1, fontStyle: 'italic' },
 });
