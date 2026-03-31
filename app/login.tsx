@@ -194,9 +194,9 @@ export default function LoginScreen() {
             </Animated.View>
             <Text style={styles.agreementText}>
               我已阅读并同意
-              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://example.com/terms')}>《用户协议》</Text>
+              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/privacy.html')}>《用户协议》</Text>
               和
-              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://example.com/privacy')}>《隐私政策》</Text>
+              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/privacy.html')}>《隐私政策》</Text>
             </Text>
           </View>
         </Animated.View>
