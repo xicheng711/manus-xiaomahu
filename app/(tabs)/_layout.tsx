@@ -69,7 +69,7 @@ function TabIcon({
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const safeBottom = Platform.OS === "web" ? 0 : insets.bottom;
-  const tabBarHeight = 68 + safeBottom;
+  const tabBarHeight = 76 + safeBottom;
 
   const { activeMembership } = useFamilyContext();
   const isJoiner = activeMembership?.role === "joiner";
@@ -110,14 +110,14 @@ export default function TabLayout() {
   );
 }
 
-const CIRCLE = 46;
+const CIRCLE = 48;
 
 const styles = StyleSheet.create({
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
-    paddingTop: 0,
+    gap: 4,
+    flex: 1,
   },
   tabItemFaded: {
     opacity: 0.22,
