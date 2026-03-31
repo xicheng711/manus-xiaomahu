@@ -36,9 +36,14 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
+    usesAppleSignIn: true,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
+      LSApplicationQueriesSchemes: ['weixin', 'weixinULAPI'],
     },
+    associatedDomains: [
+      'applinks:your-domain.com',
+    ],
   },
   android: {
     adaptiveIcon: {
@@ -67,6 +72,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-apple-authentication",
     [
       "expo-audio",
       { microphonePermission: "允许小马虎使用麦克风录音。" },

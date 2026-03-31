@@ -93,6 +93,7 @@ export default function RootLayout() {
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="oauth/callback" />
+                <Stack.Screen name="login" options={{ presentation: 'fullScreenModal' }} />
                 <Stack.Screen name="onboarding" />
                 <Stack.Screen name="checkin" />
                 <Stack.Screen name="assistant" />

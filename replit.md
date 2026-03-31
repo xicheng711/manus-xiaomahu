@@ -59,8 +59,17 @@ The application features a modern, full-stack architecture designed for scalabil
 ## External Dependencies
 - **Database**: MySQL
 - **ORM**: Drizzle ORM
-- **Authentication**: Manus OAuth (for `OAUTH_SERVER_URL`)
-- **AI Services**: Built-in Forge API (for `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`)
+- **Authentication**: Manus OAuth (for `OAUTH_SERVER_URL`), WeChat Login (`WECHAT_APP_ID`, `WECHAT_APP_SECRET`), Apple Sign In (`APPLE_SERVICE_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`)
+- **AI Services**: Built-in Forge API (for `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`), Alibaba Cloud Qwen (for `DASHSCOPE_API_KEY`)
+- **JWT Verification**: `jose` library for Apple identity token signature verification via Apple JWKS
 - **Charting Library**: `react-native-gifted-charts`
 - **SVG Rendering**: `react-native-svg`
 - **Sharing**: `expo-sharing`
+
+### Login System
+- **Login Page**: `app/login.tsx` — premium warm UI with WeChat (green) and Apple (black) login buttons, privacy agreement checkbox (required for China App Store), guest mode entry
+- **Client Auth Providers**: `lib/auth-providers.ts` — dynamic native SDK imports for WeChat (`react-native-wechat-lib`) and Apple (`expo-apple-authentication`), with web fallback messages
+- **Server Auth Routes**: `server/auth-providers.ts` — `/api/auth/wechat/callback` (WeChat OAuth token exchange) and `/api/auth/apple/callback` (Apple JWT signature verification via JWKS, audience/issuer validation)
+- **OpenId Conventions**: WeChat users prefixed `wechat_`, Apple users prefixed `apple_`, Manus OAuth users use standard openId
+- **Security**: Apple identity tokens are cryptographically verified using Apple's public JWKS; `sub` claim is used for identity (not client-supplied user field)
+- **Animations**: Native-only entrance animations (logo fade/scale, content slide-up); web renders immediately without animation
