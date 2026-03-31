@@ -129,7 +129,7 @@ function AnnouncementCard({ latest, onViewAll, onCompose }: {
       </TouchableOpacity>
       <TouchableOpacity style={styles.composeHint} onPress={onCompose} activeOpacity={0.8}>
         <Text style={styles.composeHintIcon}>✏️</Text>
-        <Text style={styles.composeHintText}>写一条公告给家人们看看</Text>
+        <Text style={styles.composeHintText}>发布一条家庭公告</Text>
         <Text style={styles.composeHintArrow}>›</Text>
       </TouchableOpacity>
     </View>
