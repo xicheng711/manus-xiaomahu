@@ -779,7 +779,10 @@ function JoinerDiaryReadOnly() {
           />
           <View style={jStyles.roleHint}>
             <Text style={jStyles.roleHintIcon}>👀</Text>
-            <Text style={jStyles.roleHintText}>查看主照顾者写的护理日记</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={jStyles.roleHintText}>查看主照顾者写的护理日记</Text>
+              <Text style={jStyles.roleHintSub}>日记由主照顾者记录，家人可在这里查阅，不支持编写</Text>
+            </View>
           </View>
         </Animated.View>
 
@@ -845,6 +848,7 @@ const jStyles = StyleSheet.create({
   },
   roleHintIcon: { fontSize: 16, marginRight: 8 },
   roleHintText: { fontSize: 13, color: AppColors.purple.strong, fontWeight: '500' },
+  roleHintSub: { fontSize: 11, color: AppColors.text.tertiary, marginTop: 3, lineHeight: 16 },
   emptyWrap: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: AppColors.text.primary, marginBottom: 8 },
   emptyDesc: { fontSize: 13, color: AppColors.text.tertiary, textAlign: 'center', lineHeight: 20 },
