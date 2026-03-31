@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "q8A8jjmAKEhuFl7Tt5n1a"
+uri = "file://xiaomahu-code.tar.gz"
+type = "unspecified"
+title = "小马虎源代码 (xiaomahu-code.tar.gz)"
