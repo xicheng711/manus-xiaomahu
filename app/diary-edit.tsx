@@ -498,7 +498,7 @@ export default function DiaryEditScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
           <ScrollView
             ref={scrollRef}
@@ -603,13 +603,18 @@ export default function DiaryEditScreen() {
                     </View>
                     <TextInput
                       style={styles.noteInput}
-                      placeholder={`${elderNickname}今天有什么特别的时刻？\n您有什么感受或担心想记下来？\n哪怕只有一两句话，都很有意义 💛`}
+                      placeholder={`${elderNickname}今天有什么特别的时刻？\n您有什么感受或担心想记下来？\n哪怕只有一两句话，都很有意义 📛`}
                       value={content}
                       onChangeText={setContent}
                       multiline
                       numberOfLines={5}
                       placeholderTextColor="#C4A0B8"
                       textAlignVertical="top"
+                      onFocus={() => {
+                        setTimeout(() => {
+                          scrollRef.current?.scrollToEnd({ animated: true });
+                        }, 300);
+                      }}
                     />
                     <Text style={styles.noteHint}>🎙️ 可以点右上角语音按钮说给小马虎听</Text>
                   </View>

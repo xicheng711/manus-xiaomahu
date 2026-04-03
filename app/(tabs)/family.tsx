@@ -646,22 +646,27 @@ export default function FamilyScreen() {
               <View key={item.date} style={styles.briefingCard}>
                 {/* ── Card Header ── */}
                 <View style={styles.briefingCardHeader}>
-                  <View>
-                    <Text style={styles.briefingAppName}>🐴🐯 小马虎 · 护理简报</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                      <Text style={styles.briefingCardDate}>
-                        {isToday
-                          ? new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
-                          : item.date}
-                      </Text>
-                      {!isToday && (
-                        <View style={styles.latestBadge}>
-                          <Text style={styles.latestBadgeText}>最新记录</Text>
-                        </View>
-                      )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <Image
+                      source={require('../../assets/images/icon.png')}
+                      style={{ width: 28, height: 28, borderRadius: 6 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.briefingAppName}>小马虎 · 护理简报</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <Text style={styles.briefingCardDate}>
+                          {isToday
+                            ? new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
+                            : item.date}
+                        </Text>
+                        {!isToday && (
+                          <View style={styles.latestBadge}>
+                            <Text style={styles.latestBadgeText}>最新记录</Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 32 }}>{elderEmoji}</Text>
                 </View>
 
                 {item.checkIn ? (
@@ -861,7 +866,10 @@ export default function FamilyScreen() {
           >
             {/* Header */}
             <View style={{ backgroundColor: AppColors.coral.primary, borderRadius: 20, padding: 20, marginBottom: 16, alignItems: 'center' }}>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: AppColors.surface.whiteStrong, marginBottom: 4 }}>🐴 小马虎 · 护理简报</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Image source={require('../../assets/images/icon.png')} style={{ width: 24, height: 24, borderRadius: 5 }} />
+                <Text style={{ fontSize: 16, fontWeight: '800', color: AppColors.surface.whiteStrong }}>小马虎 · 护理简报</Text>
+              </View>
               <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{dateLabel}</Text>
               {profile && (
                 <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 4 }}>
@@ -1202,7 +1210,7 @@ const styles = StyleSheet.create({
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 5,
     borderWidth: 1, borderColor: AppColors.border.soft,
   },
-  briefingCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  briefingCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   briefingAppName: { fontSize: 13, fontWeight: '800', color: AppColors.green.muted, letterSpacing: -0.2 },
   briefingCardDate: { fontSize: 12, color: AppColors.text.tertiary, marginTop: 2 },
   latestBadge: { backgroundColor: AppColors.peach.soft, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
