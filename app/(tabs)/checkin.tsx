@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Animated, Platform, Easing, Dimensions, Modal,
+  StyleSheet, Animated, Platform, Easing, Dimensions, Modal, Keyboard,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -434,7 +434,7 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                 {/* ── Fallback: no briefing, show raw check-in data ── */}
                 {!briefingLoading && !selectedBriefing && (
                   <View>
-                    <Text style={calStyles.noBriefingHint}>当天未生成 AI 简报</Text>
+                    <Text style={calStyles.noBriefingHint}>当天未生成智能简报</Text>
                     {selectedDay?.morningDone && (
                       <View style={calStyles.popupSection}>
                         <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
@@ -865,7 +865,7 @@ function CheckinScreenContent() {
         napDuration: NAP_KEYS[napIdx],
         notes: morningNotes || undefined,
       };
-      // 规则引擎打分（非AI）
+      // 规则引擎打分（非智能）
       const { score: sleepScore, problems: sleepProblems } = scoreSleepInput(sleepInput);
 
       const derivedQuality: 'good' | 'fair' | 'poor' =
@@ -910,7 +910,7 @@ function CheckinScreenContent() {
       if (Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      router.replace('/share' as any);
+      router.push('/share?refresh=1' as any);
       return;
     }
     if (Platform.OS !== 'web') {
@@ -991,7 +991,7 @@ function CheckinScreenContent() {
               {/* Main diary button — pink/rose gradient */}
               <TouchableOpacity
                 style={styles.nightDiaryBtn}
-                onPress={() => backfillDate ? router.replace('/share' as any) : router.push('/diary-edit' as any)}
+                onPress={() => backfillDate ? router.push('/share?refresh=1' as any) : router.push('/diary-edit' as any)}
                 activeOpacity={0.85}
               >
                 <LinearGradient
@@ -1027,7 +1027,7 @@ function CheckinScreenContent() {
           <Text style={styles.doneSub}>
             {`${elderNickname}今日照护数据已整理完毕\n可查看详细分析报告`}
           </Text>
-          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/share' as any)}>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.push('/share?refresh=1' as any)}>
             <Text style={styles.doneBtnText}>查看今日分析报告 →</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.doneBtnSecondary} onPress={() => {
@@ -1189,82 +1189,118 @@ function CheckinScreenContent() {
                 const e = new Date(seg.end);
                 return (
                   <View key={idx} style={styles.segmentCard}>
+                    {/* 标题行 */}
                     <View style={styles.segmentHeader}>
-                      <Text style={styles.segmentTitle}>时间段 {idx + 1}</Text>
+                      <Text style={styles.segmentTitle}>睡眠时间段 {idx + 1}</Text>
                       {sleepSegments.length > 1 && (
-                        <TouchableOpacity onPress={() => removeSleepSegment(idx)}>
-                          <Text style={styles.segmentRemoveBtn}>✕</Text>
+                        <TouchableOpacity onPress={() => removeSleepSegment(idx)} style={{ padding: 4 }}>
+                          <Text style={styles.segmentRemoveBtn}>✕ 删除</Text>
                         </TouchableOpacity>
                       )}
                     </View>
-                    <View style={styles.segmentTimeRow}>
-                      <View style={styles.segmentTimeBlock}>
-                        <Text style={styles.segmentTimeLabel}>入睡</Text>
-                        <View style={styles.timePickerRow}>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtn}
-                            onPress={() => updateSegmentTime(idx, 'start', (s.getHours() - 1 + 24) % 24, s.getMinutes())}
-                          >
-                            <Text style={styles.timeAdjustText}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={styles.timeDisplay}>
-                            {s.getHours().toString().padStart(2, '0')}:{s.getMinutes().toString().padStart(2, '0')}
+                    {/* 时长预览 */}
+                    {(() => {
+                      const diffMs = e.getTime() - s.getTime();
+                      const diffMin = Math.round(diffMs / 60000);
+                      const absMin = Math.abs(diffMin);
+                      const h = Math.floor(absMin / 60);
+                      const m = absMin % 60;
+                      const durationStr = diffMin <= 0 ? '时间有误' : h > 0 ? `${h}小时${m > 0 ? m + '分钟' : ''}` : `${m}分钟`;
+                      const color = diffMin <= 0 ? '#EF4444' : diffMin >= 360 ? '#16A34A' : '#F59E0B';
+                      return (
+                        <View style={styles.segmentDurationBadge}>
+                          <Text style={[styles.segmentDurationText, { color }]}>
+                            {diffMin <= 0 ? '⚠️ ' : '💤 '}睡了 {durationStr}
                           </Text>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtn}
-                            onPress={() => updateSegmentTime(idx, 'start', (s.getHours() + 1) % 24, s.getMinutes())}
-                          >
-                            <Text style={styles.timeAdjustText}>+</Text>
-                          </TouchableOpacity>
                         </View>
-                        <View style={styles.timePickerRow}>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtnSmall}
-                            onPress={() => updateSegmentTime(idx, 'start', s.getHours(), (s.getMinutes() - 15 + 60) % 60)}
-                          >
-                            <Text style={styles.timeAdjustTextSmall}>-15分</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtnSmall}
-                            onPress={() => updateSegmentTime(idx, 'start', s.getHours(), (s.getMinutes() + 15) % 60)}
-                          >
-                            <Text style={styles.timeAdjustTextSmall}>+15分</Text>
-                          </TouchableOpacity>
+                      );
+                    })()}
+                    {/* 入睡 / 醒来 两列 */}
+                    <View style={styles.segmentTimeRow}>
+                      {/* 入睡 */}
+                      <View style={styles.segmentTimeBlock}>
+                        <View style={styles.segmentTimeLabelRow}>
+                          <Text style={styles.segmentTimeLabelEmoji}>🌙</Text>
+                          <Text style={styles.segmentTimeLabelNew}>入睡时间</Text>
+                        </View>
+                        <View style={styles.timeSpinnerCard}>
+                          <View style={styles.timeSpinnerRow}>
+                            {/* 小时 */}
+                            <View style={styles.timeSpinnerCol}>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'start', (s.getHours() + 1) % 24, s.getMinutes())}>
+                                <Text style={styles.spinnerArrow}>⌃</Text>
+                              </TouchableOpacity>
+                              <View style={styles.spinnerValueBox}>
+                                <Text style={styles.spinnerValue}>{s.getHours().toString().padStart(2, '0')}</Text>
+                              </View>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'start', (s.getHours() - 1 + 24) % 24, s.getMinutes())}>
+                                <Text style={styles.spinnerArrow}>⌄</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.spinnerUnitBelow}>时</Text>
+                            </View>
+                            <Text style={styles.spinnerColon}>:</Text>
+                            {/* 分钟 */}
+                            <View style={styles.timeSpinnerCol}>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'start', s.getHours(), (s.getMinutes() + 15) % 60)}>
+                                <Text style={styles.spinnerArrow}>⌃</Text>
+                              </TouchableOpacity>
+                              <View style={styles.spinnerValueBox}>
+                                <Text style={styles.spinnerValue}>{s.getMinutes().toString().padStart(2, '0')}</Text>
+                              </View>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'start', s.getHours(), (s.getMinutes() - 15 + 60) % 60)}>
+                                <Text style={styles.spinnerArrow}>⌄</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.spinnerUnitBelow}>分</Text>
+                            </View>
+                          </View>
                         </View>
                       </View>
-                      <Text style={styles.segmentArrow}>→</Text>
+                      {/* 分隔 */}
+                      <View style={styles.segmentArrowCol}>
+                        <Text style={styles.segmentArrow}>➜</Text>
+                      </View>
+                      {/* 醒来 */}
                       <View style={styles.segmentTimeBlock}>
-                        <Text style={styles.segmentTimeLabel}>醒来</Text>
-                        <View style={styles.timePickerRow}>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtn}
-                            onPress={() => updateSegmentTime(idx, 'end', (e.getHours() - 1 + 24) % 24, e.getMinutes())}
-                          >
-                            <Text style={styles.timeAdjustText}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={styles.timeDisplay}>
-                            {e.getHours().toString().padStart(2, '0')}:{e.getMinutes().toString().padStart(2, '0')}
-                          </Text>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtn}
-                            onPress={() => updateSegmentTime(idx, 'end', (e.getHours() + 1) % 24, e.getMinutes())}
-                          >
-                            <Text style={styles.timeAdjustText}>+</Text>
-                          </TouchableOpacity>
+                        <View style={styles.segmentTimeLabelRow}>
+                          <Text style={styles.segmentTimeLabelEmoji}>☀️</Text>
+                          <Text style={styles.segmentTimeLabelNew}>醒来时间</Text>
                         </View>
-                        <View style={styles.timePickerRow}>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtnSmall}
-                            onPress={() => updateSegmentTime(idx, 'end', e.getHours(), (e.getMinutes() - 15 + 60) % 60)}
-                          >
-                            <Text style={styles.timeAdjustTextSmall}>-15分</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.timeAdjustBtnSmall}
-                            onPress={() => updateSegmentTime(idx, 'end', e.getHours(), (e.getMinutes() + 15) % 60)}
-                          >
-                            <Text style={styles.timeAdjustTextSmall}>+15分</Text>
-                          </TouchableOpacity>
+                        <View style={styles.timeSpinnerCard}>
+                          <View style={styles.timeSpinnerRow}>
+                            <View style={styles.timeSpinnerCol}>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'end', (e.getHours() + 1) % 24, e.getMinutes())}>
+                                <Text style={styles.spinnerArrow}>⌃</Text>
+                              </TouchableOpacity>
+                              <View style={styles.spinnerValueBox}>
+                                <Text style={styles.spinnerValue}>{e.getHours().toString().padStart(2, '0')}</Text>
+                              </View>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'end', (e.getHours() - 1 + 24) % 24, e.getMinutes())}>
+                                <Text style={styles.spinnerArrow}>⌄</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.spinnerUnitBelow}>时</Text>
+                            </View>
+                            <Text style={styles.spinnerColon}>:</Text>
+                            <View style={styles.timeSpinnerCol}>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'end', e.getHours(), (e.getMinutes() + 15) % 60)}>
+                                <Text style={styles.spinnerArrow}>⌃</Text>
+                              </TouchableOpacity>
+                              <View style={styles.spinnerValueBox}>
+                                <Text style={styles.spinnerValue}>{e.getMinutes().toString().padStart(2, '0')}</Text>
+                              </View>
+                              <TouchableOpacity style={styles.spinnerArrowBtn}
+                                onPress={() => updateSegmentTime(idx, 'end', e.getHours(), (e.getMinutes() - 15 + 60) % 60)}>
+                                <Text style={styles.spinnerArrow}>⌄</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.spinnerUnitBelow}>分</Text>
+                            </View>
+                          </View>
                         </View>
                       </View>
                     </View>
@@ -1501,7 +1537,7 @@ function CheckinScreenContent() {
 
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScrollBeginDrag={Keyboard.dismiss}>
         {/* Header */}
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
           <View>
@@ -1801,11 +1837,54 @@ const styles = StyleSheet.create({
   segmentRemoveBtn: { fontSize: 16, color: '#EF4444', fontWeight: '700', padding: 4 },
 
   segmentTimeRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8,
   },
   segmentTimeBlock: { flex: 1, alignItems: 'center', gap: 6 },
   segmentTimeLabel: { fontSize: 12, fontWeight: '600', color: '#9BA1A6' },
-  segmentArrow: { fontSize: 18, color: '#9BA1A6', fontWeight: '700' },
+  segmentTimeLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
+  segmentTimeLabelEmoji: { fontSize: 16 },
+  segmentTimeLabelNew: { fontSize: 14, fontWeight: '700', color: '#374151' },
+  segmentArrow: { fontSize: 20, color: AppColors.purple.strong },
+  segmentArrowCol: { alignItems: 'center', justifyContent: 'center', paddingTop: 28 },
+  segmentDurationBadge: {
+    alignSelf: 'center', backgroundColor: '#F0FDF4',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6,
+    marginBottom: 6, borderWidth: 1, borderColor: '#BBF7D0',
+  },
+  segmentDurationText: { fontSize: 13, fontWeight: '700' },
+
+  // Spinner 样式
+  timeSpinnerCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: AppColors.border.soft,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  timeSpinnerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  timeSpinnerCol: { alignItems: 'center', gap: 4 },
+  spinnerArrowBtn: {
+    width: 46, height: 34, borderRadius: 12,
+    backgroundColor: AppColors.purple.soft,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  spinnerArrow: { fontSize: 18, color: AppColors.purple.strong, fontWeight: '900', lineHeight: 22 },
+  spinnerValueBox: {
+    width: 46, height: 50, borderRadius: 12,
+    backgroundColor: AppColors.purple.soft,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: AppColors.purple.primary,
+  },
+  spinnerValue: { fontSize: 22, fontWeight: '900', color: '#11181C' },
+  spinnerUnit: { fontSize: 11, fontWeight: '600', color: AppColors.text.secondary, alignSelf: 'flex-end', marginBottom: 2 },
+  spinnerUnitBelow: { fontSize: 11, fontWeight: '600', color: AppColors.text.secondary, marginTop: 2 },
+  spinnerColon: { fontSize: 24, fontWeight: '900', color: AppColors.purple.strong, marginHorizontal: 2, marginBottom: 14 },
+  spinnerHint: { fontSize: 10, color: AppColors.text.tertiary, marginTop: 4, textAlign: 'center' },
 
   timePickerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   timeAdjustBtn: {

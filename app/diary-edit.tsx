@@ -480,7 +480,7 @@ export default function DiaryEditScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={90}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
         >
           <ScrollView
             ref={scrollRef}
@@ -1000,7 +1000,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     backgroundColor: 'rgba(253,249,247,0.97)',
     borderTopWidth: 1, borderTopColor: AppColors.border.soft,
-    paddingHorizontal: 16, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 34 : 16,
     gap: 10,
   },
 
