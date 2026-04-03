@@ -18,6 +18,8 @@ import {
   requestNotificationPermissions,
 } from '@/lib/notifications';
 import { useFamilyContext } from '@/lib/family-context';
+import { trpc } from '@/lib/trpc';
+import { clearAllLocalData } from '@/lib/storage';
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<ElderProfile | null>(null);
@@ -43,7 +45,30 @@ export default function ProfileScreen() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteConfirmType, setDeleteConfirmType] = useState<'leave' | 'delete'>('leave');
 
+  // Account deletion state
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
+
   const { memberships, activeMembership, switchFamily, leaveFamily, deleteFamily, refresh } = useFamilyContext();
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await deleteAccountMutation.mutateAsync();
+    } catch (e) {
+      // Ignore server errors — still clear local data
+    }
+    try {
+      await clearAllLocalData();
+    } catch (e) {
+      // Ignore
+    }
+    setDeletingAccount(false);
+    setShowDeleteAccountModal(false);
+    // Navigate to onboarding / welcome screen
+    router.replace('/onboarding' as any);
+  };
 
   const pickPhoto = useCallback(async (target: 'caregiver' | 'elder') => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -500,6 +525,14 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/onboarding' as any)}>
           <Text style={styles.editBtnText}>✏️ 重新设置所有信息</Text>
         </TouchableOpacity>
+
+        {/* Delete Account button */}
+        <TouchableOpacity
+          style={styles.deleteAccountBtn}
+          onPress={() => setShowDeleteAccountModal(true)}
+        >
+          <Text style={styles.deleteAccountBtnText}>注销账号</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* ── 家庭管理 Modal ── */}
@@ -610,6 +643,39 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 注销账号确认 Modal ── */}
+      <Modal visible={showDeleteAccountModal} transparent animationType="fade" onRequestClose={() => setShowDeleteAccountModal(false)}>
+        <View style={styles.permOverlay}>
+          <View style={styles.confirmBox}>
+            <Text style={styles.confirmEmoji}>⚠️</Text>
+            <Text style={styles.confirmTitle}>确认注销账号？</Text>
+            <Text style={styles.confirmMsg}>
+              注销后，您的所有本地数据（打卡记录、日记、用药记录等）将被清除，且无法恢复。{`\n\n`}此操作不可撤销，请谨慎操作。
+            </Text>
+            <View style={styles.confirmBtnRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setShowDeleteAccountModal(false)}
+                disabled={deletingAccount}
+              >
+                <Text style={styles.confirmCancelBtnText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmDeleteBtn}
+                onPress={handleDeleteAccount}
+                disabled={deletingAccount}
+              >
+                {deletingAccount ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.confirmDeleteBtnText}>确认注销</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -891,4 +957,17 @@ const styles = StyleSheet.create({
   },
   confirmLeaveBtn: { backgroundColor: AppColors.coral.primary },
   confirmDeleteBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
+
+  deleteAccountBtn: {
+    marginTop: 8,
+    marginBottom: 32,
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  deleteAccountBtnText: {
+    fontSize: 14,
+    color: AppColors.text.tertiary,
+    textDecorationLine: 'underline',
+  },
 });

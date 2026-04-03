@@ -800,3 +800,13 @@ export async function migrateToMultiFamily(): Promise<void> {
   await AsyncStorage.setItem(KEYS.MEMBERSHIPS, JSON.stringify([membership]));
   await AsyncStorage.setItem(KEYS.ACTIVE_FAMILY_ID, room.id);
 }
+
+// ─── Account Deletion ─────────────────────────────────────────────────────────
+/**
+ * Clears all local user data from AsyncStorage.
+ * Called during account deletion to ensure complete data removal.
+ */
+export async function clearAllLocalData(): Promise<void> {
+  const allKeys = Object.values(KEYS);
+  await AsyncStorage.multiRemove(allKeys);
+}

@@ -89,4 +89,19 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function deleteUserByOpenId(openId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn('[Database] Cannot delete user: database not available');
+    return;
+  }
+  try {
+    await db.delete(users).where(eq(users.openId, openId));
+    console.log('[Database] User deleted:', openId);
+  } catch (error) {
+    console.error('[Database] Failed to delete user:', error);
+    throw error;
+  }
+}
+
 // TODO: add feature queries here as your schema grows.

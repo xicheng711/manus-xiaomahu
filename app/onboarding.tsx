@@ -885,7 +885,7 @@ export default function OnboardingScreen() {
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
             <View style={styles.stepContainer}>
               <Text style={styles.title}>🌿 主要护理需求</Text>
-              <Text style={styles.subtitle}>{`选择与${elderNickname || elderName || '宝贝'}相关的护理需求\n可多选，AI 将根据这些给出更准确的建议`}</Text>
+              <Text style={styles.subtitle}>{`选择与${elderNickname || elderName || '宝贝'}相关的护理需求\n可多选，系统将根据这些给出更准确的护理建议`}</Text>
               <View style={styles.careNeedsGrid}>
                 {CARE_NEED_OPTIONS.map(opt => {
                   const selected = selectedCareNeeds.includes(opt.id);
