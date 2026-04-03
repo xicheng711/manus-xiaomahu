@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 import { useWeather } from '@/lib/weather-context';
+import { useFamilyContext } from '@/lib/family-context';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -644,6 +645,8 @@ export default function ShareScreen() {
   const [yesterdayCi, setYesterdayCi] = useState<DailyCheckIn | null>(null);
   const [viewMode, setViewMode] = useState<'today' | 'yesterday'>('today');
   const { weatherData } = useWeather();
+  const { activeMembership } = useFamilyContext();
+  const isJoiner = activeMembership?.role === 'joiner';
   const cardRef = useRef<View>(null);
   const sharePulse = useRef(new Animated.Value(1)).current;
 
@@ -987,7 +990,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
           <View style={styles.errorBox}>
             <Text style={styles.errorEmoji}>😅</Text>
             <Text style={styles.errorText}>{error}</Text>
-            {error.includes('打卡') && (
+            {error.includes('打卡') && !isJoiner && (
               <TouchableOpacity style={styles.checkinBtn} onPress={() => router.push('/(tabs)/checkin' as any)}>
                 <Text style={styles.checkinBtnText}>去打卡 →</Text>
               </TouchableOpacity>
@@ -1011,7 +1014,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
               />
             </View>
 
-            {!params.date && !(yesterdayCi?.eveningDone) && (
+            {!params.date && !(yesterdayCi?.eveningDone) && !isJoiner && (
               <View style={styles.backfillNotice}>
                 <Text style={styles.backfillText}>缺少昨晚记录</Text>
                 <TouchableOpacity onPress={() => {
@@ -1066,7 +1069,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             </TouchableOpacity>
 
             {/* ── Family Sync Notice ── */}
-            {!params.date && <Text style={styles.familySyncNotice}>今日记录已自动同步到家庭空间</Text>}
+            {!params.date && !isJoiner && <Text style={styles.familySyncNotice}>今日记录已自动同步到家庭空间</Text>}
 
             <View style={styles.disclaimer}>
               <Text style={styles.disclaimerText}>由小马虎整理 · 仅供参考</Text>

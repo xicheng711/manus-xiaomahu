@@ -106,8 +106,8 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen name="index"      options={{ title: "首页",    tabBarIcon: ({ focused }) => <TabIcon route="index"      focused={focused} isJoiner={isJoiner} /> }} />
-      <Tabs.Screen name="checkin"    options={{ title: "每日打卡", tabBarIcon: ({ focused }) => <TabIcon route="checkin"    focused={focused} isJoiner={isJoiner} /> }} />
-      <Tabs.Screen name="medication" options={{ title: "用药记录", tabBarIcon: ({ focused }) => <TabIcon route="medication" focused={focused} isJoiner={isJoiner} /> }} />
+      <Tabs.Screen name="checkin"    options={{ title: "每日打卡", tabBarIcon: ({ focused }) => <TabIcon route="checkin"    focused={focused} isJoiner={isJoiner} />, ...(isJoiner ? { tabBarButton: () => <View style={styles.disabledTabBtn}><TabIcon route="checkin" focused={false} isJoiner={isJoiner} /></View> } : {}) }} />
+      <Tabs.Screen name="medication" options={{ title: "用药记录", tabBarIcon: ({ focused }) => <TabIcon route="medication" focused={focused} isJoiner={isJoiner} />, ...(isJoiner ? { tabBarButton: () => <View style={styles.disabledTabBtn}><TabIcon route="medication" focused={false} isJoiner={isJoiner} /></View> } : {}) }} />
       <Tabs.Screen name="diary"      options={{ title: "日记",    tabBarIcon: ({ focused }) => <TabIcon route="diary"      focused={focused} isJoiner={isJoiner} /> }} />
       <Tabs.Screen name="family"     options={{ title: "家人共享", tabBarIcon: ({ focused }) => <TabIcon route="family"     focused={focused} isJoiner={isJoiner} /> }} />
     </Tabs>
@@ -154,5 +154,12 @@ const styles = StyleSheet.create({
   },
   tabLabelFaded: {
     color: AppColors.text.tertiary,
+  },
+  disabledTabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 58,
+    opacity: 0.3,
   },
 });
