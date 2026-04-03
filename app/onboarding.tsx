@@ -431,7 +431,7 @@ export default function OnboardingScreen() {
 
         {/* STEP 0: Welcome */}
         {step === 0 && (
-          <View style={styles.stepContainer}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.stepContainer}>
             <View style={styles.welcomeIconWrap}>
               <LinearGradient
                 colors={[...Gradients.appBg]}
@@ -475,7 +475,7 @@ export default function OnboardingScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </ScrollView>
         )}
 
         {/* STEP 1: Role Selection — Figma design */}
