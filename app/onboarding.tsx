@@ -428,10 +428,16 @@ export default function OnboardingScreen() {
       </View>
 
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          onScrollBeginDrag={Keyboard.dismiss}
+          contentContainerStyle={styles.scrollContent}
+        >
 
         {/* STEP 0: Welcome */}
         {step === 0 && (
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={styles.stepContainer}>
+          <View style={styles.stepContainer}>
             <View style={styles.welcomeIconWrap}>
               <LinearGradient
                 colors={[...Gradients.appBg]}
@@ -451,7 +457,7 @@ export default function OnboardingScreen() {
             <Text style={styles.welcomeCta}>让我们先认识一下吧 😊</Text>
             <View style={styles.featureGrid}>
               {[
-                { icon: '🌅', label: '每日护理', desc: '贴心建议', gradient: ['rgba(255,237,213,0.7)', 'rgba(255,228,196,0.4)'] as const },
+                { icon: '🩺', label: '每日记录', desc: '打卡记载', gradient: ['rgba(255,237,213,0.7)', 'rgba(255,228,196,0.4)'] as const },
                 { icon: '💊', label: '用药管理', desc: '按时提醒', gradient: ['rgba(219,234,254,0.7)', 'rgba(191,219,254,0.4)'] as const },
                 { icon: '📔', label: '护理日记', desc: '智能陪伴', gradient: ['rgba(243,232,255,0.7)', 'rgba(233,213,255,0.4)'] as const },
                 { icon: '🤝', label: '家庭共享', desc: '全家守护', gradient: ['rgba(209,250,229,0.7)', 'rgba(187,247,208,0.4)'] as const },
@@ -475,7 +481,7 @@ export default function OnboardingScreen() {
                 </View>
               ))}
             </View>
-          </ScrollView>
+          </View>
         )}
 
         {/* STEP 1: Role Selection — Figma design */}
@@ -580,8 +586,7 @@ export default function OnboardingScreen() {
 
         {/* STEP 2: Elder info (Creator only) */}
         {step === 2 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
-            <View style={styles.stepContainer}>
+          <View style={styles.stepContainer}>
               <View style={styles.avatarSection}>
                 <TouchableOpacity style={styles.avatarCircle} onPress={pickElderPhoto}>
                   {elderAvatarType === 'photo' && elderPhotoUri ? (
@@ -662,13 +667,11 @@ export default function OnboardingScreen() {
                 </View>
               </View>
             </View>
-          </ScrollView>
         )}
 
         {/* STEP 3: Caregiver info (Creator only) */}
         {step === 3 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
-            <View style={styles.stepContainer}>
+          <View style={styles.stepContainer}>
               {/* Avatar selection */}
               <View style={styles.avatarSection}>
                 <TouchableOpacity style={styles.avatarCircle} onPress={pickCaregiverPhoto}>
@@ -726,7 +729,6 @@ export default function OnboardingScreen() {
                 </View>
               </View>
             </View>
-          </ScrollView>
         )}
 
         {/* STEP 4: City (Creator only) */}
@@ -764,8 +766,7 @@ export default function OnboardingScreen() {
 
         {/* STEP 5: Medications (Creator only) */}
         {step === 5 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
-            <View style={styles.stepContainer}>
+          <View style={styles.stepContainer}>
               <Text style={styles.mascot}>💊</Text>
               <Text style={styles.title}>添加常用药物</Text>
               <Text style={styles.subtitle}>
@@ -877,13 +878,11 @@ export default function OnboardingScreen() {
                 <Text style={styles.skipHint}>也可以跳过，之后在用药页面添加</Text>
               )}
             </View>
-          </ScrollView>
         )}
 
         {/* STEP 6: Care Needs (Creator only) */}
         {step === 6 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-            <View style={styles.stepContainer}>
+          <View style={styles.stepContainer}>
               <Text style={styles.title}>🌿 主要护理需求</Text>
               <Text style={styles.subtitle}>{`选择与${elderNickname || elderName || '宝贝'}相关的护理需求\n可多选，系统将根据这些给出更准确的护理建议`}</Text>
               <View style={styles.careNeedsGrid}>
@@ -911,13 +910,10 @@ export default function OnboardingScreen() {
               {selectedCareNeeds.length === 0 && (
                 <Text style={styles.careNeedsSkipHint}>不确定可以跳过，后续在设置中添加</Text>
               )}
-            </View>
-          </ScrollView>
+          </View>
         )}
 
-        {/* ══════════════════════════════════════════════
-            JOINER PATH: Step 2 – Enter shared room code
-            ══════════════════════════════════════════════ */}
+        {/* JOINER PATH: Step 2 – Enter shared room code */}
         {step === 2 && userType === 'joiner' && (
           <View style={styles.stepContainer}>
             <Text style={styles.mascot}>🔗</Text>
@@ -1007,8 +1003,7 @@ export default function OnboardingScreen() {
             JOINER PATH: Step 4 – Identity (name + avatar + photo)
             ══════════════════════════════════════════════ */}
         {step === 4 && userType === 'joiner' && (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-            <View style={styles.stepContainer}>
+          <View style={styles.stepContainer}>
               {/* Avatar preview circle with upload tap */}
               <TouchableOpacity onPress={pickJoinerPhoto} activeOpacity={0.82} style={styles.joinerAvatarWrap}>
                 <LinearGradient colors={['#F9A8D4', '#FB7185']} style={styles.joinerAvatarCircle}>
@@ -1068,12 +1063,10 @@ export default function OnboardingScreen() {
                 </TouchableOpacity>
               )}
             </View>
-          </ScrollView>
         )}
 
         {/* STEP 7: Invite Code + Done (Creator only) */}
         {step === 7 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
           <View style={styles.stepContainer}>
             <Image source={require('../assets/images/icon.png')} style={styles.mascotImgSm} />
             <Text style={styles.title}>一切准备就绪！</Text>
@@ -1154,8 +1147,9 @@ export default function OnboardingScreen() {
               </View>
             </View>
           </View>
-          </ScrollView>
         )}
+
+        </ScrollView>
       </Animated.View>
 
       {/* Navigation buttons */}
@@ -1205,8 +1199,9 @@ const styles = StyleSheet.create({
   sparklePink: { backgroundColor: '#FCA5A5', width: 8, height: 8, borderRadius: 4 },
   sparkleTopRight: { top: -4, right: -4 },
   sparkleBottomLeft: { bottom: -8, left: -8 },
-  content: { flex: 1, paddingHorizontal: 24 },
-  stepContainer: { alignItems: 'center', paddingBottom: 24 },
+  content: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 32 },
+  stepContainer: { alignItems: 'center', paddingTop: 8 },
   mascot: { fontSize: 64, marginBottom: 16, marginTop: 8 },
   mascotImg: { width: 100, height: 100 },
   mascotImgSm: { width: 90, height: 90, marginBottom: 16, marginTop: 8 },
