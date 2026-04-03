@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Platform, Alert, Animated, Share, ActivityIndicator,
-  TextInput,
+  TextInput, Keyboard,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
@@ -35,7 +35,7 @@ export default function DiaryDetailScreen() {
   const [followUpHistory, setFollowUpHistory] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
   const [followUpInput, setFollowUpInput] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
-  const followUpMutation = trpc.ai.followUpDiary.useMutation();
+  const followUpMutation = trpc.smart.followUpDiary.useMutation();
 
   useEffect(() => {
     loadData();
@@ -68,21 +68,28 @@ export default function DiaryDetailScreen() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setFollowUpInput('');
     setFollowUpLoading(true);
+    // 先构建包含本次用户消息的完整历史
     const newHistory = [...followUpHistory, { role: 'user' as const, text: q }];
     setFollowUpHistory(newHistory);
     try {
+      // 传递历史时跳过最后一条（本次用户消息），由 question 字段单独传递
+      const historyForApi = followUpHistory.map(m => ({
+        role: (m.role === 'ai' ? 'ai' : 'user') as 'user' | 'ai',
+        text: m.text,
+      }));
       const result = await followUpMutation.mutateAsync({
         elderNickname,
         caregiverName,
         originalContent: entry.content || '',
         originalMood: entry.moodEmoji || '',
-        originalAiReply: entry.aiReply || '',
-        history: followUpHistory,
+        originalSmartReply: entry.smartReply || '',
+        history: historyForApi,
         question: q,
       });
       setFollowUpHistory([...newHistory, { role: 'ai' as const, text: result.reply }]);
-    } catch {
-      setFollowUpHistory([...newHistory, { role: 'ai' as const, text: '抱歉，暂时无法回复，请稍后重试' }]);
+    } catch (err) {
+      console.error('diary-detail followUp error:', err);
+      setFollowUpHistory([...newHistory, { role: 'ai' as const, text: '网络有点不稳定，请稍后再试一下 🙏' }]);
     } finally {
       setFollowUpLoading(false);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
@@ -105,11 +112,11 @@ export default function DiaryDetailScreen() {
     if (entry.content) {
       lines.push('', `📝 ${entry.content}`);
     }
-    if (entry.aiReply) {
-      lines.push('', `🩺 AI 护理顾问回复：`, entry.aiReply);
+    if (entry.smartReply) {
+      lines.push('', `🩺 小马虎回复：`, entry.smartReply);
     }
-    if (entry.aiTip) {
-      lines.push('', `💡 小贴士：${entry.aiTip}`);
+    if (entry.smartTip) {
+      lines.push('', `💡 小贴士：${entry.smartTip}`);
     }
     lines.push('', '—— 来自小马虎 🐴🐯 护理助手');
 
@@ -155,7 +162,7 @@ export default function DiaryDetailScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* Header */}
           <View style={styles.header}>
@@ -214,10 +221,10 @@ export default function DiaryDetailScreen() {
             </View>
           )}
 
-          {/* AI Reply — WeChat chat bubble style */}
-          {entry.aiReply ? (
+          {/* 智能回复 — 微信聊天气泡样式 */}
+          {entry.smartReply ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💬 小马虎对话</Text>
+              <Text style={styles.sectionTitle}>💬 智能对话</Text>
               <View style={styles.chatBox}>
                 {/* User bubble: diary content */}
                 <View style={styles.bubbleRowRight}>
@@ -227,22 +234,22 @@ export default function DiaryDetailScreen() {
                     </Text>
                   </View>
                 </View>
-                {/* AI name row */}
-                <View style={styles.aiNameRow}>
-                  <View style={styles.aiAvatarCircle}>
-                    <Text style={styles.aiAvatarEmoji}>🩺</Text>
+                {/* 智能助手名称行 */}
+                <View style={styles.smartNameRow}>
+                  <View style={styles.smartAvatarCircle}>
+                    <Text style={styles.smartAvatarEmoji}>🩺</Text>
                   </View>
-                  <Text style={styles.aiName}>小马虎陪伴您</Text>
-                  <Text style={styles.aiBadge}>小马虎</Text>
+                  <Text style={styles.smartName}>小马虎</Text>
+                  <Text style={styles.smartBadge}>护理助手</Text>
                 </View>
-                {/* AI blue bubble */}
+                {/* 智能助手气泡 */}
                 <View style={styles.bubbleRowLeft}>
                   <View style={styles.bubbleBlue}>
-                    <Text style={styles.bubbleBlueText}>{entry.aiReply}</Text>
-                    {entry.aiTip ? (
-                      <View style={styles.aiTipBox}>
-                        <Text style={styles.aiTipIcon}>💡</Text>
-                        <Text style={styles.aiTipText}>{entry.aiTip}</Text>
+                    <Text style={styles.bubbleBlueText}>{entry.smartReply}</Text>
+                    {entry.smartTip ? (
+                      <View style={styles.smartTipBox}>
+                        <Text style={styles.smartTipIcon}>💡</Text>
+                        <Text style={styles.smartTipText}>{entry.smartTip}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -251,18 +258,18 @@ export default function DiaryDetailScreen() {
             </View>
           ) : (
             <View style={styles.section}>
-              <View style={styles.noAiCard}>
-                <Text style={styles.noAiEmoji}>🩺</Text>
-                <Text style={styles.noAiText}>这条日记还没有 AI 回复</Text>
-                <Text style={styles.noAiHint}>新写的日记会自动获得 AI 回复</Text>
+              <View style={styles.noSmartCard}>
+                <Text style={styles.noSmartEmoji}>🩺</Text>
+                <Text style={styles.noSmartText}>这条日记还没有智能回复</Text>
+                <Text style={styles.noSmartHint}>新写的日记会自动获得智能回复</Text>
               </View>
             </View>
           )}
 
-          {/* Follow-up AI Chat */}
-          {entry.aiReply && (
+          {/* 继续追问智能助手 */}
+          {entry.smartReply && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💬 继续追问 AI</Text>
+              <Text style={styles.sectionTitle}>💬 继续向小马虎追问</Text>
               <View style={styles.chatBox}>
                 {followUpHistory.map((msg, i) => (
                   msg.role === 'user' ? (
@@ -273,11 +280,11 @@ export default function DiaryDetailScreen() {
                     </View>
                   ) : (
                     <View key={i}>
-                      <View style={styles.aiNameRow}>
-                        <View style={styles.aiAvatarCircle}>
-                          <Text style={styles.aiAvatarEmoji}>🩺</Text>
+                      <View style={styles.smartNameRow}>
+                        <View style={styles.smartAvatarCircle}>
+                          <Text style={styles.smartAvatarEmoji}>🩺</Text>
                         </View>
-                        <Text style={styles.aiName}>小马虎陪伴您</Text>
+                        <Text style={styles.smartName}>小马虎</Text>
                       </View>
                       <View style={styles.bubbleRowLeft}>
                         <View style={styles.bubbleBlue}>
@@ -288,9 +295,9 @@ export default function DiaryDetailScreen() {
                   )
                 ))}
                 {followUpLoading && (
-                  <View style={styles.aiNameRow}>
-                    <View style={styles.aiAvatarCircle}>
-                      <Text style={styles.aiAvatarEmoji}>🩺</Text>
+                  <View style={styles.smartNameRow}>
+                    <View style={styles.smartAvatarCircle}>
+                      <Text style={styles.smartAvatarEmoji}>🩺</Text>
                     </View>
                     <ActivityIndicator size="small" color={AppColors.purple.strong} style={{ marginLeft: 8 }} />
                     <Text style={{ fontSize: 13, color: AppColors.text.tertiary, marginLeft: 6 }}>正在思考中...</Text>
@@ -302,7 +309,7 @@ export default function DiaryDetailScreen() {
                   style={styles.followUpInput}
                   value={followUpInput}
                   onChangeText={setFollowUpInput}
-                  placeholder="追问 AI，如：这种情况怎么处理？"
+                  placeholder="向小马虎追问，如：这种情况怎么处理？"
                   placeholderTextColor={AppColors.text.tertiary}
                   returnKeyType="send"
                   onSubmitEditing={handleFollowUp}
@@ -426,36 +433,30 @@ const styles = StyleSheet.create({
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
   bubbleBlueText: { fontSize: 15, color: AppColors.text.primary, lineHeight: 24 },
-  aiNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
 
-  aiCard: {
-    backgroundColor: '#F0F7EE', borderRadius: 20, padding: 18,
-    borderWidth: 1, borderColor: '#D4E8D4',
-  },
-  aiHeader: { flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 14 },
-  aiAvatarCircle: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: '#DCFCE7',
+  // 智能助手名称行
+  smartNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  smartAvatarCircle: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#DCFCE7',
     alignItems: 'center', justifyContent: 'center',
   },
-  aiAvatarEmoji: { fontSize: 22 },
-  aiName: { fontSize: 15, fontWeight: '700', color: '#1A5C1A' },
-  aiBadge: { fontSize: 11, color: '#6C9E6C', marginTop: 2 },
-  aiText: { fontSize: 15, color: AppColors.text.primary, lineHeight: 25, marginBottom: 12 },
-  aiTipBox: {
+  smartAvatarEmoji: { fontSize: 16 },
+  smartName: { fontSize: 13, fontWeight: '700', color: AppColors.text.primary },
+  smartBadge: { fontSize: 11, color: AppColors.text.tertiary, marginLeft: 4 },
+  smartTipBox: {
     flexDirection: 'row', gap: 8, backgroundColor: '#DCFCE7', borderRadius: 14,
-    padding: 14, alignItems: 'center', marginBottom: 8,
+    padding: 12, alignItems: 'center', marginTop: 10,
   },
-  aiTipIcon: { fontSize: 16 },
-  aiTipText: { flex: 1, fontSize: 13, color: '#166534', fontWeight: '500', lineHeight: 20 },
-  aiEmoji: { fontSize: 32, textAlign: 'center', marginTop: 4 },
+  smartTipIcon: { fontSize: 16 },
+  smartTipText: { flex: 1, fontSize: 13, color: '#166534', fontWeight: '500', lineHeight: 20 },
 
-  noAiCard: {
+  noSmartCard: {
     backgroundColor: AppColors.bg.secondary, borderRadius: 20, padding: 24, alignItems: 'center',
     borderWidth: 1, borderColor: AppColors.border.soft,
   },
-  noAiEmoji: { fontSize: 32, marginBottom: 8 },
-  noAiText: { fontSize: 14, color: AppColors.text.tertiary, fontWeight: '600' },
-  noAiHint: { fontSize: 12, color: AppColors.text.tertiary, marginTop: 4 },
+  noSmartEmoji: { fontSize: 32, marginBottom: 8 },
+  noSmartText: { fontSize: 14, color: AppColors.text.tertiary, fontWeight: '600' },
+  noSmartHint: { fontSize: 12, color: AppColors.text.tertiary, marginTop: 4 },
 
   followUpRow: {
     flexDirection: 'row', gap: 10, marginTop: 12, alignItems: 'center',

@@ -164,6 +164,9 @@ export interface DiaryEntry {
   aiReply?: string;
   aiEmoji?: string;
   aiTip?: string;
+  // Smart reply fields (new naming, maps to aiReply/aiTip)
+  smartReply?: string;
+  smartTip?: string;
   // Multi-turn conversation history (new in v3.0)
   conversation?: ConversationMessage[];
   conversationFinished?: boolean; // true when user tapped "End and Save"
@@ -359,6 +362,7 @@ export async function getWeeklySleepData(days = 7): Promise<Array<{
   sleepSegments: SleepSegment[];
   nightWakings: number;
   daytimeNap: boolean;
+  napMinutes: number;
   hasMorningData: boolean;
 }>> {
   const all = await getAllCheckIns();
@@ -370,6 +374,7 @@ export async function getWeeklySleepData(days = 7): Promise<Array<{
     sleepSegments: SleepSegment[];
     nightWakings: number;
     daytimeNap: boolean;
+    napMinutes: number;
     hasMorningData: boolean;
   }> = [];
   const today = new Date();
@@ -388,6 +393,7 @@ export async function getWeeklySleepData(days = 7): Promise<Array<{
       sleepSegments: checkin?.sleepSegments ?? [],
       nightWakings: checkin?.nightWakings ?? 0,
       daytimeNap: checkin?.daytimeNap ?? false,
+      napMinutes: checkin?.napMinutes ?? (checkin?.daytimeNap ? 30 : 0),
       hasMorningData: checkin?.morningDone ?? false,
     });
   }

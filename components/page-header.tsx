@@ -9,7 +9,7 @@ export type PageTheme = {
 };
 
 export const PAGE_THEMES: Record<string, PageTheme> = {
-  checkin:    { emoji: '✨', gradient: [Gradients.green[0], Gradients.green[1], AppColors.green.strong], title: '每日打卡' },
+  checkin:    { emoji: '✅', gradient: [Gradients.green[0], Gradients.green[1], AppColors.green.strong], title: '每日打卡' },
   medication: { emoji: '💊', gradient: [Gradients.coral[0], Gradients.coral[1], AppColors.coral.primary], title: '用药管理' },
   diary:      { emoji: '📔', gradient: [Gradients.purple[0], Gradients.purple[1], AppColors.purple.strong], title: '护理日记' },
   family:     { emoji: '👥', gradient: [Gradients.navActive[0], Gradients.navActive[1], '#B8426A'], title: '家人共享' },

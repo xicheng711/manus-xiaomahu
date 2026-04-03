@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Animated, Dimensions, Platform, Image,
+  StyleSheet, Animated, Dimensions, Platform, Image, Keyboard,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -580,7 +580,7 @@ export default function OnboardingScreen() {
 
         {/* STEP 2: Elder info (Creator only) */}
         {step === 2 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
             <View style={styles.stepContainer}>
               <View style={styles.avatarSection}>
                 <TouchableOpacity style={styles.avatarCircle} onPress={pickElderPhoto}>
@@ -667,7 +667,7 @@ export default function OnboardingScreen() {
 
         {/* STEP 3: Caregiver info (Creator only) */}
         {step === 3 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
             <View style={styles.stepContainer}>
               {/* Avatar selection */}
               <View style={styles.avatarSection}>
@@ -764,7 +764,7 @@ export default function OnboardingScreen() {
 
         {/* STEP 5: Medications (Creator only) */}
         {step === 5 && userType === 'creator' && (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
             <View style={styles.stepContainer}>
               <Text style={styles.mascot}>💊</Text>
               <Text style={styles.title}>添加常用药物</Text>
@@ -1080,8 +1080,7 @@ export default function OnboardingScreen() {
             <Text style={styles.subtitle}>
               小马虎已经了解了{'\n'}
               {elderNickname || elderName || '宝贝'} {elderZodiac.emoji} 和 {caregiverName} {caregiverZodiac.emoji}{'\n\n'}
-              每天只需几分钟打卡{'\n'}
-              小马虎为您提供专业护理建议 💕
+              {'用心记录每一天，小马虎陪伴您的护理时光 💕'}
             </Text>
 
             {/* Invite Code Banner */}

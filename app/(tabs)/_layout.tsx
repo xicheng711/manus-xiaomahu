@@ -12,7 +12,7 @@ const TAB_CONFIG: Record<string, {
   label: string;
 }> = {
   index:      { emoji: "🏠", gradient: Gradients.coral,      label: "首页" },
-  checkin:    { emoji: "✨", gradient: Gradients.green,       label: "每日打卡" },
+  checkin:    { emoji: "✅", gradient: Gradients.green,       label: "每日打卡" },
   medication: { emoji: "💊", gradient: Gradients.peach,       label: "用药记录" },
   diary:      { emoji: "📔", gradient: Gradients.purple,      label: "日记" },
   family:     { emoji: "👥", gradient: Gradients.navActive,   label: "家人共享" },
@@ -56,7 +56,7 @@ function TabIcon({
         styles.tabLabel,
         showActive && { color: cfg.gradient[0], fontWeight: "600" as const },
         !accessible && styles.tabLabelFaded,
-      ]}>
+      ]} numberOfLines={1}>
         {cfg.label}
       </Text>
     </View>
@@ -66,7 +66,10 @@ function TabIcon({
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const safeBottom = Platform.OS === "web" ? 0 : insets.bottom;
-  const tabBarHeight = 80 + safeBottom;
+
+  // TabBar 可见内容高度固定 58px，安全区额外追加
+  const TAB_CONTENT_HEIGHT = 58;
+  const tabBarHeight = TAB_CONTENT_HEIGHT + safeBottom;
 
   const { activeMembership } = useFamilyContext();
   const isJoiner = activeMembership?.role === "joiner";
@@ -79,8 +82,9 @@ export default function TabLayout() {
         tabBarShowLabel: false,
         tabBarStyle: {
           height: tabBarHeight,
+          // 顶部留 4px，底部留安全区（不额外加空白）
+          paddingTop: 4,
           paddingBottom: safeBottom,
-          paddingTop: 10,
           paddingHorizontal: 4,
           backgroundColor: AppColors.surface.whiteStrong,
           borderTopWidth: 0,
@@ -95,7 +99,8 @@ export default function TabLayout() {
         },
         tabBarItemStyle: {
           paddingVertical: 0,
-          height: "100%",
+          height: TAB_CONTENT_HEIGHT,
+          alignItems: "center",
           justifyContent: "center",
         },
       }}
@@ -115,9 +120,9 @@ const styles = StyleSheet.create({
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 3,
     flex: 1,
-    minWidth: 64,
+    minWidth: 56,
   },
   tabItemFaded: {
     opacity: 0.2,
@@ -142,10 +147,10 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "400",
     color: AppColors.text.tertiary,
-    letterSpacing: 0.3,
+    letterSpacing: 0,
   },
   tabLabelFaded: {
     color: AppColors.text.tertiary,

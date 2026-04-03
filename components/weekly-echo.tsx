@@ -1,6 +1,6 @@
 /**
  * WeeklyEcho — 时光回音
- * A postcard-style AI weekly summary card that appears on Sunday evenings.
+ * 一张明信片风格的智能每周总结卡片，在周日晚上出现。
  * Shows a warm, personalized reflection of the week's care journey.
  */
 import React, { useState, useRef, useEffect } from 'react';
@@ -77,7 +77,7 @@ export function WeeklyEcho({ caregiverName, elderNickname, forceShow = false }: 
   const shimmerAnim = useRef(new Animated.Value(-1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
 
-  const weeklyEchoMutation = trpc.ai.weeklyEcho.useMutation();
+  const weeklyEchoMutation = trpc.smart.weeklyEcho.useMutation();
 
   useEffect(() => {
     const floatLoop = Animated.loop(

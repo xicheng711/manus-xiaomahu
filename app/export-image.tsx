@@ -160,7 +160,7 @@ function LongImageCard({
       {briefing?.summary && (
         <>
           <View style={imgStyles.divider} />
-          <Text style={imgStyles.sectionTitle}>🤖 AI 状态总结</Text>
+          <Text style={imgStyles.sectionTitle}>📋 智能状态总结</Text>
           <View style={imgStyles.aiBox}>
             <Text style={imgStyles.aiText}>{briefing.summary}</Text>
           </View>
@@ -412,7 +412,7 @@ export default function ExportImageScreen() {
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingEmoji}>🖼️</Text>
           <Text style={styles.loadingTitle}>正在生成简报长图...</Text>
-          <Text style={styles.loadingSub}>AI 正在为您准备精美简报</Text>
+          <Text style={styles.loadingSub}>智能助手正在为您准备精美简报</Text>
           <ActivityIndicator color={AppColors.green.muted} size="large" style={{ marginTop: 20 }} />
         </View>
       </ScreenContainer>

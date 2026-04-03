@@ -203,10 +203,6 @@ export function buildGreetingWithWeather(
   else if (hour >= 18 && hour < 21) base = `${prefix}晚上好`;
   else base = `${prefix}夜深了，注意休息`;
 
-  if (!weather) {
-    return base;
-  }
-
-  const cityStr = weather.city ? `${weather.city} ` : '';
-  return `${base}${cityStr}${weather.emoji} ${weather.description} ${weather.temp}°C`;
+  // 天气信息已在右上角显示，问候语不重复展示天气
+  return base;
 }

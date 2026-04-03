@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   ScrollView, View, Text, TouchableOpacity, Modal, TextInput,
-  StyleSheet, Dimensions, Animated, Easing, Platform, Image,
+  StyleSheet, Dimensions, Animated, Easing, Platform, Image, Keyboard, KeyboardAvoidingView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
@@ -104,7 +104,7 @@ function EnhancedCheckinBanner({
   ).current;
 
   // 星星位置固定（不在渲染时用 Math.random）
-  const starPositions = useMemo(() => [
+  const starPositions: Array<{ top: string | number; left: string | number }> = useMemo(() => [
     { top: '22%', left: '18%' }, { top: '55%', left: '64%' },
     { top: '28%', left: '78%' }, { top: '68%', left: '38%' },
   ], []);
@@ -237,8 +237,8 @@ function EnhancedCheckinBanner({
   );
 }
 
-// ─── AI 卡片：增强版 ────────────────────────────────────────────────
-function EnhancedAICard({
+// ─── 智能卡片：增强版 ────────────────────────────────────────────────
+function EnhancedSmartCard({
   morningDone, encouragement, motivation, onPress, onCheckinPress,
 }: {
   morningDone: boolean; encouragement: string; motivation: string;
@@ -271,7 +271,7 @@ function EnhancedAICard({
 
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.88}>
-      <Animated.View style={[styles.aiCard, { transform: [{ scale: scaleAnim }] }]}>
+      <Animated.View style={[styles.smartCard, { transform: [{ scale: scaleAnim }] }]}>
         <LinearGradient
           colors={['rgba(240,236,248,0.75)', 'rgba(232,226,244,0.45)']}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -413,7 +413,7 @@ function getMoodLabel(score: number): string {
   return '需要关注';
 }
 
-function getPersonalizedAISuggestion(checkIn: DailyCheckIn): string {
+function getPersonalizedSmartSuggestion(checkIn: DailyCheckIn): string {
   const { moodScore, sleepHours, medicationTaken, nightWakings } = checkIn;
   const observations: string[] = [];
 
@@ -547,7 +547,7 @@ function CreatorHomeScreen() {
   const todayDone = morningDone;
 
   const encouragement = morningDone
-    ? getPersonalizedAISuggestion(todayCheckIn!)
+    ? getPersonalizedSmartSuggestion(todayCheckIn!)
     : '完成打卡后，自动整理今日照护数据';
 
   const quickActions = [
@@ -559,11 +559,15 @@ function CreatorHomeScreen() {
 
   return (
     <View style={styles.root}>
+      {/* 渐变背景延伸到全屏（包含状态栏区域） */}
       <LinearGradient
         colors={[...Gradients.appBg]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
+
+      {/* SafeAreaView 确保内容在状态栏下方，不被遗挡 */}
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
 
       {/* ── 背景装饰层（不干扰交互）── */}
       <View style={styles.bgDecorLayer} pointerEvents="none">
@@ -571,16 +575,18 @@ function CreatorHomeScreen() {
         <FloatingCloud top={62} left={-10} delay={0} />
         <FloatingCloud top={42} left={width * 0.38} delay={600} />
         <FloatingCloud top={78} left={width * 0.68} delay={1200} />
-        {/* ✦ 闪光 */}
+        {/* ✶ 闪光 */}
         <FloatingSparkle top={28} left={width * 0.18} delay={400} size={9} />
         <FloatingSparkle top={72} left={width * 0.54} delay={900} size={7} />
         <FloatingSparkle top={108} left={width * 0.82} delay={1600} size={8} />
       </View>
 
       <ScrollView
-        style={[styles.container, { paddingTop: insets.top }]}
+        style={styles.container}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={Keyboard.dismiss}
       >
         {/* ── 顶部 Header ── */}
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
@@ -609,7 +615,7 @@ function CreatorHomeScreen() {
 
             {/* 标题 + 问候 */}
             <View style={styles.appNameRow}>
-              <Text style={styles.appName}>今日照护总览</Text>
+              <Text style={styles.appName}>一起照顾好每一天</Text>
             </View>
             {memberships.length > 0 && (
               <TouchableOpacity
@@ -660,8 +666,8 @@ function CreatorHomeScreen() {
           onPress={() => router.push('/checkin' as any)}
         />
 
-        {/* ── AI 卡片 ── */}
-        <EnhancedAICard
+         {/* ── 智能卡片 ── */}
+         <EnhancedSmartCard
           morningDone={morningDone}
           encouragement={encouragement}
           motivation={getDailyStatusHint(todayCheckIn)}
@@ -703,8 +709,9 @@ function CreatorHomeScreen() {
           </View>
         </View>
 
-        <View style={{ height: 32 }} />
       </ScrollView>
+
+      </SafeAreaView>
 
       {/* Family Switcher Modal */}
       <Modal visible={showSwitcher} transparent animationType="fade" onRequestClose={() => setShowSwitcher(false)}>
@@ -768,8 +775,9 @@ function CreatorHomeScreen() {
 
       {/* Join Family Sheet */}
       <Modal visible={showJoinSheet} transparent animationType="slide" onRequestClose={() => setShowJoinSheet(false)}>
-        <TouchableOpacity style={switStyles.overlay} activeOpacity={1} onPress={() => setShowJoinSheet(false)}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[switStyles.sheet, { paddingBottom: 48 }]}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={switStyles.overlay} activeOpacity={1} onPress={() => { setShowJoinSheet(false); Keyboard.dismiss(); }}>
+            <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[switStyles.sheet, { paddingBottom: 48 }]}>
             <Text style={switStyles.title}>加入已有家庭</Text>
             <Text style={{ fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 }}>
               请输入家庭管理员分享的邀请码
@@ -817,8 +825,9 @@ function CreatorHomeScreen() {
             <TouchableOpacity onPress={() => setShowJoinSheet(false)} style={{ marginTop: 12, alignItems: 'center' }}>
               <Text style={{ fontSize: 14, color: AppColors.text.tertiary }}>取消</Text>
             </TouchableOpacity>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -847,8 +856,9 @@ const switStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  safeArea: { flex: 1 },
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { paddingHorizontal: 22, paddingBottom: 28 },
+  content: { paddingHorizontal: 22, paddingBottom: 8 },
 
   bgDecorLayer: { position: 'absolute', top: 0, left: 0, right: 0, height: 220, overflow: 'hidden' },
 
@@ -869,7 +879,7 @@ const styles = StyleSheet.create({
   weatherTemp: { fontSize: 13, fontWeight: '700', color: AppColors.text.primary, lineHeight: 16 },
   weatherDesc: { fontSize: 10, color: AppColors.text.tertiary, lineHeight: 13 },
   appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  appName: { fontSize: 24, fontWeight: '900', color: AppColors.text.primary, letterSpacing: -0.5 },
+  appName: { fontSize: 24, fontWeight: '900', color: AppColors.coral.primary, letterSpacing: -0.5 },
   greeting: { fontSize: 13, color: AppColors.text.tertiary, fontWeight: '500', lineHeight: 20 },
   profileBtn: { width: 50, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 },
   profileGradient: { width: 50, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
@@ -900,8 +910,8 @@ const styles = StyleSheet.create({
   chevronCircleDone: { width: 30, height: 30, borderRadius: 15, backgroundColor: AppColors.green.primary + '25', alignItems: 'center', justifyContent: 'center' },
   careScoreBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, backgroundColor: AppColors.green.primary + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, alignSelf: 'flex-start' },
 
-  // AI 卡片
-  aiCard: {
+  // 智能卡片
+  smartCard: {
     marginBottom: 18, backgroundColor: 'transparent', borderRadius: 22,
     padding: 16, borderWidth: 1, borderColor: AppColors.border.glass,
     overflow: 'hidden',
@@ -959,7 +969,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 14,
     backgroundColor: AppColors.surface.card, borderRadius: 20,
     paddingHorizontal: 18, paddingVertical: 14,
-    marginTop: 10, marginBottom: 8,
+    marginTop: 10, marginBottom: 0,
     borderWidth: 1, borderColor: AppColors.border.glass,
     shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 1,
   },

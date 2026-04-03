@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Animated, Platform, Alert, Share, Modal, Easing,
+  Keyboard, TouchableWithoutFeedback, Clipboard, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
@@ -46,14 +47,14 @@ const MEMBER_ROLES = [
 
 // ─── Setup Screen ─────────────────────────────────────────────────────────────
 
-function FamilySetupScreen({ onSetupComplete }: { onSetupComplete: () => void }) {
-  const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
+function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: () => void; initialCode?: string }) {
+  const [mode, setMode] = useState<'choose' | 'create' | 'join'>(initialCode ? 'join' : 'choose');
   const [memberName, setMemberName] = useState('');
   const [memberEmoji, setMemberEmoji] = useState('👩');
   const [memberColor, setMemberColor] = useState(AppColors.coral.primary);
   const [memberRole, setMemberRole] = useState<'caregiver' | 'family' | 'nurse'>('caregiver');
   const [memberRoleLabel, setMemberRoleLabel] = useState('主要照顾者');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(initialCode ?? '');
   const [loading, setLoading] = useState(false);
   const [patientNickname, setPatientNickname] = useState('家人');
 
@@ -124,7 +125,17 @@ function FamilySetupScreen({ onSetupComplete }: { onSetupComplete: () => void })
   }
 
   return (
-    <ScrollView contentContainerStyle={setup.formContainer} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView
+          contentContainerStyle={setup.formContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
       <Text style={setup.emoji}>{mode === 'create' ? '✨' : '🔗'}</Text>
       <Text style={setup.title}>{mode === 'create' ? '创建家庭空间' : '加入家庭空间'}</Text>
 
@@ -139,6 +150,8 @@ function FamilySetupScreen({ onSetupComplete }: { onSetupComplete: () => void })
             maxLength={6}
             autoCapitalize="characters"
             placeholderTextColor={AppColors.text.tertiary}
+            returnKeyType="next"
+            blurOnSubmit={false}
           />
         </View>
       )}
@@ -151,6 +164,8 @@ function FamilySetupScreen({ onSetupComplete }: { onSetupComplete: () => void })
           value={memberName}
           onChangeText={setMemberName}
           placeholderTextColor={AppColors.text.tertiary}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
         />
       </View>
 
@@ -213,7 +228,9 @@ function FamilySetupScreen({ onSetupComplete }: { onSetupComplete: () => void })
           </Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -221,7 +238,7 @@ function FamilySetupScreen({ onSetupComplete }: { onSetupComplete: () => void })
 
 export default function FamilyScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ openCompose?: string }>();
+  const params = useLocalSearchParams<{ openCompose?: string; joinCode?: string }>();
   const [room, setRoom] = useState<FamilyRoom | null>(null);
   const [currentMember, setCurrentMemberState] = useState<FamilyMember | null>(null);
   const [announcements, setAnnouncements] = useState<FamilyAnnouncement[]>([]);
@@ -249,6 +266,7 @@ export default function FamilyScreen() {
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [isCreator, setIsCreator] = useState(true);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -424,7 +442,7 @@ export default function FamilyScreen() {
     return (
       <ScreenContainer containerClassName="bg-background">
         <View style={{ paddingTop: insets.top + 20, flex: 1 }}>
-          <FamilySetupScreen onSetupComplete={loadData} />
+          <FamilySetupScreen onSetupComplete={loadData} initialCode={params.joinCode} />
         </View>
       </ScreenContainer>
     );
@@ -721,7 +739,7 @@ export default function FamilyScreen() {
 
                 {/* ── Actions ── */}
                 <View style={styles.briefingActions}>
-                  <TouchableOpacity style={styles.exportBtn} onPress={() => router.push('/share' as any)}>
+                  <TouchableOpacity style={styles.exportBtn} onPress={() => router.push(({ pathname: '/share', params: { date: item.date } }) as any)}>
                     <Text style={styles.exportBtnText}>📋 查看简报</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.shareBtn, isGeneratingShare && { opacity: 0.6 }]} onPress={handleShareBriefing} disabled={isGeneratingShare}>
@@ -737,19 +755,21 @@ export default function FamilyScreen() {
 
       {/* Compose FAB — round circle, bottom-right, anyone can post */}
       {activeSection === 'broadcast' && (
-        <Animated.View style={[styles.fabWrap, { bottom: insets.bottom + 90, transform: [{ scale: fabBreath }] }]}>
+        <Animated.View style={[styles.fabWrap, { bottom: insets.bottom + 16, transform: [{ scale: fabBreath }] }]}>
           <TouchableOpacity
             style={styles.fabBtn}
             onPress={() => setShowCompose(true)}
             activeOpacity={0.85}
           >
             <Text style={styles.fabIcon}>📢</Text>
+            <Text style={styles.fabLabel}>发布公告</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
 
       {/* Compose Modal */}
       <Modal visible={showCompose} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCompose(false)}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.modal}>
           {/* Cancel button top-left */}
           <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowCompose(false)}>
@@ -817,6 +837,7 @@ export default function FamilyScreen() {
             <Text style={styles.modalPublishBtnText}>📢 发布公告</Text>
           </TouchableOpacity>
         </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Hidden briefing card for screenshot capture */}
@@ -922,17 +943,49 @@ export default function FamilyScreen() {
           activeOpacity={1}
           onPress={() => setShowInviteModal(false)}
         >
-          <View style={styles.inviteCard}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.inviteCard}>
             <Text style={styles.inviteTitle}>👨‍👩‍👧 邀请家人加入</Text>
-            <Text style={styles.inviteDesc}>将下方邀请码分享给家人，让他们在小马虎里输入加入家庭空间</Text>
-            <View style={styles.inviteCodeBox}>
-              <Text style={styles.inviteCode}>{room.roomCode}</Text>
-            </View>
-            <Text style={styles.inviteHint}>家人打开小马虎 → 家庭共享 → 输入邀请码 → 加入</Text>
-            <TouchableOpacity style={styles.inviteCloseBtn} onPress={() => setShowInviteModal(false)}>
-              <Text style={styles.inviteCloseBtnText}>知道了</Text>
+            <Text style={styles.inviteDesc}>点击邀请码复制，或发送链接让家人直接加入</Text>
+
+            {/* 邀请码—点击复制 */}
+            <TouchableOpacity
+              style={styles.inviteCodeBox}
+              activeOpacity={0.7}
+              onPress={() => {
+                Clipboard.setString(room.roomCode);
+                if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                setCodeCopied(true);
+                setTimeout(() => setCodeCopied(false), 2000);
+              }}
+            >
+              <Text style={styles.inviteCode} numberOfLines={1} adjustsFontSizeToFit>{room.roomCode}</Text>
+              <Text style={styles.inviteCopyHint}>{codeCopied ? '✅ 已复制' : '点击复制'}</Text>
             </TouchableOpacity>
-          </View>
+
+            {/* 分享链接按鈕 */}
+            <TouchableOpacity
+              style={styles.inviteShareBtn}
+              activeOpacity={0.85}
+              onPress={async () => {
+                const link = `exp://6_vvva0-anonymous-8083.exp.direct/--/(tabs)/family?joinCode=${room.roomCode}`;
+                const msg = `🐾 我在用「小马虎」记录${room.elderName}的护理日常，邀请你加入我们的家庭空间！
+
+点击链接加入：${link}
+
+或手动输入邀请码：${room.roomCode}`;
+                try {
+                  await Share.share({ message: msg, title: '加入小马虎家庭空间' });
+                } catch (e) { /* ignore */ }
+              }}
+            >
+              <Text style={styles.inviteShareBtnText}>💬 分享到微信 / 其他应用</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.inviteHint}>家人点链接后打开小马虎，输入名字即可自动加入</Text>
+            <TouchableOpacity style={styles.inviteCloseBtn} onPress={() => setShowInviteModal(false)}>
+              <Text style={styles.inviteCloseBtnText}>关闭</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </Animated.View>
@@ -1190,15 +1243,20 @@ const styles = StyleSheet.create({
   exportBtnText: { fontSize: 14, fontWeight: '700', color: '#B8426A' },
   goCheckinBtn: { backgroundColor: '#B8426A', borderRadius: 14, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
   goCheckinBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
-  fabWrap: { position: 'absolute', right: 24 },
+  fabWrap: { position: 'absolute', right: 20 },
   fabBtn: {
-    width: 58, height: 58, borderRadius: 29,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 30,
     backgroundColor: '#B8426A',
-    alignItems: 'center', justifyContent: 'center',
     shadowColor: '#B8426A', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
   },
-  fabIcon: { fontSize: 26 },
+  fabIcon: { fontSize: 22 },
+  fabLabel: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
   modal: { flex: 1, backgroundColor: AppColors.bg.warmCream, paddingHorizontal: 20, paddingTop: 16 },
   modalCancelBtn: { alignSelf: 'flex-start', paddingVertical: 4, paddingRight: 12, marginBottom: 8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -1239,14 +1297,17 @@ const styles = StyleSheet.create({
   briefingDateTabActive: { backgroundColor: '#B8426A', borderColor: '#B8426A' },
   briefingDateTabText: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary },
   briefingDateTabTextActive: { color: AppColors.surface.whiteStrong },
-  inviteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  inviteCard: { width: '100%', backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 28, alignItems: 'center', shadowColor: AppColors.shadow.dark, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 16 },
-  inviteTitle: { fontSize: 18, fontWeight: '800', color: AppColors.text.primary, marginBottom: 10, textAlign: 'center' },
-  inviteDesc: { fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  inviteCodeBox: { backgroundColor: '#FEF0F4', borderRadius: 16, borderWidth: 2, borderColor: '#EDAABB', borderStyle: 'dashed', paddingHorizontal: 32, paddingVertical: 18, marginBottom: 16, alignItems: 'center' },
-  inviteCode: { fontSize: 32, fontWeight: '900', color: '#B8426A', letterSpacing: 8 },
-  inviteHint: { fontSize: 12, color: AppColors.text.tertiary, textAlign: 'center', marginBottom: 24, lineHeight: 18 },
-  inviteCloseBtn: { backgroundColor: '#B8426A', borderRadius: 20, paddingHorizontal: 40, paddingVertical: 14, alignItems: 'center' },
+  inviteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  inviteCard: { width: '100%', backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 24, alignItems: 'center', shadowColor: AppColors.shadow.dark, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 16 },
+  inviteTitle: { fontSize: 18, fontWeight: '800', color: AppColors.text.primary, marginBottom: 8, textAlign: 'center' },
+  inviteDesc: { fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
+  inviteCodeBox: { backgroundColor: '#FEF0F4', borderRadius: 16, borderWidth: 2, borderColor: '#EDAABB', borderStyle: 'dashed', paddingHorizontal: 24, paddingVertical: 14, marginBottom: 6, alignItems: 'center', width: '100%' },
+  inviteCode: { fontSize: 34, fontWeight: '900', color: '#B8426A', letterSpacing: 10, textAlign: 'center' },
+  inviteCopyHint: { fontSize: 12, color: '#B8426A', marginTop: 6, fontWeight: '600', opacity: 0.7 },
+  inviteShareBtn: { backgroundColor: '#07C160', borderRadius: 18, paddingHorizontal: 24, paddingVertical: 13, alignItems: 'center', width: '100%', marginBottom: 12, marginTop: 12 },
+  inviteShareBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  inviteHint: { fontSize: 12, color: AppColors.text.tertiary, textAlign: 'center', marginBottom: 16, lineHeight: 18 },
+  inviteCloseBtn: { backgroundColor: '#B8426A', borderRadius: 20, paddingHorizontal: 40, paddingVertical: 12, alignItems: 'center' },
   inviteCloseBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
 });
 
@@ -1319,7 +1380,7 @@ const card = StyleSheet.create({
 
 const setup = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  formContainer: { padding: 24, paddingBottom: 40 },
+  formContainer: { padding: 24, paddingBottom: 80, flexGrow: 1 },
   emoji: { fontSize: 64, marginBottom: 16, textAlign: 'center' },
   title: { fontSize: 26, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: 32 },

@@ -382,6 +382,68 @@ const sleepStyles = StyleSheet.create({
   wakeEmpty: { fontSize: 9, color: AppColors.border.soft },
 });
 
+// ─── Nap Bar Chart ──────────────────────────────────────────────────────────
+function NapChart({ data }: {
+  data: { label: string; value: number; hasData: boolean; isToday?: boolean }[];
+}) {
+  const chartH = 90;
+  const maxVal = 120; // max 120 minutes
+  const barW = 22;
+
+  return (
+    <View style={napStyles.root}>
+      {/* Y-axis */}
+      <View style={[napStyles.yAxis, { height: chartH }]}>
+        <Text style={napStyles.yLabel}>2h</Text>
+        <Text style={napStyles.yLabel}>1h</Text>
+        <Text style={napStyles.yLabel}>0</Text>
+      </View>
+
+      {/* Bars */}
+      <View style={napStyles.barsArea}>
+        {data.map((d, i) => {
+          const fillH = d.hasData ? Math.max(4, (d.value / maxVal) * chartH) : 0;
+          const barColor = d.hasData ? '#F59E0B' : 'transparent';
+          const labelColor = d.hasData ? '#D97706' : AppColors.text.tertiary;
+          const isToday = d.isToday ?? false;
+
+          return (
+            <View key={i} style={napStyles.barCol}>
+              <Text style={[napStyles.valueLabel, { color: labelColor, opacity: d.hasData ? 1 : 0 }]}>
+                {d.hasData ? (d.value >= 60 ? `${(d.value / 60).toFixed(1)}h` : `${d.value}m`) : ''}
+              </Text>
+              <View style={[napStyles.track, { height: chartH, width: barW }]}>
+                <View style={[napStyles.fill, { height: fillH, width: barW, backgroundColor: barColor }]} />
+              </View>
+              <Text style={[napStyles.dayLabel, isToday && napStyles.dayLabelToday]}>
+                {d.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const napStyles = StyleSheet.create({
+  root: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  yAxis: { width: 26, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 4, paddingTop: 16 },
+  yLabel: { fontSize: 9, color: AppColors.text.tertiary },
+  barsArea: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
+  barCol: { alignItems: 'center', gap: 4 },
+  valueLabel: { fontSize: 10, fontWeight: '600', marginBottom: 2, minHeight: 14 },
+  track: {
+    backgroundColor: AppColors.border.soft,
+    borderRadius: 8,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  fill: { borderRadius: 8 },
+  dayLabel: { fontSize: 10, color: AppColors.text.tertiary, marginTop: 4 },
+  dayLabelToday: { color: '#F59E0B', fontWeight: '700' },
+});
+
 function MedicationChart({ data }: { data: { label: string; taken: boolean | null }[] }) {
   const takenCount = data.filter(d => d.taken === true).length;
   const missedCount = data.filter(d => d.taken === false).length;
@@ -518,6 +580,40 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
     ? `${period === 'year' ? yearLabel : periodLabel}平均 ${avgSleep.toFixed(1)}h · ${avgSleep >= 7 ? '睡眠充足 ✅' : '睡眠不足 ⚠️'}`
     : `${period === 'year' ? yearLabel : periodLabel}暂无睡眠记录`;
 
+  // 白天小睡数据
+  const yearNapData = Array.from({ length: 12 }, (_, m) => {
+    const label = `${m + 1}月`;
+    const monthCheckIns = checkIns.filter(c => {
+      const d = new Date(c.date);
+      return d.getFullYear() === currentYear && d.getMonth() === m;
+    });
+    const withNap = monthCheckIns.filter(c => (c.napMinutes ?? 0) > 0);
+    const avg = withNap.length > 0
+      ? withNap.reduce((s, c) => s + (c.napMinutes ?? 0), 0) / withNap.length
+      : 0;
+    return { label, value: Math.round(avg), hasData: withNap.length > 0 };
+  });
+
+  const napData = period === 'year' ? yearNapData : dateRange.map(date => {
+    const c = checkInMap.get(date);
+    const d = new Date(date + 'T12:00:00');
+    const napMins = c?.napMinutes ?? 0;
+    return {
+      label: DAY_LABELS[d.getDay()],
+      value: napMins,
+      hasData: !!c && napMins > 0,
+      isToday: date === todayStr,
+    };
+  });
+
+  const napWithData = (period === 'year' ? checkIns.filter(c => new Date(c.date).getFullYear() === currentYear) : periodCheckIns)
+    .filter(c => (c.napMinutes ?? 0) > 0);
+  const avgNap = napWithData.length > 0
+    ? napWithData.reduce((s, c) => s + (c.napMinutes ?? 0), 0) / napWithData.length : 0;
+  const napSubtitle = avgNap > 0
+    ? `${period === 'year' ? yearLabel : periodLabel}平均 ${avgNap >= 60 ? (avgNap / 60).toFixed(1) + 'h' : Math.round(avgNap) + '分钟'}`
+    : `${period === 'year' ? yearLabel : periodLabel}暂无小睡记录`;
+
 
   // 心情分数：优先用日记里的 caregiverMoodEmoji，已废弃的 caregiverMoodScore 作为兜底
   const cgMoodDates = dateRange.filter(d => (diaryMoodMap[d] ?? (checkInMap.get(d)?.caregiverMoodScore ?? 0)) > 0);
@@ -575,11 +671,25 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
             <Text style={styles.sectionIcon}>😴</Text>
           </View>
           <View style={styles.sectionHeaderText}>
-            <Text style={styles.sectionTitle}>{patientNickname}的睡眠时长</Text>
+            <Text style={styles.sectionTitle}>{patientNickname}的夜晚睡眠时长</Text>
             <Text style={styles.sectionSubtitle}>{sleepSubtitle}</Text>
           </View>
         </View>
         <SleepChart data={sleepData} />
+      </View>
+
+      {/* 白天小睡 card */}
+      <View style={[styles.sectionCard, { borderColor: '#FDE68A' }]}>
+        <View style={styles.sectionHeader}>
+          <View style={[styles.sectionIconWrap, { backgroundColor: '#FEF3C7' }]}>
+            <Text style={styles.sectionIcon}>☀️</Text>
+          </View>
+          <View style={styles.sectionHeaderText}>
+            <Text style={styles.sectionTitle}>{patientNickname}的白天小睡</Text>
+            <Text style={styles.sectionSubtitle}>{napSubtitle}</Text>
+          </View>
+        </View>
+        <NapChart data={napData} />
       </View>
 
       <View style={styles.sectionCard}>

@@ -6,7 +6,7 @@ import { useRef, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Platform, Animated, ActivityIndicator,
-  Easing, KeyboardAvoidingView, Dimensions, Modal,
+  Easing, KeyboardAvoidingView, Dimensions, Modal, Keyboard,
 } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -94,7 +94,7 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
-function AIBubble({ text, animate = false, isFirst = false }: { text: string; animate?: boolean; isFirst?: boolean }) {
+function SmartBubble({ text, animate = false, isFirst = false }: { text: string; animate?: boolean; isFirst?: boolean }) {
   const fadeAnim = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const slideAnim = useRef(new Animated.Value(animate ? 16 : 0)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -118,7 +118,7 @@ function AIBubble({ text, animate = false, isFirst = false }: { text: string; an
   const rotate = rotateAnim.interpolate({ inputRange: [-1, 1], outputRange: ['-5deg', '5deg'] });
 
   return (
-    <Animated.View style={[styles.aiBubbleWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+    <Animated.View style={[styles.smartBubbleWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       {isFirst && (
         <Animated.View style={[styles.stickerDecor, { transform: [{ rotate }] }]}>
           <Text style={styles.stickerText}>✨</Text>
@@ -136,25 +136,25 @@ function AIBubble({ text, animate = false, isFirst = false }: { text: string; an
   );
 }
 
-// ─── AI Name Row ──────────────────────────────────────────────────────────────
+// ─── Smart Name Row ───────────────────────────────────────────────────────────
 
-function AINameRow() {
+function SmartNameRow() {
   return (
-    <View style={styles.aiNameRow}>
-      <View style={styles.aiAvatarWrap}>
+    <View style={styles.smartNameRow}>
+      <View style={styles.smartAvatarWrap}>
         <LinearGradient
           colors={['#8B6E5A', '#A07858', '#7A5C40']}
-          style={styles.aiAvatarCircle}
+          style={styles.smartAvatarCircle}
         >
-          <Text style={styles.aiAvatarEmoji}>🐴</Text>
+          <Text style={styles.smartAvatarEmoji}>🐴</Text>
         </LinearGradient>
-        <View style={styles.aiOnlineDot} />
+        <View style={styles.smartOnlineDot} />
       </View>
       <View>
-        <Text style={styles.aiName}>小马虎护理顾问</Text>
-        <View style={styles.aiBadgeRow}>
-          <LinearGradient colors={['#3B82F6', '#8B5CF6']} style={styles.aiBadge}>
-            <Text style={styles.aiBadgeText}>✨ 数据分析</Text>
+        <Text style={styles.smartName}>小马虎</Text>
+        <View style={styles.smartBadgeRow}>
+          <LinearGradient colors={['#3B82F6', '#8B5CF6']} style={styles.smartBadge}>
+            <Text style={styles.smartBadgeText}>✨ 智能分析</Text>
           </LinearGradient>
         </View>
       </View>
@@ -222,7 +222,7 @@ export default function DiaryEditScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [finished, setFinished] = useState(false);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [smartLoading, setAiLoading] = useState(false);
   const [followUpInput, setFollowUpInput] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [elderNickname, setElderNickname] = useState('家人');
@@ -237,8 +237,8 @@ export default function DiaryEditScreen() {
   const formSlide = useRef(new Animated.Value(30)).current;
   const shimmerAnim = useRef(new Animated.Value(-1)).current;
 
-  const replyMutation = trpc.ai.replyToDiary.useMutation();
-  const followUpMutation = trpc.ai.followUpDiary.useMutation();
+  const replyMutation = trpc.smart.replyToDiary.useMutation();
+  const followUpMutation = trpc.smart.followUpDiary.useMutation();
 
   useEffect(() => {
     fadeInUp(formFade, formSlide, { duration: 400 });
@@ -385,11 +385,19 @@ export default function DiaryEditScreen() {
     setFollowUpInput('');
     setFollowUpLoading(true);
     const userMsg: ConversationMessage = { id: generateId(), role: 'user', text: q, createdAt: new Date().toISOString() };
+    // 先构建包含新消息的完整对话列表
     const conv1 = [...conversation, userMsg];
     setConversation(conv1);
     await persistConversation(conv1);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
-    const historyForApi = conversation.slice(2).map(m => ({ role: m.role as 'user' | 'ai', text: m.text }));
+    // 将 conv1 中除第一条用户消息和第一条 AI 回复之外的历史传给服务端
+    // 使用 conv1（已含本次用户消息），跳过最初的两条（初始日记 + 第一条回复）
+    // 再跳过最后一条（本次用户消息，由 question 字段单独传递）
+    const historySlice = conv1.slice(2, -1);
+    const historyForApi = historySlice.map(m => ({
+      role: (m.role === 'ai' ? 'ai' : 'user') as 'user' | 'ai',
+      text: m.text,
+    }));
     // Build a compact check-in summary string for context
     const checkInSummaryParts: string[] = [];
     if (todayCheckIn?.morningDone) {
@@ -402,13 +410,23 @@ export default function DiaryEditScreen() {
     }
     const checkInSummary = checkInSummaryParts.length > 0 ? checkInSummaryParts.join('，') : undefined;
     try {
-      const result = await followUpMutation.mutateAsync({ elderNickname, caregiverName, originalContent: entryRef.current.content ?? '', originalMood: entryRef.current.moodEmoji ?? '', originalAiReply: entryRef.current.aiReply ?? '', checkInSummary, history: historyForApi, question: q });
+      const result = await followUpMutation.mutateAsync({
+        elderNickname,
+        caregiverName,
+        originalContent: entryRef.current.content ?? '',
+        originalMood: entryRef.current.moodEmoji ?? '',
+        originalAiReply: entryRef.current.aiReply ?? '',
+        checkInSummary,
+        history: historyForApi,
+        question: q,
+      });
       const aiMsg: ConversationMessage = { id: generateId(), role: 'ai', text: result.reply, createdAt: new Date().toISOString() };
       const conv2 = [...conv1, aiMsg];
       setConversation(conv2);
       await persistConversation(conv2);
-    } catch {
-      const errMsg: ConversationMessage = { id: generateId(), role: 'ai', text: '抱歉，暂时无法回复，请稍后重试 🙏', createdAt: new Date().toISOString() };
+    } catch (err) {
+      console.error('followUp error:', err);
+      const errMsg: ConversationMessage = { id: generateId(), role: 'ai', text: '网络有点不稳定，请稍后再试一下 🙏', createdAt: new Date().toISOString() };
       const conv2 = [...conv1, errMsg];
       setConversation(conv2);
       await persistConversation(conv2);
@@ -488,6 +506,7 @@ export default function DiaryEditScreen() {
             contentContainerStyle={styles.container}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            onScrollBeginDrag={Keyboard.dismiss}
           >
             <Animated.View style={{ opacity: formFade, transform: [{ translateY: formSlide }] }}>
 
@@ -625,7 +644,7 @@ export default function DiaryEditScreen() {
               )}
 
               {/* ── CONVERSATION ── */}
-              {(conversation.length > 0 || aiLoading) && (
+              {(conversation.length > 0 || smartLoading) && (
                 <View style={styles.chatContainer}>
                   <Text style={styles.chatTitle}>💬 小马虎对话</Text>
 
@@ -634,16 +653,16 @@ export default function DiaryEditScreen() {
                       <UserBubble key={msg.id} text={msg.text} />
                     ) : (
                       <View key={msg.id}>
-                        <AINameRow />
-                        <AIBubble text={msg.text} animate={i === conversation.length - 1 && !finished} isFirst={i === 1} />
+                        <SmartNameRow />
+                        <SmartBubble text={msg.text} animate={i === conversation.length - 1 && !finished} isFirst={i === 1} />
                       </View>
                     )
                   )}
 
-                  {aiLoading && (
+                  {smartLoading && (
                     <View>
-                      <AINameRow />
-                      <View style={styles.aiBubbleWrap}>
+                      <SmartNameRow />
+                      <View style={styles.smartBubbleWrap}>
                         <View style={[styles.bubbleBlue, styles.bubbleBluePink, { paddingVertical: 14 }]}>
                           <TypingIndicator />
                         </View>
@@ -945,8 +964,8 @@ const styles = StyleSheet.create({
   },
   bubbleGreenText: { fontSize: 15, color: AppColors.surface.whiteStrong, lineHeight: 22, fontWeight: '500', flexWrap: 'wrap' },
 
-  // AI bubble
-  aiBubbleWrap: { position: 'relative', marginBottom: 4 },
+  // 智能助手气泡
+  smartBubbleWrap: { position: 'relative', marginBottom: 4 },
   stickerDecor: {
     position: 'absolute', top: -12, right: -8, zIndex: 10,
     width: 36, height: 36, borderRadius: 18,
@@ -966,24 +985,24 @@ const styles = StyleSheet.create({
   bubbleDot: { width: 5, height: 5, borderRadius: 2.5 },
   bubbleBlueText: { fontSize: 15, color: AppColors.text.primary, lineHeight: 24 },
 
-  // AI name row
-  aiNameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, marginLeft: 2 },
-  aiAvatarWrap: { position: 'relative' },
-  aiAvatarCircle: {
+  // 智能助手名称行
+  smartNameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, marginLeft: 2 },
+  smartAvatarWrap: { position: 'relative' },
+  smartAvatarCircle: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 3,
   },
-  aiAvatarEmoji: { fontSize: 18 },
-  aiOnlineDot: {
+  smartAvatarEmoji: { fontSize: 18 },
+  smartOnlineDot: {
     position: 'absolute', bottom: -1, right: -1,
     width: 12, height: 12, borderRadius: 6,
     backgroundColor: '#4ADE80', borderWidth: 2, borderColor: AppColors.surface.whiteStrong,
   },
-  aiName: { fontSize: 13, fontWeight: '800', color: AppColors.text.primary },
-  aiBadgeRow: { flexDirection: 'row', marginTop: 2 },
-  aiBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-  aiBadgeText: { fontSize: 10, fontWeight: '700', color: AppColors.surface.whiteStrong },
+  smartName: { fontSize: 13, fontWeight: '800', color: AppColors.text.primary },
+  smartBadgeRow: { flexDirection: 'row', marginTop: 2 },
+  smartBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  smartBadgeText: { fontSize: 10, fontWeight: '700', color: AppColors.surface.whiteStrong },
 
   // Typing
   typingRow: { flexDirection: 'row', gap: 4, alignItems: 'center', paddingHorizontal: 4 },

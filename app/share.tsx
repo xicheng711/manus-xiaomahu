@@ -4,12 +4,12 @@ import {
   Animated, ActivityIndicator, Share, Dimensions, Platform, Easing, Alert, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
@@ -248,9 +248,9 @@ function AnimatedBadge({ emoji, label, value, color, delay }: { emoji: string; l
   );
 }
 
-function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEmoji }: {
+function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEmoji, historyDate }: {
   briefing: any; checkIn: DailyCheckIn;
-  elderNickname: string; caregiverName: string; elderEmoji: string;
+  elderNickname: string; caregiverName: string; elderEmoji: string; historyDate?: string;
 }) {
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -261,7 +261,9 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
     ]).start();
   }, []);
 
-  const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+  const today = historyDate
+    ? (() => { const d = new Date(historyDate + 'T00:00:00'); return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }); })()
+    : new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
   const sleepLabel = checkIn.sleepQuality === 'good' ? '良好' : checkIn.sleepQuality === 'fair' ? '一般' : '较差';
   const medLabel = checkIn.medicationTaken ? '按时 ✅' : '漏药 ❌';
 
@@ -303,7 +305,7 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
         <AnimatedBadge emoji="🍽️" label="饮食" value={checkIn.mealNotes ? (checkIn.mealNotes.length > 6 ? checkIn.mealNotes.slice(0, 6) + '…' : checkIn.mealNotes) : '已记录'} color={AppColors.coral.primary} delay={300} />
       </View>
 
-      {/* ── AI Summary ── */}
+       {/* ── 智能总结 ── */}
       <View style={cardStyles.summaryBox}>
         <View style={cardStyles.summaryHeader}>
           <Text style={cardStyles.summaryIcon}>📋</Text>
@@ -316,11 +318,15 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
         </Text>
       </View>
 
-      {/* ── Attention Note ── */}
-      {briefing.attention && briefing.attention.trim().length > 0 && (
-        <View style={cardStyles.attentionBox}>
-          <Text style={cardStyles.attentionIcon}>⚠️</Text>
-          <Text style={cardStyles.attentionText}>{briefing.attention}</Text>
+      {/* ── Highlights ── */}
+      {briefing.highlights && briefing.highlights.length > 0 && (
+        <View style={cardStyles.highlightsBox}>
+          {briefing.highlights.map((item: string, idx: number) => (
+            <View key={idx} style={cardStyles.highlightRow}>
+              <Text style={cardStyles.highlightDot}>·</Text>
+              <Text style={cardStyles.highlightText}>{item}</Text>
+            </View>
+          ))}
         </View>
       )}
 
@@ -361,12 +367,13 @@ const cardStyles = StyleSheet.create({
   summaryIcon: { fontSize: 16 },
   summaryTitle: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary },
   summaryText: { fontSize: 14, color: AppColors.text.secondary, lineHeight: 22 },
-  attentionBox: {
-    flexDirection: 'row', gap: 10, backgroundColor: '#FFF6E8', borderRadius: 14, padding: 14,
-    marginBottom: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F5E6CC', marginHorizontal: 22,
+  highlightsBox: {
+    backgroundColor: '#F7F4F0', borderRadius: 14, padding: 14,
+    marginBottom: 14, marginHorizontal: 22, gap: 6,
   },
-  attentionIcon: { fontSize: 18 },
-  attentionText: { flex: 1, fontSize: 13, color: '#8B6914', lineHeight: 20, fontWeight: '600' },
+  highlightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  highlightDot: { fontSize: 16, color: '#A89080', lineHeight: 22, marginTop: 0 },
+  highlightText: { flex: 1, fontSize: 13, color: '#6B5B52', lineHeight: 22 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#EDE4DF', paddingTop: 14, paddingBottom: 18, paddingHorizontal: 22 },
   footerLeft: { fontSize: 12, color: AppColors.text.tertiary },
   footerRight: { fontSize: 12, color: AppColors.green.muted, fontWeight: '600' },
@@ -539,6 +546,61 @@ function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sl
   );
 }
 
+function WeeklyNapChart({ weeklyData }: { weeklyData: Array<{ date: string; napMinutes: number }> }) {
+  const napBars = useMemo(() => {
+    const reversed = [...weeklyData].reverse();
+    return reversed.map((d) => {
+      const dayOfWeek = new Date(d.date + 'T00:00:00').getDay();
+      const label = WEEKDAY_LABELS[dayOfWeek];
+      const mins = d.napMinutes || 0;
+      const hasData = mins > 0;
+      return {
+        value: hasData ? mins : 0.1,
+        label,
+        frontColor: hasData ? '#F59E0B' : '#F3F4F6',
+        topLabelComponent: () => (
+          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#92400E', marginBottom: 4 }}>
+            {hasData ? (mins >= 60 ? `${(mins / 60).toFixed(1).replace('.0', '')}h` : `${mins}m`) : ''}
+          </Text>
+        ),
+      };
+    });
+  }, [weeklyData]);
+
+  const hasAnyNap = weeklyData.some(d => d.napMinutes > 0);
+  if (!hasAnyNap) return null;
+
+  return (
+    <View style={sleepStyles.card}>
+      <Text style={sleepStyles.sectionTitle}>☀️ 近一周白天小睡趋势</Text>
+      <View style={{ paddingRight: 10, paddingBottom: 10, width: '100%' }}>
+        <BarChart
+          data={napBars}
+          adjustToWidth
+          width={CHART_W}
+          height={120}
+          barBorderTopLeftRadius={6}
+          barBorderTopRightRadius={6}
+          noOfSections={3}
+          maxValue={Math.max(90, Math.max(...weeklyData.map(d => d.napMinutes)) + 20)}
+          yAxisThickness={0}
+          yAxisLabelWidth={30}
+          xAxisThickness={1}
+          xAxisColor={AppColors.border.soft}
+          rulesColor={AppColors.bg.secondary}
+          rulesType="solid"
+          initialSpacing={10}
+          endSpacing={40}
+          yAxisTextStyle={{ fontSize: 10, color: AppColors.text.tertiary }}
+          xAxisLabelTextStyle={{ fontSize: 11, color: AppColors.text.secondary, fontWeight: '500' }}
+          isAnimated
+          animationDuration={600}
+        />
+      </View>
+    </View>
+  );
+}
+
 const sleepStyles = StyleSheet.create({
   card: {
     backgroundColor: '#FBF7F4', borderRadius: 20, padding: 18, marginBottom: 16,
@@ -577,7 +639,7 @@ export default function ShareScreen() {
   const [shareText, setShareText] = useState('');
   const [copied, setCopied] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
-  const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number }>>([]);
+  const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number; napMinutes: number }>>([]);
   const [todayCi, setTodayCi] = useState<DailyCheckIn | null>(null);
   const [yesterdayCi, setYesterdayCi] = useState<DailyCheckIn | null>(null);
   const [viewMode, setViewMode] = useState<'today' | 'yesterday'>('today');
@@ -594,11 +656,23 @@ export default function ShareScreen() {
 
   const generateBriefingMutation = trpc.ai.generateBriefing.useMutation();
 
+  const params = useLocalSearchParams<{ refresh?: string; date?: string }>();
   const loadedRef = useRef(false);
   useEffect(() => {
     if (!loadedRef.current) {
       loadedRef.current = true;
-      loadAndGenerate(false);
+      const forceRefresh = params.refresh === '1';
+      const historyDate = params.date; // 历史日期参数，如 '2025-04-01'
+      if (historyDate) {
+        // 历史模式：直接加载指定日期数据，不走缓存
+        loadHistoryDate(historyDate);
+      } else {
+        if (forceRefresh) {
+          _briefingCache = null;
+          AsyncStorage.removeItem('share_briefing_cache_v1').catch(() => {});
+        }
+        loadAndGenerate(forceRefresh);
+      }
     }
   }, []);
   useFocusEffect(useCallback(() => {
@@ -609,6 +683,44 @@ export default function ShareScreen() {
       recheckBackfill();
     }
   }, []));
+
+  async function loadHistoryDate(dateStr: string) {
+    setError(null);
+    setLoading(true);
+    try {
+      const profile = await getProfile();
+      const nickname = profile?.nickname || profile?.name || '家人';
+      const caregiver = profile?.caregiverName || '照顾者';
+      const emoji = profile?.zodiacEmoji || '🐯';
+      setElderNickname(nickname);
+      setCaregiverName(caregiver);
+      setElderEmoji(emoji);
+
+      const ci = await getCheckInByDate(dateStr);
+      if (!ci) {
+        setError(`${dateStr} 无打卡记录`);
+        setLoading(false);
+        return;
+      }
+
+      const fixedCi = fixMoodScore(ci);
+      setCheckIn(fixedCi);
+      setViewMode('today'); // 展示模式不影响历史记录
+
+      // 加载周数据
+      const weekly = await getWeeklySleepData(7);
+      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
+
+      // 使用本地构建简报（历史模式不调用 AI）
+      const fallback = buildLocalBriefing(nickname, caregiver, fixedCi);
+      setBriefing(fallback);
+      setShareText(fallback.shareText);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function recheckBackfill() {
     try {
@@ -698,7 +810,7 @@ export default function ShareScreen() {
         setCaregiverName(profile.caregiverName || '照顾者');
         setElderEmoji(profile.zodiacEmoji || '🐯');
       }
-      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings })));
+      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
       setTodayCi(today);
       setYesterdayCi(yesterday);
     } catch {}
@@ -723,7 +835,7 @@ export default function ShareScreen() {
         },
         careScore: 0,
       });
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('AI timeout')), 15000));
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('智能助手超时')), 15000));
       const result = await Promise.race([aiPromise, timeout]) as any;
       if (result.success && result.briefing) {
         setBriefing(result.briefing);
@@ -748,18 +860,24 @@ export default function ShareScreen() {
     const dateStr = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
     const napMins = ci.napMinutes ?? (ci.daytimeNap ? 30 : 0);
     const napStr = napMins > 0 ? (napMins >= 60 ? `${(napMins / 60).toFixed(1).replace('.0', '')}小时` : `${napMins}分钟`) : '';
-    const weatherLine = weatherData ? `${weatherData.icon} ${weatherData.city} ${weatherData.description} ${weatherData.temp}°C` : '';
+    const encouragements = [
+      `${nickname}今天辛苦了，有您的陪伴是最大的安心 ❤️`,
+      `每一天的用心记录，都是对${nickname}最深的爱护 🌸`,
+      `照顾好${nickname}，也别忘了照顾好自己，您做得很好 🌟`,
+      `${nickname}有您在身边，一定感受得到这份温暖 🧡`,
+    ];
+    const encouragement = encouragements[new Date().getDay() % encouragements.length];
     return {
-      summary: `${dateStr}${weatherLine ? `（${weatherLine}）` : ''}，${nickname}今日记录：睡眠${ci.sleepHours ?? '--'}小时（${sleepLabel}），心情${ci.moodScore ?? '--'}/10，用药${ci.medicationTaken ? '按时完成' : '有漏服'}。${napStr ? `白天小睡了${napStr}。` : ''}`,
+      summary: encouragement,
       highlights: [
-        weatherLine ? `今日天气：${weatherLine}` : null,
         ci.medicationTaken ? '今日按时服药 💊' : '注意：今日未按时服药 ⚠️',
         `睡眠${ci.sleepHours ?? '--'}小时，质量${sleepLabel}`,
-        napStr ? `白天小睡${napStr} 😴` : null,
+        napStr ? `白天小睡${napStr} ☀️` : null,
+        ci.moodScore ? `心情${ci.moodScore}/10 ${ci.moodEmoji || ''}` : null,
         ci.eveningNotes || ci.morningNotes ? `备注：${(ci.eveningNotes || ci.morningNotes || '').slice(0, 30)}` : null,
       ].filter(Boolean) as string[],
-      attention: !ci.medicationTaken ? '今日用药未完成，请确认是否已服用' : (ci.sleepHours != null && ci.sleepHours < 5 ? '睡眠不足5小时，建议安排补觉' : ''),
-      shareText: `【${nickname}今日照护简报】\n${dateStr}${weatherLine ? ` ${weatherLine}` : ''}\n\n睡眠：${ci.sleepHours ?? '--'}小时（${sleepLabel}）${napStr ? `\n午休：${napStr}` : ''}\n心情：${ci.moodScore ?? '--'}/10\n用药：${ci.medicationTaken ? '已完成' : '未完成'}\n\n记录人：${caregiver}`,
+      attention: '',
+      shareText: `【${nickname}今日照护简报】\n${dateStr}\n\n睡眠：${ci.sleepHours ?? '--'}小时（${sleepLabel}）${napStr ? `\n午休：${napStr}` : ''}\n心情：${ci.moodScore ?? '--'}/10\n用药：${ci.medicationTaken ? '已完成' : '未完成'}\n\n记录人：${caregiver}`,
     };
   }
 
@@ -837,12 +955,12 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         {/* ── Header ── */}
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.title}>📋 {viewMode === 'today' ? '今日' : '昨日'}记录分析</Text>
+          <Text style={styles.title}>📋 {params.date ? `${params.date} 记录` : viewMode === 'today' ? '今日' : '昨日'}记录分析</Text>
           <View style={{ width: 40 }} />
         </View>
 
         {/* ── 日期切换 ── */}
-        {(todayCi || yesterdayCi) && (
+        {!params.date && (todayCi || yesterdayCi) && (
           <View style={styles.dateSwitchRow}>
             <TouchableOpacity
               style={[styles.dateSwitchBtn, viewMode === 'today' && styles.dateSwitchBtnActive]}
@@ -889,10 +1007,11 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                 elderNickname={elderNickname}
                 caregiverName={caregiverName}
                 elderEmoji={elderEmoji}
+                historyDate={params.date}
               />
             </View>
 
-            {!(yesterdayCi?.eveningDone) && (
+            {!params.date && !(yesterdayCi?.eveningDone) && (
               <View style={styles.backfillNotice}>
                 <Text style={styles.backfillText}>缺少昨晚记录</Text>
                 <TouchableOpacity onPress={() => {
@@ -917,6 +1036,9 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
 
             {/* ── Weekly Sleep Trend (Bar Chart) ── */}
             <WeeklySleepChart weeklyData={weeklyData} />
+
+            {/* ── Weekly Nap Trend (Bar Chart) ── */}
+            <WeeklyNapChart weeklyData={weeklyData} />
 
             {/* ── WeChat Share Button (pulse) ── */}
             <Animated.View style={{ transform: [{ scale: sharePulse }] }}>
@@ -944,7 +1066,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             </TouchableOpacity>
 
             {/* ── Family Sync Notice ── */}
-            <Text style={styles.familySyncNotice}>今日记录已自动同步到家庭空间</Text>
+            {!params.date && <Text style={styles.familySyncNotice}>今日记录已自动同步到家庭空间</Text>}
 
             <View style={styles.disclaimer}>
               <Text style={styles.disclaimerText}>由小马虎整理 · 仅供参考</Text>

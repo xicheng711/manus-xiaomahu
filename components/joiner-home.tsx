@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Animated, Easing, Modal, TextInput, Platform,
+  Keyboard, KeyboardAvoidingView, TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -245,60 +246,71 @@ function PostAnnouncementModal({ visible, onClose, onPosted, member }: {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalSheet}>
-          <View style={styles.modalHandle} />
-          {done ? (
-            <View style={styles.modalDone}>
-              <Text style={{ fontSize: 44, marginBottom: 12 }}>✅</Text>
-              <Text style={styles.modalDoneTitle}>公告已发布</Text>
-              <Text style={styles.modalDoneSubtitle}>所有家庭成员都能看到</Text>
-              <TouchableOpacity style={styles.modalDoneBtn} onPress={() => { handleClose(); onPosted(); }}>
-                <Text style={styles.modalDoneBtnText}>好的</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.modalTitle}>发布家庭公告</Text>
-              <Text style={styles.modalSubtitle}>所有家庭成员都能看到</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={content}
-                onChangeText={setContent}
-                placeholder="输入公告内容，如：下周三复查，提醒大家早点出发…"
-                placeholderTextColor={AppColors.text.tertiary}
-                multiline
-                numberOfLines={4}
-              />
-              <View style={styles.typeRow}>
-                {ANNOUNCE_TYPES.map(t => (
-                  <TouchableOpacity
-                    key={t.key}
-                    style={[styles.typeChip, type === t.key && styles.typeChipActive]}
-                    onPress={() => setType(t.key)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.typeChipText, type === t.key && styles.typeChipTextActive]}>{t.label}</Text>
-                  </TouchableOpacity>
-                ))}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
+              <View style={styles.modalSheet}>
+                <View style={styles.modalHandle} />
+                {done ? (
+                  <View style={styles.modalDone}>
+                    <Text style={{ fontSize: 44, marginBottom: 12 }}>✅</Text>
+                    <Text style={styles.modalDoneTitle}>公告已发布</Text>
+                    <Text style={styles.modalDoneSubtitle}>所有家庭成员都能看到</Text>
+                    <TouchableOpacity style={styles.modalDoneBtn} onPress={() => { handleClose(); onPosted(); }}>
+                      <Text style={styles.modalDoneBtnText}>好的</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={styles.modalTitle}>发布家庭公告</Text>
+                    <Text style={styles.modalSubtitle}>所有家庭成员都能看到</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      value={content}
+                      onChangeText={setContent}
+                      placeholder="输入公告内容，如：下周三复查，提醒大家早点出发…"
+                      placeholderTextColor={AppColors.text.tertiary}
+                      multiline
+                      numberOfLines={4}
+                      returnKeyType="done"
+                      blurOnSubmit
+                    />
+                    <View style={styles.typeRow}>
+                      {ANNOUNCE_TYPES.map(t => (
+                        <TouchableOpacity
+                          key={t.key}
+                          style={[styles.typeChip, type === t.key && styles.typeChipActive]}
+                          onPress={() => setType(t.key)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.typeChipText, type === t.key && styles.typeChipTextActive]}>{t.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.postSubmitBtn, !content.trim() && styles.postSubmitBtnDisabled]}
+                      onPress={handlePost}
+                      activeOpacity={0.85}
+                      disabled={!content.trim()}
+                    >
+                      <Text style={[styles.postSubmitText, !content.trim() && styles.postSubmitTextDisabled]}>
+                        {posting ? '发布中…' : '发布公告'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={handleClose}>
+                      <Text style={styles.cancelBtnText}>取消</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
-              <TouchableOpacity
-                style={[styles.postSubmitBtn, !content.trim() && styles.postSubmitBtnDisabled]}
-                onPress={handlePost}
-                activeOpacity={0.85}
-                disabled={!content.trim()}
-              >
-                <Text style={[styles.postSubmitText, !content.trim() && styles.postSubmitTextDisabled]}>
-                  {posting ? '发布中…' : '发布公告'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelBtn} onPress={handleClose}>
-                <Text style={styles.cancelBtnText}>取消</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -544,7 +556,28 @@ export function JoinerHomeScreen() {
           </View>
         )}
 
-        <UpgradeCard onPress={goSetup} />
+        {/* 只有当用户在所有 memberships 中都没有 creator 角色时，才显示升级卡 */}
+        {!memberships.some(m => m.role === 'creator') && (
+          <UpgradeCard onPress={goSetup} />
+        )}
+        {/* 如果 joiner 自己也有 creator 身份，显示切换提示 */}
+        {memberships.some(m => m.role === 'creator') && activeMembership?.role === 'joiner' && (
+          <TouchableOpacity
+            style={styles.switchToCreatorBanner}
+            onPress={() => {
+              const creatorM = memberships.find(m => m.role === 'creator');
+              if (creatorM) switchFamily(creatorM.familyId);
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.switchToCreatorIcon}>👑</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchToCreatorTitle}>切换到我的家庭档案</Text>
+              <Text style={styles.switchToCreatorSub}>点此切换为主照顾者身份，进行打卡、用药等操作</Text>
+            </View>
+            <Text style={{ fontSize: 18, color: '#B8426A' }}>›</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -763,4 +796,13 @@ const styles = StyleSheet.create({
   modalDoneSubtitle: { fontSize: 14, color: AppColors.text.secondary, marginBottom: 24 },
   modalDoneBtn: { backgroundColor: AppColors.purple.strong, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 40 },
   modalDoneBtnText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
+
+  switchToCreatorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FEF0F4', borderRadius: 18, padding: 16,
+    marginBottom: 16, borderWidth: 1.5, borderColor: '#EDAABB',
+  },
+  switchToCreatorIcon: { fontSize: 24 },
+  switchToCreatorTitle: { fontSize: 14, fontWeight: '700', color: '#B8426A', marginBottom: 2 },
+  switchToCreatorSub: { fontSize: 12, color: '#B8426A', opacity: 0.7, lineHeight: 16 },
 });
