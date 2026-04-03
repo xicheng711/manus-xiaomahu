@@ -42,7 +42,8 @@ const config: ExpoConfig = {
       LSApplicationQueriesSchemes: ['weixin', 'weixinULAPI'],
     },
     associatedDomains: [
-      'applinks:your-domain.com',
+      'applinks:xtdtinthemorning.cn',
+      'webcredentials:xtdtinthemorning.cn',
     ],
   },
   android: {
