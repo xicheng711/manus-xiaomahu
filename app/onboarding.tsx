@@ -431,7 +431,7 @@ export default function OnboardingScreen() {
 
         {/* STEP 0: Welcome */}
         {step === 0 && (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.stepContainer}>
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={styles.stepContainer}>
             <View style={styles.welcomeIconWrap}>
               <LinearGradient
                 colors={[...Gradients.appBg]}
