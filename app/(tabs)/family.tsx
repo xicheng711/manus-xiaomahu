@@ -649,7 +649,7 @@ export default function FamilyScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
                     <Image
                       source={require('../../assets/images/icon.png')}
-                      style={{ width: 28, height: 28, borderRadius: 6 }}
+                      style={{ width: 28, height: 28, borderRadius: 6, overflow: 'hidden' }}
                     />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.briefingAppName}>小马虎 · 护理简报</Text>

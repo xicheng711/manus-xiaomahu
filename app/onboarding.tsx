@@ -1204,7 +1204,7 @@ const styles = StyleSheet.create({
   stepContainer: { alignItems: 'center', paddingTop: 8 },
   mascot: { fontSize: 64, marginBottom: 16, marginTop: 8 },
   mascotImg: { width: 100, height: 100, borderRadius: 28, overflow: 'hidden' },
-  mascotImgSm: { width: 90, height: 90, marginBottom: 16, marginTop: 8 },
+  mascotImgSm: { width: 90, height: 90, borderRadius: 24, overflow: 'hidden', marginBottom: 16, marginTop: 8 },
   zodiacBig: { fontSize: 72, marginBottom: 12, marginTop: 8 },
   title: { fontSize: 26, fontWeight: '700', color: '#11181C', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: '#687076', textAlign: 'center', lineHeight: 24, marginBottom: 24 },

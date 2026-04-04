@@ -1001,7 +1001,7 @@ const styles = StyleSheet.create({
   smartNameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, marginLeft: 2 },
   smartAvatarWrap: { position: 'relative' },
   smartAvatarCircle: {
-    width: 38, height: 38, borderRadius: 19,
+    width: 38, height: 38, borderRadius: 19, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center',
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 3,
   },
