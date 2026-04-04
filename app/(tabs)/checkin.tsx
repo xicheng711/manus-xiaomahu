@@ -494,6 +494,7 @@ function CheckinLanding({
   const morningDone = checkIn?.morningDone ?? false;
   const eveningDone = checkIn?.eveningDone ?? false;
   const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
+  const completedCount = (morningDone ? 1 : 0) + (eveningDone ? 1 : 0);
 
   useEffect(() => {
     getAllCheckIns().then(setAllCheckIns);
@@ -511,122 +512,168 @@ function CheckinLanding({
         subtitle={new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}
         right={
           <View style={styles.progressPill}>
-            <Text style={styles.progressPillText}>
-              {(morningDone ? 1 : 0) + (eveningDone ? 1 : 0)}/2 完成
-            </Text>
+            <LinearGradient
+              colors={completedCount === 2 ? ['#34D399', '#059669'] : [COLORS.primaryLight || '#FFB5A7', COLORS.primary]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.progressPillGradient}
+            >
+              <Text style={styles.progressPillText}>
+                {completedCount === 2 ? '✨ 全部完成' : `${completedCount}/2 完成`}
+              </Text>
+            </LinearGradient>
           </View>
         }
       />
 
-      {/* Morning block */}
-      <View style={[styles.checkinBlock, morningDone && styles.checkinBlockDone]}>
-        <View style={styles.checkinBlockHeader}>
-          <View style={[styles.checkinBlockIcon, { backgroundColor: morningDone ? '#FFF3E0' : '#FFF8F0' }]}>
-            <Text style={styles.checkinBlockIconText}>🌅</Text>
-          </View>
-          <View style={styles.checkinBlockInfo}>
-            <Text style={styles.checkinBlockTitle}>早间打卡</Text>
-            {morningDone ? (
-              <Text style={styles.checkinBlockStatus}>
-                ✅ 已完成{morningTime ? ` · ${morningTime}` : ''}
+      {/* Morning Card */}
+      <TouchableOpacity
+        style={styles.checkinCard}
+        onPress={morningDone ? onViewMorning : onStartMorning}
+        activeOpacity={0.88}
+      >
+        <LinearGradient
+          colors={morningDone ? ['#FFF9F0', '#FFF3E0'] : ['#FFFCF8', '#FFF8F0']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.checkinCardGradient}
+        >
+          {/* Top row: icon + info + status */}
+          <View style={styles.checkinCardTop}>
+            <LinearGradient
+              colors={morningDone ? ['#FFCC02', '#FF9500'] : ['#FFD88A', '#FFBF60']}
+              style={styles.checkinCardIconCircle}
+            >
+              <Text style={styles.checkinCardIconEmoji}>🌅</Text>
+            </LinearGradient>
+            <View style={styles.checkinCardInfo}>
+              <Text style={styles.checkinCardTitle}>早间打卡</Text>
+              <Text style={[styles.checkinCardSubtitle, morningDone && { color: '#059669' }]}>
+                {morningDone ? `✅ 已完成${morningTime ? ` · ${morningTime}` : ''}` : '记录昨晚睡眠情况'}
               </Text>
+            </View>
+            {morningDone ? (
+              <View style={styles.checkinCardDoneBadge}>
+                <Text style={styles.checkinCardDoneBadgeText}>✓</Text>
+              </View>
             ) : (
-              <Text style={styles.checkinBlockStatusPending}>⏳ 待完成</Text>
+              <View style={styles.checkinCardArrow}>
+                <Text style={styles.checkinCardArrowText}>›</Text>
+              </View>
             )}
           </View>
-          {morningDone && (
-            <View style={styles.doneCheckCircle}>
-              <Text style={styles.doneCheckText}>✓</Text>
-            </View>
-          )}
-        </View>
 
-        {morningDone && checkIn && (
-          <View style={styles.checkinSummary}>
-            <View style={styles.checkinSummaryRow}>
-              <Text style={styles.checkinSummaryItem}>
-                💤 {elderNickname}睡了 {checkIn.sleepHours}h
-              </Text>
+          {/* Summary chips */}
+          {morningDone && checkIn && (
+            <View style={styles.checkinCardChips}>
+              <View style={styles.checkinChip}>
+                <Text style={styles.checkinChipText}>💤 {elderNickname}睡了 {checkIn.sleepHours}h</Text>
+              </View>
+              {checkIn.nightAwakenings && checkIn.nightAwakenings !== '没醒' && (
+                <View style={styles.checkinChip}>
+                  <Text style={styles.checkinChipText}>🌛 夜醒{checkIn.nightAwakenings}</Text>
+                </View>
+              )}
               {checkIn.caregiverMoodEmoji && (
-                <Text style={styles.checkinSummaryItem}>
-                  {checkIn.caregiverMoodEmoji} {caregiverName}的心情已记录
-                </Text>
+                <View style={styles.checkinChip}>
+                  <Text style={styles.checkinChipText}>{checkIn.caregiverMoodEmoji} {caregiverName}心情</Text>
+                </View>
               )}
             </View>
-          </View>
-        )}
+          )}
 
-        <TouchableOpacity
-          style={[styles.checkinBlockBtn, morningDone && styles.checkinBlockBtnSecondary]}
-          onPress={morningDone ? onViewMorning : onStartMorning}
-          activeOpacity={0.85}
+          {/* CTA */}
+          {!morningDone && (
+            <LinearGradient
+              colors={['#FF9500', '#FF7A00']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.checkinCardCTA}
+            >
+              <Text style={styles.checkinCardCTAText}>开始早间打卡 →</Text>
+            </LinearGradient>
+          )}
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* Evening Card */}
+      <TouchableOpacity
+        style={styles.checkinCard}
+        onPress={onStartEvening}
+        disabled={!morningDone && !eveningDone}
+        activeOpacity={0.88}
+      >
+        <LinearGradient
+          colors={eveningDone ? [AppColors.purple.soft, '#E8E0F8'] : ['#F8F5FF', '#F0ECF8']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.checkinCardGradient}
         >
-          <Text style={[styles.checkinBlockBtnText, morningDone && styles.checkinBlockBtnTextSecondary]}>
-            {morningDone ? '查看已记录内容' : '开始早间打卡 →'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Evening block */}
-      <View style={[styles.checkinBlock, eveningDone && styles.checkinBlockDone]}>
-        <View style={styles.checkinBlockHeader}>
-          <View style={[styles.checkinBlockIcon, { backgroundColor: eveningDone ? AppColors.purple.soft : '#F5F0FF' }]}>
-            <Text style={styles.checkinBlockIconText}>🌙</Text>
-          </View>
-          <View style={styles.checkinBlockInfo}>
-            <Text style={styles.checkinBlockTitle}>晚间记录</Text>
+          <View style={styles.checkinCardTop}>
+            <LinearGradient
+              colors={eveningDone ? [AppColors.purple.strong, '#6C5BAE'] : [AppColors.purple.primary, '#B5A2E8']}
+              style={styles.checkinCardIconCircle}
+            >
+              <Text style={styles.checkinCardIconEmoji}>🌙</Text>
+            </LinearGradient>
+            <View style={styles.checkinCardInfo}>
+              <Text style={styles.checkinCardTitle}>晚间记录</Text>
+              <Text style={[styles.checkinCardSubtitle, eveningDone && { color: '#059669' }]}>
+                {eveningDone ? '✅ 已完成' : morningDone ? '记录今天的状态' : '先完成早间打卡'}
+              </Text>
+            </View>
             {eveningDone ? (
-              <Text style={styles.checkinBlockStatus}>✅ 已完成</Text>
+              <View style={[styles.checkinCardDoneBadge, { backgroundColor: AppColors.purple.strong }]}>
+                <Text style={styles.checkinCardDoneBadgeText}>✓</Text>
+              </View>
             ) : morningDone ? (
-              <Text style={styles.checkinBlockStatusPending}>⏳ 今晚可以继续记录</Text>
+              <View style={styles.checkinCardArrow}>
+                <Text style={[styles.checkinCardArrowText, { color: AppColors.purple.strong }]}>›</Text>
+              </View>
             ) : (
-              <Text style={styles.checkinBlockStatusLocked}>🔒 先完成早间打卡</Text>
+              <View style={[styles.checkinCardArrow, { opacity: 0.3 }]}>
+                <Text style={styles.checkinCardArrowText}>🔒</Text>
+              </View>
             )}
           </View>
-          {eveningDone && (
-            <View style={[styles.doneCheckCircle, { backgroundColor: AppColors.purple.strong }]}>
-              <Text style={styles.doneCheckText}>✓</Text>
+
+          {/* Summary chips */}
+          {eveningDone && checkIn && (
+            <View style={styles.checkinCardChips}>
+              <View style={[styles.checkinChip, { backgroundColor: 'rgba(119,104,181,0.1)' }]}>
+                <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>{checkIn.moodEmoji} 心情 {checkIn.moodScore}/10</Text>
+              </View>
+              <View style={[styles.checkinChip, { backgroundColor: 'rgba(119,104,181,0.1)' }]}>
+                <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>💊 {checkIn.medicationTaken ? '已服药' : '未服药'}</Text>
+              </View>
+              {checkIn.mealNotes && (
+                <View style={[styles.checkinChip, { backgroundColor: 'rgba(119,104,181,0.1)' }]}>
+                  <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>🍜 {checkIn.mealNotes}</Text>
+                </View>
+              )}
             </View>
           )}
-        </View>
 
-        {eveningDone && checkIn && (
-          <View style={styles.checkinSummary}>
-            <View style={styles.checkinSummaryRow}>
-              <Text style={styles.checkinSummaryItem}>
-                {checkIn.moodEmoji} 心情 {checkIn.moodScore}/10
-              </Text>
-              <Text style={styles.checkinSummaryItem}>
-                💊 {checkIn.medicationTaken ? '已服药' : '未服药'}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[
-            styles.checkinBlockBtn,
-            styles.checkinBlockBtnEvening,
-            (!morningDone || eveningDone) && styles.checkinBlockBtnSecondary,
-          ]}
-          onPress={onStartEvening}
-          disabled={!morningDone && !eveningDone}
-          activeOpacity={0.85}
-        >
-          <Text style={[
-            styles.checkinBlockBtnText,
-            (!morningDone || eveningDone) && styles.checkinBlockBtnTextSecondary,
-          ]}>
-            {eveningDone ? '查看晚间记录' : morningDone ? '开始晚间记录 →' : '今晚再来记录'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          {/* CTA */}
+          {!eveningDone && morningDone && (
+            <LinearGradient
+              colors={[AppColors.purple.strong, '#6C5BAE']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.checkinCardCTA}
+            >
+              <Text style={styles.checkinCardCTAText}>开始晚间记录 →</Text>
+            </LinearGradient>
+          )}
+        </LinearGradient>
+      </TouchableOpacity>
 
       {/* Tip */}
       <View style={styles.landingTip}>
-        <Text style={styles.landingTipText}>
-          💡 每天两次记录，帮助掌握{elderNickname}的状态变化，及时发现需要关注的情况。
-        </Text>
+        <LinearGradient
+          colors={['#FFF8F0', '#FFF3E8']}
+          style={styles.landingTipGradient}
+        >
+          <Text style={styles.landingTipEmoji}>💡</Text>
+          <Text style={styles.landingTipText}>
+            每天两次记录，帮助掌握{elderNickname}的状态变化
+          </Text>
+        </LinearGradient>
       </View>
 
       {/* History Calendar */}
@@ -1602,57 +1649,75 @@ const styles = StyleSheet.create({
 
   // Landing
   landingContainer: { padding: 20, paddingBottom: 40 },
-  landingHeader: { marginBottom: 24 },
-  landingTitle: { fontSize: 26, fontWeight: '900', color: COLORS.text, letterSpacing: -0.5 },
-  landingDate: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
-  progressPill: {
-    marginTop: 10, alignSelf: 'flex-start',
-    backgroundColor: COLORS.primaryBg, borderRadius: RADIUS.pill,
-    paddingHorizontal: 12, paddingVertical: 5,
+  progressPill: { marginTop: 10, alignSelf: 'flex-start' },
+  progressPillGradient: {
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 14, paddingVertical: 6,
   },
-  progressPillText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
-  checkinBlock: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: RADIUS.xxl, padding: 20, marginBottom: 16,
-    borderWidth: 1.5, borderColor: '#F0F0F0',
+  progressPillText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+  // Checkin Cards (new)
+  checkinCard: {
+    marginBottom: 14, borderRadius: 22, overflow: 'hidden',
     ...SHADOWS.md,
   },
-  checkinBlockDone: { borderColor: '#D1FAE5' },
-  checkinBlockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  checkinBlockIcon: {
-    width: 44, height: 44, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center',
+  checkinCardGradient: {
+    padding: 20, borderRadius: 22,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.6)',
   },
-  checkinBlockIconText: { fontSize: 22 },
-  checkinBlockInfo: { flex: 1 },
-  checkinBlockTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
-  checkinBlockStatus: { fontSize: 12, color: '#059669', fontWeight: '600', marginTop: 2 },
-  checkinBlockStatusPending: { fontSize: 12, color: '#F59E0B', fontWeight: '600', marginTop: 2 },
-  checkinBlockStatusLocked: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600', marginTop: 2 },
+  checkinCardTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  checkinCardIconCircle: {
+    width: 48, height: 48, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    ...SHADOWS.sm,
+  },
+  checkinCardIconEmoji: { fontSize: 24 },
+  checkinCardInfo: { flex: 1 },
+  checkinCardTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text, letterSpacing: -0.3 },
+  checkinCardSubtitle: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500', marginTop: 2 },
+  checkinCardDoneBadge: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center',
+    ...SHADOWS.sm,
+  },
+  checkinCardDoneBadgeText: { fontSize: 16, color: '#fff', fontWeight: '800' },
+  checkinCardArrow: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.04)', alignItems: 'center', justifyContent: 'center',
+  },
+  checkinCardArrowText: { fontSize: 22, color: COLORS.primary, fontWeight: '300', marginTop: -2 },
+  checkinCardChips: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14,
+    paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  checkinChip: {
+    backgroundColor: 'rgba(255,149,0,0.08)', borderRadius: RADIUS.pill,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  checkinChipText: { fontSize: 12, fontWeight: '600', color: '#B45309' },
+  checkinCardCTA: {
+    marginTop: 16, borderRadius: RADIUS.xl,
+    paddingVertical: 13, alignItems: 'center',
+    ...SHADOWS.sm,
+  },
+  checkinCardCTAText: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+
+  // Legacy compat (keep for done state)
   doneCheckCircle: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center',
   },
   doneCheckText: { fontSize: 14, color: '#fff', fontWeight: '700' },
-  checkinSummary: { marginBottom: 12 },
-  checkinSummaryRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
-  checkinSummaryItem: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '500' },
-  checkinBlockBtn: {
-    backgroundColor: COLORS.primary, borderRadius: RADIUS.xl,
-    paddingVertical: 13, alignItems: 'center',
-    ...SHADOWS.glow(COLORS.primary),
-  },
-  checkinBlockBtnEvening: { backgroundColor: AppColors.purple.strong, ...SHADOWS.glow(AppColors.purple.strong) },
-  checkinBlockBtnSecondary: {
-    backgroundColor: AppColors.bg.secondary, borderWidth: 1, borderColor: '#EBEBEB',
-    shadowOpacity: 0,
-  },
-  checkinBlockBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  checkinBlockBtnTextSecondary: { color: COLORS.textSecondary },
-  landingTip: {
-    backgroundColor: '#FFF8F0', borderRadius: RADIUS.lg, padding: 14,
+
+  // Tip
+  landingTip: { marginBottom: 4, marginTop: 2 },
+  landingTipGradient: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 16, padding: 14,
     borderWidth: 1, borderColor: '#FFE4C4',
   },
-  landingTipText: { fontSize: 13, color: '#92400E', lineHeight: 20 },
+  landingTipEmoji: { fontSize: 18 },
+  landingTipText: { fontSize: 13, color: '#92400E', lineHeight: 20, flex: 1 },
 
   // Header
   header: {
@@ -1680,7 +1745,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20,
   },
   progressBg: {
-    flex: 1, height: 6, backgroundColor: '#F0F0F0', borderRadius: 3, overflow: 'hidden',
+    flex: 1, height: 5, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden',
   },
   progressFill: {
     height: '100%', backgroundColor: COLORS.primary, borderRadius: 3,
@@ -1689,20 +1754,21 @@ const styles = StyleSheet.create({
 
   // Question card
   questionCard: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: RADIUS.xxl, padding: 24, marginBottom: 20,
-    borderWidth: 1, borderColor: '#F0F0F0',
-    ...SHADOWS.lg,
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 24, marginBottom: 20,
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)',
+    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1, shadowRadius: 16, elevation: 6,
   },
   questionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   questionEmojiCircle: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: COLORS.primaryBg,
+    width: 40, height: 40, borderRadius: 14,
+    backgroundColor: '#FFF0ED',
     alignItems: 'center', justifyContent: 'center',
   },
-  questionEmojiText: { fontSize: 18 },
-  questionNum: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
-  question: { fontSize: 22, fontWeight: '800', color: COLORS.text, marginBottom: 6, lineHeight: 30 },
-  hint: { fontSize: 13, color: COLORS.textMuted, marginBottom: 20 },
+  questionEmojiText: { fontSize: 20 },
+  questionNum: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600', letterSpacing: 0.5 },
+  question: { fontSize: 21, fontWeight: '800', color: COLORS.text, marginBottom: 6, lineHeight: 30, letterSpacing: -0.3 },
+  hint: { fontSize: 13, color: COLORS.textMuted, marginBottom: 20, lineHeight: 20 },
   answerArea: { minHeight: 120 },
 
   // Picker
@@ -1717,20 +1783,22 @@ const styles = StyleSheet.create({
   selectedDisplay: { textAlign: 'center', fontSize: 14, color: COLORS.primary, fontWeight: '700', marginTop: 12 },
   stepContent: { alignItems: 'center', width: '100%' },
 
-  // Pill list (v4.0 — 全宽列选项)
-  pillList: { gap: 10 },
+  // Pill list
+  pillList: { gap: 8 },
   pillItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 18, paddingVertical: 16,
-    borderRadius: RADIUS.lg, backgroundColor: AppColors.bg.secondary,
-    borderWidth: 1.5, borderColor: '#EBEBEB',
+    paddingHorizontal: 18, paddingVertical: 15,
+    borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.02)',
+    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.06)',
   },
   pillItemSelected: {
-    backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary,
+    backgroundColor: '#FFF0ED', borderColor: COLORS.primary,
+    shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 8, elevation: 3,
   },
   pillIcon: { fontSize: 22, width: 28, textAlign: 'center' },
   pillLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#374151' },
-  pillLabelSelected: { color: COLORS.primary },
+  pillLabelSelected: { color: COLORS.primary, fontWeight: '700' },
   pillCheck: { fontSize: 16, color: COLORS.primary, fontWeight: '700' },
 
   // 2-column grid pills (for 4 options)
@@ -1766,10 +1834,14 @@ const styles = StyleSheet.create({
   // Mood
   moodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
   moodCard: {
-    alignItems: 'center', padding: 14, borderRadius: RADIUS.lg,
-    backgroundColor: AppColors.bg.secondary, borderWidth: 1.5, borderColor: '#EBEBEB', gap: 6,
+    alignItems: 'center', padding: 14, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.02)', borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.06)', gap: 6,
   },
-  moodCardSelected: { backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary },
+  moodCardSelected: {
+    backgroundColor: '#FFF0ED', borderColor: COLORS.primary,
+    shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 8, elevation: 3,
+  },
   moodEmoji: { fontSize: 32 },
   moodLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary },
   moodLabelSelected: { color: COLORS.primary, fontWeight: '700' },
@@ -1947,19 +2019,24 @@ const styles = StyleSheet.create({
   // Nav
   navRow: { flexDirection: 'row', gap: 12 },
   backBtn: {
-    flex: 1, padding: 16, borderRadius: RADIUS.xl,
-    backgroundColor: AppColors.bg.secondary, alignItems: 'center',
-    borderWidth: 1, borderColor: '#EBEBEB',
+    flex: 1, padding: 16, borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.03)', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
   },
   backBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.textSecondary },
   nextBtn: {
-    padding: 16, borderRadius: RADIUS.xl,
+    padding: 16, borderRadius: 18,
     backgroundColor: COLORS.primary, alignItems: 'center',
-    ...SHADOWS.glow(COLORS.primary),
+    shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
-  nextBtnFinish: { backgroundColor: COLORS.secondary, ...SHADOWS.glow(COLORS.secondary) },
-  nextBtnDisabled: { backgroundColor: AppColors.border.soft },
-  nextBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  nextBtnFinish: {
+    backgroundColor: '#059669',
+    shadowColor: '#059669', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+  },
+  nextBtnDisabled: { backgroundColor: '#D1D5DB', shadowOpacity: 0 },
+  nextBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
 
   // Done
   doneContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
@@ -2051,16 +2128,20 @@ const calStyles = StyleSheet.create({
 
   wrapper: {
     backgroundColor: AppColors.surface.whiteStrong,
-    borderRadius: RADIUS.xxl,
+    borderRadius: 22,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
-    ...SHADOWS.md,
+    borderColor: 'rgba(0,0,0,0.04)',
+    shadowColor: 'rgba(0,0,0,0.06)', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1, shadowRadius: 12, elevation: 4,
   },
-  monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  navBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  navBtnText: { fontSize: 22, color: COLORS.primary, fontWeight: '700' },
-  monthTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  navBtn: {
+    width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  navBtnText: { fontSize: 20, color: COLORS.primary, fontWeight: '600' },
+  monthTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, letterSpacing: 0.3 },
 
   weekRow: { flexDirection: 'row', marginBottom: 6 },
   weekLabel: { width: CELL_SIZE, textAlign: 'center', fontSize: 11, color: COLORS.textMuted, fontWeight: '600' },
@@ -2068,30 +2149,34 @@ const calStyles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: CELL_SIZE, height: CELL_SIZE + 6, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
   dayCircle: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 30, height: 30, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',
   },
-  dayCircleToday: { borderWidth: 2, borderColor: COLORS.primary },
-  dayCircleDone: { backgroundColor: '#059669' },
+  dayCircleToday: { borderWidth: 2, borderColor: COLORS.primary, borderRadius: 10 },
+  dayCircleDone: { backgroundColor: '#059669', borderRadius: 10 },
   dayNum: { fontSize: 13, fontWeight: '600', color: COLORS.text },
   dayNumFuture: { color: '#D1D5DB' },
   dayNumToday: { color: COLORS.primary, fontWeight: '800' },
   dayNumDone: { color: '#fff', fontWeight: '700' },
-  dot: { width: 5, height: 5, borderRadius: 3, marginTop: 1 },
+  dot: { width: 5, height: 5, borderRadius: 3, marginTop: 2 },
   dotBoth: { backgroundColor: '#059669' },
-  dotMorning: { backgroundColor: '#F59E0B' },
+  dotMorning: { backgroundColor: '#FF9500' },
   dotEvening: { backgroundColor: AppColors.purple.strong },
 
-  legendRow: { flexDirection: 'row', gap: 16, marginTop: 12, justifyContent: 'center' },
+  legendRow: {
+    flexDirection: 'row', gap: 16, marginTop: 14, justifyContent: 'center',
+    paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.04)',
+  },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 11, color: COLORS.textMuted },
+  legendText: { fontSize: 11, color: COLORS.textMuted, fontWeight: '500' },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
   popup: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: RADIUS.xxl, padding: 20,
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 22,
     width: '100%', maxWidth: 340,
-    ...SHADOWS.lg,
+    shadowColor: 'rgba(0,0,0,0.12)', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1, shadowRadius: 24, elevation: 12,
   },
   popupDateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   popupDateEmoji: { fontSize: 20 },
@@ -2102,8 +2187,8 @@ const calStyles = StyleSheet.create({
   popupItem: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 3 },
   popupNote: { fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic', marginTop: 4 },
   popupClose: {
-    marginTop: 12, paddingVertical: 10, borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.primaryBg, alignItems: 'center',
+    marginTop: 14, paddingVertical: 11, borderRadius: 14,
+    backgroundColor: '#FFF0ED', alignItems: 'center',
   },
   popupCloseText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
 
