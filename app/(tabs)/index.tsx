@@ -705,7 +705,7 @@ function CreatorHomeScreen() {
           <Image source={require('@/assets/images/app-icon.png')} style={styles.warmFooterIcon} />
           <View style={{ flex: 1 }}>
             <Text style={styles.warmFooterText}>小马虎陪您一起，照顾好每一天</Text>
-            <Text style={styles.warmFooterSub}>您的每一份用心，家人都感受得到 ♡</Text>
+            <Text style={styles.warmFooterSub}>您的每一份用心，家人都感受得到 💗</Text>
           </View>
         </View>
 
