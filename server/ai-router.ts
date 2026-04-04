@@ -51,21 +51,27 @@ function extractJSON(raw: string): string {
   throw new Error('Failed to parse LLM JSON response');
 }
 
-async function callQwen(prompt: string, systemPrompt: string, retries = 1, maxTokens = 2000): Promise<string> {
+async function callQwen(prompt: string, systemPrompt: string, retries = 2, maxTokens = 2000): Promise<string> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const result = await invokeLLM({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      maxTokens,
-    });
-    const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
     try {
-      return extractJSON(raw);
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        maxTokens,
+      });
+      const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
+      try {
+        return extractJSON(raw);
+      } catch (e) {
+        console.warn(`Qwen JSON parse attempt ${attempt + 1} failed, raw length: ${raw.length}, raw: ${raw.slice(0, 200)}`);
+        if (attempt === retries) throw e;
+      }
     } catch (e) {
-      console.warn(`Qwen JSON parse attempt ${attempt + 1} failed, raw length: ${raw.length}`);
+      console.error(`Qwen API call attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
       if (attempt === retries) throw e;
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
     }
   }
   return "{}";
@@ -491,11 +497,11 @@ ${checkInBlock}
 }`;
 
       try {
-        const raw = await callQwen(prompt, SYSTEM_PROMPT);
+        const raw = await callQwen(prompt, SYSTEM_PROMPT, 2, 600);
         const result = JSON.parse(raw);
         return { success: true, ...result };
       } catch (e) {
-        console.error("Diary reply error:", e);
+        console.error("Diary reply error:", e instanceof Error ? e.message : e);
         return {
           success: false,
           reply: `${caregiverName}，已收到您的护理记录。持续记录有助于了解${nickname}的状态变化，如有异常建议及时咨询专业医生。`,
@@ -551,9 +557,10 @@ ${caregiverName}问：${question}
         const replyText = parsed.reply ?? parsed.message ?? parsed.text ?? raw;
         return { success: true, reply: String(replyText).trim() };
       } catch (e) {
+        console.error('followUpDiary error:', e instanceof Error ? e.message : e);
         return {
           success: false,
-          reply: `${caregiverName}，这是个好问题。建议您和专业医生进一步沟通。您对${nickname}的用心我都看到了`,
+          reply: `这个问题我需要再想想。如果涉及具体的病情判断，建议和主治医生确认一下。您能再说详细一点吗？`,
         };
       }
     }),

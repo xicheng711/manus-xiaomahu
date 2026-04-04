@@ -77,18 +77,22 @@ function TypingIndicator() {
 
 // ─── Chat Bubble Components ───────────────────────────────────────────────────
 
-function UserBubble({ text }: { text: string }) {
+function UserBubble({ text, photoUri, zodiacEmoji }: { text: string; photoUri?: string | null; zodiacEmoji?: string }) {
   return (
     <View style={styles.bubbleRowRight}>
-      <View style={styles.userBubbleWrap}>
-        <Text style={styles.userBubbleDecor}>😊</Text>
-        <LinearGradient
-          colors={['#5DBD7A', '#3DA862']}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={styles.bubbleGreen}
-        >
-          <Text style={styles.bubbleGreenText}>{text}</Text>
-        </LinearGradient>
+      <LinearGradient
+        colors={['#5DBD7A', '#3DA862']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={styles.bubbleGreen}
+      >
+        <Text style={styles.bubbleGreenText}>{text}</Text>
+      </LinearGradient>
+      <View style={styles.userAvatarCircle}>
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.userAvatarImg} />
+        ) : (
+          <Text style={styles.userAvatarEmoji}>{zodiacEmoji || '😊'}</Text>
+        )}
       </View>
     </View>
   );
@@ -225,6 +229,8 @@ export default function DiaryEditScreen() {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('照顾者');
+  const [caregiverPhotoUri, setCaregiverPhotoUri] = useState<string | null>(null);
+  const [caregiverZodiacEmoji, setCaregiverZodiacEmoji] = useState('😊');
   const [loadingEntry, setLoadingEntry] = useState(!!existingId);
   const [diaryCount, setDiaryCount] = useState(0);
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
@@ -261,6 +267,8 @@ export default function DiaryEditScreen() {
     if (profile) {
       setElderNickname(profile.nickname || profile.name || '家人');
       setCaregiverName(profile.caregiverName || '照顾者');
+      setCaregiverPhotoUri(profile.caregiverPhotoUri || null);
+      setCaregiverZodiacEmoji(profile.caregiverZodiacEmoji || '😊');
     }
     setDiaryCount(entries.length);
     if (checkIn) setTodayCheckIn(checkIn);
@@ -424,7 +432,7 @@ export default function DiaryEditScreen() {
       await persistConversation(conv2);
     } catch (err) {
       console.error('followUp error:', err);
-      const errMsg: ConversationMessage = { id: generateId(), role: 'ai', text: '网络有点不稳定，请稍后再试一下 🙏', createdAt: new Date().toISOString() };
+      const errMsg: ConversationMessage = { id: generateId(), role: 'ai', text: '我这边小幸出了点状况，请稍后再试试。您的记录我已经保存好了 📝', createdAt: new Date().toISOString() };
       const conv2 = [...conv1, errMsg];
       setConversation(conv2);
       await persistConversation(conv2);
@@ -653,7 +661,7 @@ export default function DiaryEditScreen() {
 
                   {conversation.map((msg, i) =>
                     msg.role === 'user' ? (
-                      <UserBubble key={msg.id} text={msg.text} />
+                      <UserBubble key={msg.id} text={msg.text} photoUri={caregiverPhotoUri} zodiacEmoji={caregiverZodiacEmoji} />
                     ) : (
                       <View key={msg.id}>
                         <SmartNameRow />
@@ -957,9 +965,10 @@ const styles = StyleSheet.create({
   },
 
   // User bubble
-  bubbleRowRight: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 12, paddingLeft: 50 },
-  userBubbleWrap: { position: 'relative' },
-  userBubbleDecor: { position: 'absolute', top: -10, left: -14, fontSize: 18, zIndex: 2 },
+  bubbleRowRight: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end', marginBottom: 12, paddingLeft: 50, gap: 8 },
+  userAvatarCircle: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden', backgroundColor: AppColors.peach.soft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  userAvatarImg: { width: 34, height: 34, borderRadius: 17 },
+  userAvatarEmoji: { fontSize: 18 },
   bubbleGreen: {
     borderRadius: 24, borderTopRightRadius: 6,
     paddingHorizontal: 18, paddingVertical: 12, maxWidth: SW * 0.72,
