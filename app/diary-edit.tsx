@@ -6,7 +6,7 @@ import { useRef, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Platform, Animated, ActivityIndicator,
-  Easing, KeyboardAvoidingView, Dimensions, Modal, Keyboard,
+  Easing, KeyboardAvoidingView, Dimensions, Modal, Keyboard, Image,
 } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -142,12 +142,10 @@ function SmartNameRow() {
   return (
     <View style={styles.smartNameRow}>
       <View style={styles.smartAvatarWrap}>
-        <LinearGradient
-          colors={['#8B6E5A', '#A07858', '#7A5C40']}
+        <Image
+          source={require('../assets/images/icon.png')}
           style={styles.smartAvatarCircle}
-        >
-          <Text style={styles.smartAvatarEmoji}>🐴</Text>
-        </LinearGradient>
+        />
         <View style={styles.smartOnlineDot} />
       </View>
       <View>
@@ -603,7 +601,7 @@ export default function DiaryEditScreen() {
                     </View>
                     <TextInput
                       style={styles.noteInput}
-                      placeholder={`${elderNickname}今天有什么特别的时刻？\n您有什么感受或担心想记下来？\n哪怕只有一两句话，都很有意义 📛`}
+                      placeholder={`${elderNickname}今天有什么特别的时刻？\n您有什么感受或担心想记下来？\n哪怕只有一两句话，都很有意义 💗`}
                       value={content}
                       onChangeText={setContent}
                       multiline
