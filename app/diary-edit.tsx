@@ -289,7 +289,7 @@ export default function DiaryEditScreen() {
         setConversation(entry.conversation);
       } else if (entry.aiReply) {
         const legacyConv: ConversationMessage[] = [
-          { id: generateId(), role: 'user', text: entry.moodEmoji + (entry.content ? ' ' + entry.content.slice(0, 80) : ' 已记录今日护理情况 📖'), createdAt: entry.createdAt ?? new Date().toISOString() },
+          { id: generateId(), role: 'user', text: entry.content ? entry.content.slice(0, 80) : '已记录今日护理情况', createdAt: entry.createdAt ?? new Date().toISOString() },
           { id: generateId(), role: 'ai', text: entry.aiReply, createdAt: entry.createdAt ?? new Date().toISOString() },
         ];
         setConversation(legacyConv);
@@ -341,7 +341,7 @@ export default function DiaryEditScreen() {
     setSubmitting(false);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    const userText = mood.emoji + (content.trim() ? ' ' + content.trim() : ' 已记录今日护理情况 📖');
+    const userText = content.trim() ? content.trim() : '已记录今日护理情况';
     const userMsg: ConversationMessage = { id: generateId(), role: 'user', text: userText, createdAt: new Date().toISOString() };
     const conv1 = [userMsg];
     setConversation(conv1);
