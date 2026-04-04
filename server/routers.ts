@@ -30,6 +30,7 @@ export const appRouter = router({
     }),
   }),
   ai: aiRouter,
+  smart: aiRouter,
 });
 
 export type AppRouter = typeof appRouter;
