@@ -1203,7 +1203,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 24, paddingBottom: 32 },
   stepContainer: { alignItems: 'center', paddingTop: 8 },
   mascot: { fontSize: 64, marginBottom: 16, marginTop: 8 },
-  mascotImg: { width: 100, height: 100 },
+  mascotImg: { width: 100, height: 100, borderRadius: 28, overflow: 'hidden' },
   mascotImgSm: { width: 90, height: 90, marginBottom: 16, marginTop: 8 },
   zodiacBig: { fontSize: 72, marginBottom: 12, marginTop: 8 },
   title: { fontSize: 26, fontWeight: '700', color: '#11181C', textAlign: 'center', marginBottom: 8 },
