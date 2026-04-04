@@ -88,10 +88,6 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
             {timeStr ? <Text style={styles.diaryTime}>{timeStr}</Text> : null}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, justifyContent: 'flex-end' }}>
-            <View style={[styles.moodBadge, { backgroundColor: mood.color + '18' }]}>
-              <Text style={styles.moodBadgeEmoji}>{entry.moodEmoji}</Text>
-              <Text style={[styles.moodBadgeLabel, { color: mood.color }]}>{mood.label}</Text>
-            </View>
             {editMode && (
               <Animated.View style={{ transform: [{ translateX: deleteShake }] }}>
                 <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} activeOpacity={0.8}>
