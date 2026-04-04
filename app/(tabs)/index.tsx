@@ -639,7 +639,7 @@ function CreatorHomeScreen() {
           </View>
           <Animated.View style={{ transform: [{ scale: avatarScale }] }}>
             <TouchableOpacity
-              style={[styles.profileBtn, memberPhotoUri ? { backgroundColor: 'transparent', borderWidth: 2.5, borderColor: zodiacColor + '60' } : {}]}
+              style={[styles.profileBtn, memberPhotoUri ? { backgroundColor: 'transparent', borderWidth: 0 } : {}]}
               onPress={() => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/profile' as any);
@@ -881,9 +881,9 @@ const styles = StyleSheet.create({
   appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   appName: { fontSize: 24, fontWeight: '900', color: AppColors.coral.primary, letterSpacing: -0.5 },
   greeting: { fontSize: 13, color: AppColors.text.tertiary, fontWeight: '500', lineHeight: 20 },
-  profileBtn: { width: 50, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 },
-  profileGradient: { width: 50, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  profilePhoto: { width: 50, height: 50, borderRadius: 18 },
+  profileBtn: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 },
+  profileGradient: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
+  profilePhoto: { width: 50, height: 50, borderRadius: 25 },
 
   // 打卡横幅
   checkinBanner: { flexDirection: 'row', alignItems: 'center', borderRadius: 24, padding: 18, overflow: 'hidden', shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 14, elevation: 4 },
