@@ -82,7 +82,7 @@ export default function DiaryDetailScreen() {
         caregiverName,
         originalContent: entry.content || '',
         originalMood: entry.moodEmoji || '',
-        originalSmartReply: entry.smartReply || '',
+        originalAiReply: entry.smartReply || '',
         history: historyForApi,
         question: q,
       });
@@ -269,7 +269,7 @@ export default function DiaryDetailScreen() {
           {/* 继续追问智能助手 */}
           {entry.smartReply && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💬 继续向小马虎追问</Text>
+              <Text style={styles.sectionTitle}>💬 继续和小马虎说说</Text>
               <View style={styles.chatBox}>
                 {followUpHistory.map((msg, i) => (
                   msg.role === 'user' ? (
@@ -309,7 +309,7 @@ export default function DiaryDetailScreen() {
                   style={styles.followUpInput}
                   value={followUpInput}
                   onChangeText={setFollowUpInput}
-                  placeholder="向小马虎追问，如：这种情况怎么处理？"
+                  placeholder="继续和小马虎说说...💗"
                   placeholderTextColor={AppColors.text.tertiary}
                   returnKeyType="send"
                   onSubmitEditing={handleFollowUp}

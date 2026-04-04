@@ -123,11 +123,7 @@ function SmartBubble({ text, animate = false, isFirst = false }: { text: string;
 
   return (
     <Animated.View style={[styles.smartBubbleWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-      {isFirst && (
-        <Animated.View style={[styles.stickerDecor, { transform: [{ rotate }] }]}>
-          <Text style={styles.stickerText}>✨</Text>
-        </Animated.View>
-      )}
+
       <View style={[styles.bubbleBlue, isFirst ? styles.bubbleBlueFirst : styles.bubbleBluePink]}>
         <View style={styles.bubbleDots}>
           <View style={[styles.bubbleDot, { backgroundColor: '#D4C4B4' }]} />
@@ -722,7 +718,7 @@ export default function DiaryEditScreen() {
                   <View style={styles.inputWrap}>
                     <TextInput
                       style={styles.chatInput}
-                      placeholder="继续向小马虎提问...💭"
+                      placeholder="继续和小马虎说说...💗"
                       value={followUpInput}
                       onChangeText={setFollowUpInput}
                       placeholderTextColor="#C4A0B8"
