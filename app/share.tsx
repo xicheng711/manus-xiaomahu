@@ -1069,17 +1069,32 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             </View>
 
             {!params.date && !(yesterdayCi?.eveningDone) && !isJoiner && (
-              <View style={styles.backfillNotice}>
-                <Text style={styles.backfillText}>缺少昨晚记录</Text>
-                <TouchableOpacity onPress={() => {
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
                   const y = new Date();
                   y.setDate(y.getDate() - 1);
                   const yDate = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
                   router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: yDate } } as any);
-                }}>
-                  <Text style={styles.backfillCta}>去补昨晚打卡 &gt;</Text>
-                </TouchableOpacity>
-              </View>
+                }}
+              >
+                <LinearGradient
+                  colors={['#FFF7ED', '#FEF3C7']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.backfillNotice}
+                >
+                  <View style={styles.backfillLeft}>
+                    <Text style={styles.backfillIcon}>🌙</Text>
+                    <View>
+                      <Text style={styles.backfillTitle}>缺少昨晚打卡记录</Text>
+                      <Text style={styles.backfillSub}>补完昨晚记录可获得更准确的健康分析</Text>
+                    </View>
+                  </View>
+                  <View style={styles.backfillCtaBtn}>
+                    <Text style={styles.backfillCtaBtnText}>去补卡</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
             )}
 
             {backfillNotice && (
@@ -1214,9 +1229,20 @@ const styles = StyleSheet.create({
   missingCheckinBtnText: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   backfillNotice: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFF8EE', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
-    marginBottom: 14, borderWidth: 1, borderColor: '#F5E6D0',
+    borderRadius: 18, paddingHorizontal: 18, paddingVertical: 16,
+    marginBottom: 16, borderWidth: 1.5, borderColor: '#FDE68A',
+    shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3,
   },
+  backfillLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  backfillIcon: { fontSize: 28 },
+  backfillTitle: { fontSize: 15, fontWeight: '800', color: '#92400E', marginBottom: 3 },
+  backfillSub: { fontSize: 12, color: '#B45309', opacity: 0.85, lineHeight: 17 },
+  backfillCtaBtn: {
+    backgroundColor: '#F59E0B', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 8,
+    shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6,
+  },
+  backfillCtaBtnText: { fontSize: 13, fontWeight: '800', color: '#fff' },
   backfillText: { fontSize: 13, color: '#B8860B', fontWeight: '600' },
   backfillCta: { fontSize: 13, color: AppColors.green.strong, fontWeight: '700' },
   backfillSuccess: {
