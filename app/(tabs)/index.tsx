@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { WeeklyEcho } from '@/components/weekly-echo';
 import { JoinerHomeScreen } from '@/components/joiner-home';
 import { useFamilyContext } from '@/lib/family-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -482,6 +483,7 @@ function CreatorHomeScreen() {
   const [zodiacEmoji, setZodiacEmoji] = useState('🐎');
   const { weatherData, cityName, buildGreeting, refresh: refreshWeather } = useWeather();
   const [latestCheckIn, setLatestCheckIn] = useState<DailyCheckIn | null>(null);
+  const [briefingSummary, setBriefingSummary] = useState<string | null>(null);
   const lunarDate = getLunarDate();
   const todayLabel = getFormattedDate();
 
@@ -518,6 +520,21 @@ function CreatorHomeScreen() {
     setAllCheckIns(all);
     const diaries = await getDiaryEntries();
     setAllDiaryEntries(diaries);
+    // 读取今日简报缓存的 AI 总结
+    try {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const raw = await AsyncStorage.getItem('share_briefing_cache_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.date === todayKey && parsed.briefing?.summary) {
+          setBriefingSummary(parsed.briefing.summary);
+        } else {
+          setBriefingSummary(null);
+        }
+      } else {
+        setBriefingSummary(null);
+      }
+    } catch { setBriefingSummary(null); }
   }, [activeMembership?.familyId]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
@@ -546,9 +563,11 @@ function CreatorHomeScreen() {
   const eveningDone = todayCheckIn?.eveningDone ?? false;
   const todayDone = morningDone;
 
-  const encouragement = morningDone
-    ? getPersonalizedSmartSuggestion(todayCheckIn!)
-    : '完成打卡后，自动整理今日照护数据';
+  const encouragement = briefingSummary
+    ? briefingSummary
+    : morningDone
+      ? '今日记录已完成，点击查看完整分析'
+      : '完成打卡后，自动生成今日状态总结';
 
   const quickActions = [
     { emoji: '💊', label: '用药记录', route: '/medication', gradientStart: Gradients.coral[0], gradientEnd: Gradients.coral[1], bgColor: AppColors.coral.soft, pulse: false },
