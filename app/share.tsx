@@ -664,6 +664,7 @@ export default function ShareScreen() {
   const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number; napMinutes: number }>>([]);
   const [todayCi, setTodayCi] = useState<DailyCheckIn | null>(null);
   const [yesterdayCi, setYesterdayCi] = useState<DailyCheckIn | null>(null);
+  const [mergedTodayCi, setMergedTodayCi] = useState<DailyCheckIn | null>(null); // 今日分析用的合并记录
   const [viewMode, setViewMode] = useState<'today' | 'yesterday'>('today');
   const { weatherData } = useWeather();
   const { activeMembership } = useFamilyContext();
@@ -845,6 +846,7 @@ export default function ShareScreen() {
         morningDone: morningSource.morningDone,
       };
       setViewMode('today'); // 今日分析始终默认显示今日视图（今天早间+昨晚记录合并）
+      setMergedTodayCi(ci); // 保存合并记录，供今日按钮切换回来时使用
 
       setCheckIn(ci);
       loadSupplementaryData();
@@ -1029,11 +1031,13 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             <TouchableOpacity
               style={[styles.dateSwitchBtn, viewMode === 'today' && styles.dateSwitchBtnActive]}
               onPress={() => {
-                if (todayCi) { setViewMode('today'); setCheckIn(todayCi); }
+                // 今日按钮：显示合并的今日分析记录（早间睡眠+昨晚心情/用药/饮食）
+                const target = mergedTodayCi || todayCi;
+                if (target) { setViewMode('today'); setCheckIn(target); }
               }}
-              disabled={!todayCi}
+              disabled={!mergedTodayCi && !todayCi}
             >
-              <Text style={[styles.dateSwitchText, viewMode === 'today' && styles.dateSwitchTextActive, !todayCi && { opacity: 0.35 }]}>今日</Text>
+              <Text style={[styles.dateSwitchText, viewMode === 'today' && styles.dateSwitchTextActive, (!mergedTodayCi && !todayCi) && { opacity: 0.35 }]}>今日</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.dateSwitchBtn, viewMode === 'yesterday' && styles.dateSwitchBtnActive]}
