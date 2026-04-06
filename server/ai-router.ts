@@ -51,6 +51,34 @@ function extractJSON(raw: string): string {
   throw new Error('Failed to parse LLM JSON response');
 }
 
+// 日记对话专用 system prompt — 像朋友聊天，不像专业助手
+const DIARY_CHAT_SYSTEM = `你是"小马虎"，一个陪伴照顾者的朋友。你的风格是温暖、自然、真实，像一个懂照护的老朋友。
+- 不要像客服或助手，要像真人朋友
+- 不要重复之前说过的话，不要每次都总结一遍状态
+- 不要主动抛问题拉对话，倾听为主
+- 简短回复时就简短，不要硬凑字数
+- 用中文，口语化`;
+
+// 支持多轮对话的 chat 函数（直接返回文本，不需要 JSON）
+async function callQwenChat(
+  messages: Array<{role: 'system' | 'user' | 'assistant', content: string}>,
+  retries = 2,
+  maxTokens = 300
+): Promise<string> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const result = await invokeLLM({ messages, maxTokens });
+      const raw = (result.choices?.[0]?.message?.content as string) ?? '';
+      return raw.trim();
+    } catch (e) {
+      console.error(`callQwenChat attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
+      if (attempt === retries) throw e;
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+  return '';
+}
+
 async function callQwen(prompt: string, systemPrompt: string, retries = 2, maxTokens = 2000): Promise<string> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -499,41 +527,48 @@ ${checkInBlock}
     }))
     .mutation(async ({ input }) => {
       const { elderNickname, caregiverName, originalContent, originalMood, originalAiReply, checkInSummary, history, question } = input;
-      const nickname = elderNickname || '家人';
-      const historyText = history.length > 0
-        ? history.map(m => m.role === 'user' ? `${caregiverName}：${m.text}` : `护理员：${m.text}`).join('\n')
+
+      // 构建真正的多轮对话 messages
+      const messages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [];
+
+      // system prompt + 背景上下文
+      const contextParts: string[] = [];
+      if (originalContent) contextParts.push(`今天的日记：${originalContent}`);
+      if (originalMood) contextParts.push(`心情：${originalMood}`);
+      if (checkInSummary) contextParts.push(`打卡数据：${checkInSummary}`);
+      const contextNote = contextParts.length > 0
+        ? `\n\n背景（仅供参考，不要每次都重复提及）：\n${contextParts.join('\n')}`
         : '';
-      const prompt = `你正在和${caregiverName}聊天。你是一个有照护经验的朋友。你的角色是倾听，不是主导对话。
+      messages.push({
+        role: 'system',
+        content: DIARY_CHAT_SYSTEM + contextNote,
+      });
 
-背景：
-- 日记内容：${originalContent || '未填写'}
-- 心情：${originalMood}
-${checkInSummary ? `- 打卡数据：${checkInSummary}` : ''}
-${historyText ? `\n之前的对话：\n${historyText}\n` : ''}
-${caregiverName}说：${question}
+      // 把第一轮（日记 → AI 首次回复）加进去，建立对话起点
+      if (originalContent) {
+        messages.push({ role: 'user', content: originalContent });
+      }
+      if (originalAiReply) {
+        messages.push({ role: 'assistant', content: originalAiReply });
+      }
 
-回复要求：
-- 你是倾听者，不是对话发起者。不要主动抛问题、不要硬拉话题
-- 如果用户回复很简短（比如"好""嗯""知道了""谢谢"），说明对话可以结束了，你就简短温暖地收尾，比如"好的~""嗯嗯""有事随时说"，不要再追问或给建议
-- 如果用户主动聊了新内容或问了问题，再正常回应
-- 语气像朋友，自然、不啰嗦
-- 不要臆想没提到的事情
-- 字数跟着用户走：用户说得少你也少，用户说得多你可以多一点，不超过100字
+      // 历史对话（真正的多轮格式）
+      for (const m of history) {
+        messages.push({
+          role: m.role === 'user' ? 'user' : 'assistant',
+          content: m.text,
+        });
+      }
 
-返回JSON（不要代码块标记）：
-{"reply": "<回复内容>"}`;
+      // 当前用户消息
+      messages.push({ role: 'user', content: question });
+
       try {
-        const raw = await callQwen(prompt, SYSTEM_PROMPT);
-        const parsed = JSON.parse(raw);
-        // Extract reply from various possible JSON shapes
-        const replyText = parsed.reply ?? parsed.message ?? parsed.text ?? raw;
-        return { success: true, reply: String(replyText).trim() };
+        const reply = await callQwenChat(messages, 2, 300);
+        return { success: true, reply: reply || '嗯嗯~' };
       } catch (e) {
         console.error('followUpDiary error:', e instanceof Error ? e.message : e);
-        return {
-          success: false,
-          reply: `这个问题我需要再想想。如果涉及具体的病情判断，建议和主治医生确认一下。您能再说详细一点吗？`,
-        };
+        return { success: false, reply: '嗯，有事随时说~' };
       }
     }),
   weeklyEcho: publicProcedure
