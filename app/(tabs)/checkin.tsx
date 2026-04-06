@@ -841,14 +841,24 @@ function CheckinScreenContent() {
         // 无历史数据 → 保持 useState 初始值（7-9小时 / 没醒 / 几乎没有 / 没有）
       }
 
-      // 计算连续打卡天数
+      // 计算连续打卡天数（去重同一天，只有相差1天才算连续）
       getAllCheckIns().then(all => {
-        const sorted = [...new Set(all.map(c => c.date))].sort().reverse();
+        // 去重：同一天只算一次，且必须有 eveningDone 或 morningDone
+        const doneDates = [...new Set(
+          all.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
+        )].sort().reverse();
         let count = 0;
-        let prev = todayStr();
-        for (const d of sorted) {
-          const diff = (new Date(prev).getTime() - new Date(d).getTime()) / 86400000;
-          if (diff <= 1) { count++; prev = d; } else break;
+        let prev: string | null = null;
+        for (const d of doneDates) {
+          if (prev === null) {
+            // 第一条：必须是今天或昨天才开始计数
+            const diffFromToday = (new Date(todayStr()).getTime() - new Date(d).getTime()) / 86400000;
+            if (diffFromToday <= 1) { count = 1; prev = d; }
+            else break;
+          } else {
+            const diff = (new Date(prev).getTime() - new Date(d).getTime()) / 86400000;
+            if (diff === 1) { count++; prev = d; } else break;
+          }
         }
         setStreak(Math.max(count, 1));
       });
@@ -961,6 +971,26 @@ function CheckinScreenContent() {
       router.push('/share?refresh=1' as any);
       return;
     }
+    // 保存完成后重新计算连续打卡天数（包含刚刚保存的这次）
+    try {
+      const allAfterSave = await getAllCheckIns();
+      const doneDates = [...new Set(
+        allAfterSave.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
+      )].sort().reverse();
+      let newCount = 0;
+      let prevDate: string | null = null;
+      for (const d of doneDates) {
+        if (prevDate === null) {
+          const diffFromToday = (new Date(todayStr()).getTime() - new Date(d).getTime()) / 86400000;
+          if (diffFromToday <= 1) { newCount = 1; prevDate = d; }
+          else break;
+        } else {
+          const diff = (new Date(prevDate).getTime() - new Date(d).getTime()) / 86400000;
+          if (diff === 1) { newCount++; prevDate = d; } else break;
+        }
+      }
+      setStreak(Math.max(newCount, 1));
+    } catch { /* 保持原有天数 */ }
     if (Platform.OS !== 'web') {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200);

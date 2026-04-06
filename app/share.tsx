@@ -844,7 +844,7 @@ export default function ShareScreen() {
         morningNotes: morningSource.morningNotes,
         morningDone: morningSource.morningDone,
       };
-      setViewMode(hasYesterdayEvening ? 'yesterday' : 'today');
+      setViewMode('today'); // 今日分析始终默认显示今日视图（今天早间+昨晚记录合并）
 
       setCheckIn(ci);
       loadSupplementaryData();
