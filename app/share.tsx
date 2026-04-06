@@ -771,6 +771,7 @@ export default function ShareScreen() {
         setShareText(memCached.shareText);
         if (memCached.checkIn) {
           setCheckIn(memCached.checkIn);
+          setMergedTodayCi(memCached.checkIn); // 缓存命中时也要同步合并记录
         }
         setLoading(false);
         loadSupplementaryData();
@@ -786,6 +787,7 @@ export default function ShareScreen() {
         setShareText(persisted.shareText);
         if (persisted.checkIn) {
           setCheckIn(persisted.checkIn);
+          setMergedTodayCi(persisted.checkIn); // 持久化缓存命中时也要同步合并记录
         }
         setLoading(false);
         loadSupplementaryData();
