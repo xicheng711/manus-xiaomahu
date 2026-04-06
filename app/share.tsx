@@ -315,21 +315,17 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
         <Text style={cardStyles.summaryText}>
           {briefing.summary && briefing.summary.trim().length > 0
             ? briefing.summary
-            : `${elderNickname}今日记录：睡眠${checkIn.sleepHours}小时，心情${checkIn.moodScore}/10，用药${checkIn.medicationTaken ? '按时完成' : '有漏服情况'}。`}
+            : [
+                checkIn.sleepHours ? `睡眠${checkIn.sleepHours}小时，质量${checkIn.sleepQuality === 'good' ? '良好' : checkIn.sleepQuality === 'fair' ? '一般' : '较差'}` : null,
+                checkIn.moodScore !== undefined ? `心情${checkIn.moodScore >= 8 ? '良好' : checkIn.moodScore >= 6 ? '一般' : '较差'}` : null,
+                checkIn.medicationTaken !== undefined ? (checkIn.medicationTaken ? '用药完成' : '未按时服药') : null,
+                checkIn.mealOption ? `进食${checkIn.mealOption.includes('正常') ? '正常' : checkIn.mealOption.includes('偏少') ? '偏少' : '较少'}` : null,
+              ].filter(Boolean).join('，') + '。'
+          }
         </Text>
       </View>
 
-      {/* ── Highlights ── */}
-      {briefing.highlights && briefing.highlights.length > 0 && (
-        <View style={cardStyles.highlightsBox}>
-          {briefing.highlights.map((item: string, idx: number) => (
-            <View key={idx} style={cardStyles.highlightRow}>
-              <Text style={cardStyles.highlightDot}>·</Text>
-              <Text style={cardStyles.highlightText}>{item}</Text>
-            </View>
-          ))}
-        </View>
-      )}
+      {/* Highlights 已移除，避免与今日状态总结重复 */}
 
       {/* ── Footer ── */}
       <View style={cardStyles.footer}>
@@ -781,14 +777,21 @@ export default function ShareScreen() {
       const yesterday = await getYesterdayCheckIn();
       setTodayCi(today);
       setYesterdayCi(yesterday);
-      const ci = today || yesterday;
-      setViewMode(today ? 'today' : 'yesterday');
 
-      if (!ci) {
+      // 优先使用昨晚已完成的记录，其次今日已完成的记录
+      // 如果昨晚记录缺失，先提示用户补录，不生成总结
+      const hasYesterdayEvening = yesterday?.eveningDone;
+      const hasTodayMorning = today?.morningDone;
+
+      if (!hasYesterdayEvening && !hasTodayMorning) {
         setError('请先完成今日打卡，再生成简报');
         setLoading(false);
         return;
       }
+
+      // 如果有昨晚数据用昨晚，否则用今日早间
+      const ci = (hasYesterdayEvening ? yesterday : today)!;
+      setViewMode(hasYesterdayEvening ? 'yesterday' : 'today');
 
       setCheckIn(ci);
       loadSupplementaryData();
@@ -835,6 +838,10 @@ export default function ShareScreen() {
           medicationTaken: ci.medicationTaken ?? true,
           napMinutes: ci.napMinutes ?? (ci.daytimeNap ? 30 : 0),
           notes: ci.eveningNotes || ci.morningNotes || undefined,
+          // 只有用户实际选择了饮食选项才传，否则不传（避免 AI 默认为较差）
+          mealSituation: ci.mealOption
+            ? (ci.mealOption.includes('正常') ? 'good' : ci.mealOption.includes('偏少') ? 'fair' : 'poor')
+            : undefined,
         },
         careScore: 0,
       });
@@ -870,17 +877,19 @@ export default function ShareScreen() {
       `${nickname}有您在身边，一定感受得到这份温暖 🧡`,
     ];
     const encouragement = encouragements[new Date().getDay() % encouragements.length];
+    // 严格基于用户实际输入构建总结，不使用随机鼓励语
+    const parts: string[] = [];
+    if (ci.sleepHours) parts.push(`睡眠${ci.sleepHours}小时，质量${sleepLabel}`);
+    if (ci.moodScore !== undefined) parts.push(`心情${ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差'}（${ci.moodScore}/10）`);
+    if (ci.medicationTaken !== undefined) parts.push(ci.medicationTaken ? '用药完成' : '今日未按时服药');
+    if (ci.mealOption) parts.push(`进食${ci.mealOption.includes('正常') ? '正常' : ci.mealOption.includes('偏少') ? '偏少' : '较少'}`);
+    if (napStr) parts.push(`白天小睡${napStr}`);
+    const summary = parts.length > 0 ? parts.join('，') + '。' : `${nickname}今日照护记录已整理完毕。`;
     return {
-      summary: encouragement,
-      highlights: [
-        ci.medicationTaken ? '今日按时服药 💊' : '注意：今日未按时服药 ⚠️',
-        `睡眠${ci.sleepHours ?? '--'}小时，质量${sleepLabel}`,
-        napStr ? `白天小睡${napStr} ☀️` : null,
-        ci.moodScore ? `心情${ci.moodScore}/10 ${ci.moodEmoji || ''}` : null,
-        ci.eveningNotes || ci.morningNotes ? `备注：${(ci.eveningNotes || ci.morningNotes || '').slice(0, 30)}` : null,
-      ].filter(Boolean) as string[],
+      summary,
+      highlights: [],
       attention: '',
-      shareText: `【${nickname}今日照护简报】\n${dateStr}\n\n睡眠：${ci.sleepHours ?? '--'}小时（${sleepLabel}）${napStr ? `\n午休：${napStr}` : ''}\n心情：${ci.moodScore ?? '--'}/10\n用药：${ci.medicationTaken ? '已完成' : '未完成'}\n\n记录人：${caregiver}`,
+      shareText: `【${nickname}今日照护简报】\n${dateStr}\n\n睡眠：${ci.sleepHours ?? '--'}小时（${sleepLabel}）${napStr ? `\n午休：${napStr}` : ''}\n心情：${ci.moodScore ?? '--'}/10\n用药：${ci.medicationTaken ? '已完成' : '未完成'}${ci.mealOption ? `\n饮食：${ci.mealOption}` : ''}\n\n记录人：${caregiver}`,
     };
   }
 
