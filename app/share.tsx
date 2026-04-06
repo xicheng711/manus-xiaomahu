@@ -265,8 +265,31 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
   const today = historyDate
     ? (() => { const d = new Date(historyDate + 'T00:00:00'); return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }); })()
     : new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
-  const sleepLabel = checkIn.sleepQuality === 'good' ? '良好' : checkIn.sleepQuality === 'fair' ? '一般' : '较差';
-  const medLabel = checkIn.medicationTaken ? '按时 ✅' : '漏药 ❌';
+
+  // 严格基于实际记录判断：早间字段需要 morningDone，晚间字段需要 eveningDone
+  const hasMorning = checkIn.morningDone === true;
+  const hasEvening = checkIn.eveningDone === true;
+
+  // 睡眠数据来自早间打卡
+  const sleepValue = hasMorning && checkIn.sleepHours ? `${checkIn.sleepHours}h` : null;
+  const sleepQualityLabel = checkIn.sleepQuality === 'good' ? '良好' : checkIn.sleepQuality === 'fair' ? '一般' : '较差';
+  const sleepLabel = sleepValue ? `${sleepValue} · ${sleepQualityLabel}` : '未记录';
+
+  // 心情来自晚间打卡
+  const moodValue = hasEvening && checkIn.moodScore != null ? `${checkIn.moodScore}/10` : '未记录';
+  const moodEmoji = hasEvening && checkIn.moodEmoji ? checkIn.moodEmoji : '—';
+
+  // 用药来自晚间打卡
+  const medLabel = hasEvening && checkIn.medicationTaken != null
+    ? (checkIn.medicationTaken ? '按时 ✅' : '漏药 ❌')
+    : '未记录';
+
+  // 饮食来自晚间打卡
+  const mealValue = hasEvening
+    ? (checkIn.mealNotes && checkIn.mealNotes.trim()
+        ? (checkIn.mealNotes.length > 6 ? checkIn.mealNotes.slice(0, 6) + '…' : checkIn.mealNotes)
+        : (checkIn.mealOption ? checkIn.mealOption : '已记录'))
+    : '未记录';
 
   return (
     <Animated.View style={[cardStyles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
@@ -298,12 +321,12 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
 
       {/* ── Data Grid (4 badges with staggered entrance) ── */}
       <View style={cardStyles.dataGrid}>
-        <AnimatedBadge emoji="😴" label="睡眠" value={`${checkIn.sleepHours}h · ${sleepLabel}`} color={AppColors.green.muted} delay={0} />
-        <AnimatedBadge emoji={checkIn.moodEmoji || '😊'} label="心情" value={`${checkIn.moodScore}/10`} color={AppColors.peach.primary} delay={100} />
+        <AnimatedBadge emoji="😴" label="睡眠" value={sleepLabel} color={AppColors.green.muted} delay={0} />
+        <AnimatedBadge emoji={moodEmoji !== '—' ? moodEmoji : '😊'} label="心情" value={moodValue} color={AppColors.peach.primary} delay={100} />
       </View>
       <View style={cardStyles.dataGrid}>
         <AnimatedBadge emoji="💊" label="用药" value={medLabel} color={AppColors.purple.strong} delay={200} />
-        <AnimatedBadge emoji="🍽️" label="饮食" value={checkIn.mealNotes ? (checkIn.mealNotes.length > 6 ? checkIn.mealNotes.slice(0, 6) + '…' : checkIn.mealNotes) : '已记录'} color={AppColors.coral.primary} delay={300} />
+        <AnimatedBadge emoji="🍽️" label="饮食" value={mealValue} color={AppColors.coral.primary} delay={300} />
       </View>
 
        {/* ── 智能总结 ── */}
@@ -315,12 +338,14 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
         <Text style={cardStyles.summaryText}>
           {briefing.summary && briefing.summary.trim().length > 0
             ? briefing.summary
-            : [
-                checkIn.sleepHours ? `睡眠${checkIn.sleepHours}小时，质量${checkIn.sleepQuality === 'good' ? '良好' : checkIn.sleepQuality === 'fair' ? '一般' : '较差'}` : null,
-                checkIn.moodScore !== undefined ? `心情${checkIn.moodScore >= 8 ? '良好' : checkIn.moodScore >= 6 ? '一般' : '较差'}` : null,
-                checkIn.medicationTaken !== undefined ? (checkIn.medicationTaken ? '用药完成' : '未按时服药') : null,
-                checkIn.mealOption ? `进食${checkIn.mealOption.includes('正常') ? '正常' : checkIn.mealOption.includes('偏少') ? '偏少' : '较少'}` : null,
-              ].filter(Boolean).join('，') + '。'
+            : (() => {
+                const parts: string[] = [];
+                if (hasMorning && checkIn.sleepHours) parts.push(`睡眠${checkIn.sleepHours}小时，质量${sleepQualityLabel}`);
+                if (hasEvening && checkIn.moodScore != null) parts.push(`心情${checkIn.moodScore >= 8 ? '良好' : checkIn.moodScore >= 6 ? '一般' : '较差'}`);
+                if (hasEvening && checkIn.medicationTaken != null) parts.push(checkIn.medicationTaken ? '用药完成' : '未按时服药');
+                if (hasEvening && checkIn.mealOption) parts.push(`进食${checkIn.mealOption.includes('正常') ? '正常' : checkIn.mealOption.includes('偏少') ? '偏少' : '较少'}`);
+                return parts.length > 0 ? parts.join('，') + '。' : '暂无足够数据生成总结。';
+              })()
           }
         </Text>
       </View>
@@ -678,10 +703,15 @@ export default function ShareScreen() {
     if (!loadedRef.current) {
       loadedRef.current = true;
       loadAndGenerate(false);
+    } else if (error) {
+      // 之前是错误状态（缺少昨晚记录），用户可能已经去补卡了，强制刷新
+      _briefingCache = null;
+      AsyncStorage.removeItem('share_briefing_cache_v1').catch(() => {});
+      loadAndGenerate(true);
     } else {
       recheckBackfill();
     }
-  }, []));
+  }, [error]));
 
   async function loadHistoryDate(dateStr: string) {
     setError(null);
@@ -996,12 +1026,27 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         )}
 
         {error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorEmoji}>😅</Text>
-            <Text style={styles.errorText}>{error}</Text>
-            {error.includes('打卡') && !isJoiner && (
-              <TouchableOpacity style={styles.checkinBtn} onPress={() => router.push('/(tabs)/checkin' as any)}>
-                <Text style={styles.checkinBtnText}>去打卡 →</Text>
+          <View style={styles.missingCheckinCard}>
+            <View style={styles.missingCheckinTop}>
+              <Text style={styles.missingCheckinEmoji}>🌙</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.missingCheckinTitle}>缺少昨晚打卡记录</Text>
+                <Text style={styles.missingCheckinDesc}>补完昨晚的睡眠、用药、饮食记录后，才能生成完整的今日护理简报</Text>
+              </View>
+            </View>
+            {!isJoiner && (
+              <TouchableOpacity
+                style={styles.missingCheckinBtn}
+                onPress={() => {
+                  const y = new Date();
+                  y.setDate(y.getDate() - 1);
+                  const yDate = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+                  router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: yDate } } as any);
+                }}
+              >
+                <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.missingCheckinBtnGradient}>
+                  <Text style={styles.missingCheckinBtnText}>补打昨晚卡 →</Text>
+                </LinearGradient>
               </TouchableOpacity>
             )}
           </View>
@@ -1155,6 +1200,18 @@ const styles = StyleSheet.create({
   homeBottomBtnText: { fontSize: 15, fontWeight: '800', color: AppColors.surface.whiteStrong },
   disclaimer: { alignItems: 'center', marginBottom: 8 },
   disclaimerText: { fontSize: 11, color: AppColors.text.tertiary, textAlign: 'center' },
+  missingCheckinCard: {
+    backgroundColor: '#FAF5FF', borderRadius: 20, padding: 20,
+    borderWidth: 1, borderColor: '#DDD6FE', gap: 16,
+    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2,
+  },
+  missingCheckinTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  missingCheckinEmoji: { fontSize: 36, lineHeight: 44 },
+  missingCheckinTitle: { fontSize: 16, fontWeight: '800', color: '#5B21B6', marginBottom: 6 },
+  missingCheckinDesc: { fontSize: 13, color: '#6D28D9', lineHeight: 20, opacity: 0.8 },
+  missingCheckinBtn: { borderRadius: 16, overflow: 'hidden' },
+  missingCheckinBtnGradient: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  missingCheckinBtnText: { fontSize: 15, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
   backfillNotice: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#FFF8EE', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,

@@ -1038,7 +1038,13 @@ function CheckinScreenContent() {
               {/* Main diary button — pink/rose gradient */}
               <TouchableOpacity
                 style={styles.nightDiaryBtn}
-                onPress={() => backfillDate ? router.push('/share?refresh=1' as any) : router.push('/diary-edit' as any)}
+                onPress={() => {
+                  if (backfillDate) {
+                    router.push('/share?refresh=1' as any);
+                  } else {
+                    router.push('/diary-edit' as any);
+                  }
+                }}
                 activeOpacity={0.85}
               >
                 <LinearGradient
@@ -1047,7 +1053,7 @@ function CheckinScreenContent() {
                   style={styles.nightDiaryBtnInner}
                 >
                   <Text style={styles.nightDiaryIcon}>{backfillDate ? '📊' : '📖'}</Text>
-                  <Text style={styles.nightDiaryBtnText}>{backfillDate ? '回到分析报告 →' : '写今天的护理日记 →'}</Text>
+                  <Text style={styles.nightDiaryBtnText}>{backfillDate ? '查看今日护理简报 →' : '写今天的护理日记 →'}</Text>
                 </LinearGradient>
               </TouchableOpacity>
 
