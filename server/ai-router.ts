@@ -561,37 +561,52 @@ ${caregiverName}说：${question}
     .mutation(async ({ input }) => {
       const { caregiverName, elderNickname, weekDiaries, weekCheckins } = input;
       const name = caregiverName || '照顾者';
-      const diaryText = weekDiaries.length > 0
-        ? weekDiaries.map(d => `${d.date}（${d.mood}）：${d.content || '未写内容'}`).join('\n')
+
+      // 日记按日期排序，只传实际有内容的
+      const sortedDiaries = [...weekDiaries]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .filter(d => d.content && d.content.trim().length > 0);
+      const diaryText = sortedDiaries.length > 0
+        ? sortedDiaries.map(d => `${d.date}（心情:${d.mood}）：${d.content.slice(0, 200)}`).join('\n')
         : '本周没有写日记';
-      const avgMood = weekCheckins.length > 0
-        ? (weekCheckins.reduce((s, c) => s + (c.moodScore || 5), 0) / weekCheckins.length).toFixed(1)
-        : '未知';
-      const checkinText = weekCheckins.length > 0
-        ? `本周打卡 ${weekCheckins.length} 天，平均心情分数 ${avgMood} 分`
-        : '本周未打卡';
-      const prompt = `您是一位护理数据助手，每周为照顾者整理一份简要的周回顾。
 
-照顾者名字：${name}
-${elderNickname ? `被照顾的家人：${elderNickname}` : ''}
+      // 打卡数据：只统计实际有心情分数的记录，不用默认分展开
+      const checkinsWithMood = weekCheckins.filter(c => c.moodScore !== undefined && c.moodScore !== null);
+      const avgMood = checkinsWithMood.length > 0
+        ? (checkinsWithMood.reduce((s, c) => s + (c.moodScore!), 0) / checkinsWithMood.length).toFixed(1)
+        : null;
+      const checkinsWithSleep = weekCheckins.filter(c => c.sleepHours && c.sleepHours > 0);
+      const avgSleep = checkinsWithSleep.length > 0
+        ? (checkinsWithSleep.reduce((s, c) => s + c.sleepHours!, 0) / checkinsWithSleep.length).toFixed(1)
+        : null;
 
-本周护理记录：
+      const checkinLines: string[] = [];
+      if (weekCheckins.length > 0) checkinLines.push(`本周打卡 ${weekCheckins.length} 天`);
+      if (avgMood) checkinLines.push(`平均心情分数 ${avgMood}/10`);
+      if (avgSleep) checkinLines.push(`平均睡眠 ${avgSleep} 小时`);
+      const checkinText = checkinLines.length > 0 ? checkinLines.join('，') : '本周未打卡';
+
+      // 如果本周没有任何数据，返回简短提示
+      const hasAnyData = sortedDiaries.length > 0 || weekCheckins.length > 0;
+
+      const prompt = `你是一个温暖的护理伴侣。每周日本周结束时，你会基于照顾者本周实际的日记和打卡记录，写一段周回顾。
+
+照顾者：${name}${elderNickname ? `，照顾对象：${elderNickname}` : ''}
+
+本周日记：
 ${diaryText}
 
-打卡情况：${checkinText}
+打卡数据：${checkinText}
 
-请写一份周回顾（150-200字），要求：
-1. 基于本周实际数据，客观总结照护情况（打卡频率、情绪趋势、值得注意的记录）
-2. 如果日记中有具体细节，点明该细节及其意义
-3. 指出本周做得好的地方和需要关注的方面
-4. 结尾给一条具体可执行的建议（如：关注睡眠规律、尝试固定用药时间）
-5. 语气温和、专业，不说空话
+要求：
+- 严格基于上面的实际数据，不要添加任何未记录的内容
+- 如果日记有具体细节，自然地提及
+- 如果本周没有日记也没有打卡，就说“本周没有记录，下周加油”这类的话
+- 语气像朋友一样自然温暖，不要太正式
+- 字数根据内容多少自然决定，不要硬凑凑凑
 
-返回JSON格式（不要包含任何代码块标记）：
-{
-  "echo": "<周回顾文字>",
-  "title": "<一句话标题，如：本周照护情况整体稳定>"
-}`;
+返回JSON（不要包含代码块标记）：
+{"echo": "<周回顾文字>", "title": "<一句话标题>"}`;
       try {
         const raw = await callQwen(prompt, SYSTEM_PROMPT);
         const parsed = JSON.parse(raw);
