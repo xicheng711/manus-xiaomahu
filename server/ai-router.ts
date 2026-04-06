@@ -219,7 +219,7 @@ export const aiRouter = router({
           mood: yesterday.moodScore >= 7 ? "良好" : yesterday.moodScore >= 5 ? "一般" : "较差",
           mood_score: yesterday.moodScore,
           medication_taken: yesterday.medicationTaken,
-          meal: yesterday.mealNotes || "未记录",
+	          meal: yesterday.mealNotes || undefined,
           notes: yesterday.notes,
         } : null),
         weather: weatherInfo || null,
@@ -344,7 +344,7 @@ ${JSON.stringify(structuredInput, null, 2)}
 - 睡眠：${checkIn.sleepHours}小时，质量${checkIn.sleepQuality === "good" ? "良好" : checkIn.sleepQuality === "fair" ? "一般" : "较差"}
 - 心情评分：${checkIn.moodScore}/10
 - 用药：${checkIn.medicationTaken ? "已按时服药" : "未按时服药"}
-- 饮食：${checkIn.mealSituation === "good" ? "进食良好" : checkIn.mealSituation === "fair" ? "进食一般" : "进食较差"}
+	${checkIn.mealSituation ? `- 饮食：${checkIn.mealSituation === "good" ? "进食良好" : checkIn.mealSituation === "fair" ? "进食一般" : "进食较差"}` : "- 饮食：未记录"}
 - 白天小睡：${checkIn.napMinutes != null && checkIn.napMinutes > 0 ? `${checkIn.napMinutes}分钟` : "无"}
 ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
 

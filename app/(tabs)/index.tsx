@@ -663,7 +663,7 @@ function CreatorHomeScreen() {
           todayCheckIn={todayCheckIn}
           elderNickname={elderNickname}
           caregiverName={caregiverName}
-          onPress={() => router.push('/checkin' as any)}
+          onPress={() => router.push('/(tabs)/checkin' as any)}
         />
 
          {/* ── 智能卡片 ── */}
@@ -672,7 +672,7 @@ function CreatorHomeScreen() {
           encouragement={encouragement}
           motivation={getDailyStatusHint(todayCheckIn)}
           onPress={() => router.push('/share' as any)}
-          onCheckinPress={() => router.push('/checkin' as any)}
+          onCheckinPress={() => router.push('/(tabs)/checkin' as any)}
         />
 
         {/* ── 趋势图 ── */}
