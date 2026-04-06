@@ -241,7 +241,6 @@ ${JSON.stringify(structuredInput, null, 2)}
 
 返回以下JSON格式（不包含任何代码块标记，直接返回JSON）：
 {
-  "careScore": <1-100整数，综合状态指数，100=状态极佳，sleep_analysis.score可作为重要参考>,
   "summary": "<基于数据的客观情况描述，指出哪些指标正常、哪些值得注意，30-50字>",
   "suggestion": "<具体的下一步建议，基于数据给出可执行动作，20字以内>"
 }`;
@@ -325,10 +324,9 @@ ${JSON.stringify(structuredInput, null, 2)}
         napMinutes: z.number().optional(),
         notes: z.string().optional(),
       }),
-      careScore: z.number(),
     }))
     .mutation(async ({ input }) => {
-      const { elderNickname, caregiverName, date, checkIn, careScore } = input;
+      const { elderNickname, caregiverName, date, checkIn } = input;
       const nickname = elderNickname || "家人";
 
       const moodEmoji = checkIn.moodScore >= 8 ? "😊" : checkIn.moodScore >= 6 ? "😌" : checkIn.moodScore >= 4 ? "😐" : "😟";

@@ -873,7 +873,6 @@ export default function ShareScreen() {
             ? (ci.mealOption.includes('正常') ? 'good' : ci.mealOption.includes('偏少') ? 'fair' : 'poor')
             : undefined,
         },
-        careScore: 0,
       });
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('智能助手超时')), 15000));
       const result = await Promise.race([aiPromise, timeout]) as any;
