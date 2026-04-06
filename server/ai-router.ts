@@ -444,15 +444,15 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
         if (checkIn.medicationTaken === false) checkInLines.push('今日未服药');
         if (checkIn.mealNotes) checkInLines.push(`饮食：${checkIn.mealNotes}`);
       }
-      const checkInContext = checkInLines.length > 0
-        ? `\n\n今日打卡背景（仅供参考，不要主动提及）：${checkInLines.join('，')}`
+      // 心情和标签放进 system 背景，不出现在用户消息里
+      const moodContext = moodLabel ? `${nickname}今日心情：${moodLabel}${tags.length > 0 ? `，标签：${tags.join('、')}` : ''}` : '';
+      const checkInContext = [...(moodContext ? [moodContext] : []), ...checkInLines].length > 0
+        ? `\n\n今日背景（仅供参考，不要主动提及）：${[...(moodContext ? [moodContext] : []), ...checkInLines].join('，')}`
         : '';
 
-      // 用多轮 messages 格式，像朋友读完日记后自然回应
+      // 用多轮 messages 格式，用户消息只包含日记正文
       const systemContent = DIARY_CHAT_SYSTEM + checkInContext;
-      const userContent = content
-        ? `${content}${tags.length > 0 ? `\n（心情：${moodLabel}，标签：${tags.join('、')}）` : `\n（心情：${moodLabel}）`}`
-        : `（今天没写什么，心情：${moodLabel}）`;
+      const userContent = content || '（今天没写什么）';
 
       const messages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [
         { role: 'system', content: systemContent },
