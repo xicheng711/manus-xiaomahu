@@ -665,6 +665,8 @@ export default function ShareScreen() {
   const [todayCi, setTodayCi] = useState<DailyCheckIn | null>(null);
   const [yesterdayCi, setYesterdayCi] = useState<DailyCheckIn | null>(null);
   const [mergedTodayCi, setMergedTodayCi] = useState<DailyCheckIn | null>(null); // 今日分析用的合并记录
+  const [mergedBriefing, setMergedBriefing] = useState<any>(null); // 今日分析的简报
+  const [yesterdayBriefing, setYesterdayBriefing] = useState<any>(null); // 昨日记录的简报
   const [viewMode, setViewMode] = useState<'today' | 'yesterday'>('today');
   const { weatherData } = useWeather();
   const { activeMembership } = useFamilyContext();
@@ -768,6 +770,7 @@ export default function ShareScreen() {
       const memCached = getCachedBriefing();
       if (memCached) {
         setBriefing(memCached.briefing);
+        setMergedBriefing(memCached.briefing); // 保存今日简报
         setShareText(memCached.shareText);
         if (memCached.checkIn) {
           setCheckIn(memCached.checkIn);
@@ -784,6 +787,7 @@ export default function ShareScreen() {
       const persisted = await loadPersistedBriefing();
       if (persisted) {
         setBriefing(persisted.briefing);
+        setMergedBriefing(persisted.briefing); // 保存今日简报
         setShareText(persisted.shareText);
         if (persisted.checkIn) {
           setCheckIn(persisted.checkIn);
@@ -905,16 +909,19 @@ export default function ShareScreen() {
       const result = await Promise.race([aiPromise, timeout]) as any;
       if (result.success && result.briefing) {
         setBriefing(result.briefing);
+        setMergedBriefing(result.briefing); // 保存今日简报
         setShareText(result.briefing.shareText ?? '');
         setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci);
       } else {
         const fallback = buildLocalBriefing(nickname, caregiver, ci);
         setBriefing(fallback);
+        setMergedBriefing(fallback); // 保存今日简报
         setCachedBriefing(fallback, fallback.shareText, ci);
       }
     } catch (e) {
       const fallback = buildLocalBriefing(nickname, caregiver, ci);
       setBriefing(fallback);
+      setMergedBriefing(fallback); // 保存今日简报
       setCachedBriefing(fallback, fallback.shareText, ci);
     } finally {
       setGenerating(false);
@@ -1035,7 +1042,11 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
               onPress={() => {
                 // 今日按钮：显示合并的今日分析记录（早间睡眠+昨晚心情/用药/饮食）
                 const target = mergedTodayCi || todayCi;
-                if (target) { setViewMode('today'); setCheckIn(target); }
+                if (target) {
+                  setViewMode('today');
+                  setCheckIn(target);
+                  if (mergedBriefing) setBriefing(mergedBriefing);
+                }
               }}
               disabled={!mergedTodayCi && !todayCi}
             >
@@ -1044,7 +1055,18 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             <TouchableOpacity
               style={[styles.dateSwitchBtn, viewMode === 'yesterday' && styles.dateSwitchBtnActive]}
               onPress={() => {
-                if (yesterdayCi) { setViewMode('yesterday'); setCheckIn(yesterdayCi); }
+                if (yesterdayCi) {
+                  setViewMode('yesterday');
+                  setCheckIn(yesterdayCi);
+                  // 昨日简报：用昨日数据本地构建（只含有记录的字段）
+                  if (!yesterdayBriefing) {
+                    const yb = buildLocalBriefing(elderNickname, caregiverName, yesterdayCi);
+                    setYesterdayBriefing(yb);
+                    setBriefing(yb);
+                  } else {
+                    setBriefing(yesterdayBriefing);
+                  }
+                }
               }}
               disabled={!yesterdayCi}
             >
