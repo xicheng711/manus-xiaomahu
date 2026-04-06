@@ -429,84 +429,45 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
       }).optional(),
     }))
     .mutation(async ({ input }) => {
-      const { elderNickname, caregiverName, moodEmoji, moodLabel, tags, content, checkIn } = input;
+      const { elderNickname, caregiverName, moodLabel, tags, content, checkIn } = input;
       const nickname = elderNickname || "家人";
 
-      // Build check-in summary only from available fields
+      // 打卡背景数据（只作为参考，不主动罗列）
       const checkInLines: string[] = [];
       if (checkIn?.morningDone) {
         const sleep = checkIn.sleepRange ?? (checkIn.sleepHours ? `${checkIn.sleepHours}小时` : null);
-        const quality = checkIn.sleepQuality === 'good' ? '睡眠质量良好' : checkIn.sleepQuality === 'fair' ? '睡眠质量一般' : checkIn.sleepQuality === 'poor' ? '睡眠质量较差' : null;
-        if (sleep) checkInLines.push(`夜间睡眠：${sleep}${checkIn.nightAwakenings ? `，夜醒${checkIn.nightAwakenings}` : ''}${quality ? `，${quality}` : ''}`);
-        if (checkIn.napDuration && checkIn.napDuration !== '没有') checkInLines.push(`白天小睡：${checkIn.napDuration}`);
-        if (checkIn.morningNotes) checkInLines.push(`早间备注：${checkIn.morningNotes}`);
+        if (sleep) checkInLines.push(`昨晚睡眠${sleep}${checkIn.nightAwakenings ? `，夜醒${checkIn.nightAwakenings}` : ''}`);
+        if (checkIn.napDuration && checkIn.napDuration !== '没有') checkInLines.push(`白天小睡${checkIn.napDuration}`);
       }
       if (checkIn?.eveningDone) {
-        if (checkIn.moodScore !== undefined) checkInLines.push(`${nickname}今日心情评分：${checkIn.moodScore}/10`);
-        if (checkIn.medicationTaken !== undefined) checkInLines.push(`用药情况：${checkIn.medicationTaken ? '已按时服药' : '今日未服药'}`);
+        if (checkIn.moodScore !== undefined) checkInLines.push(`${nickname}今日心情${checkIn.moodScore}/10`);
+        if (checkIn.medicationTaken === false) checkInLines.push('今日未服药');
         if (checkIn.mealNotes) checkInLines.push(`饮食：${checkIn.mealNotes}`);
-        if (checkIn.eveningNotes) checkInLines.push(`晚间备注：${checkIn.eveningNotes}`);
       }
-      const checkInSummary = checkInLines.length > 0 ? checkInLines.join('\n') : '（今日暂无打卡数据）';
+      const checkInContext = checkInLines.length > 0
+        ? `\n\n今日打卡背景（仅供参考，不要主动提及）：${checkInLines.join('，')}`
+        : '';
 
-      // ── 分流：日记内容丰富 vs 简短 ──────────────────────────────────────
-      const cleanContent = (content || '').replace(/\s/g, '');
-      const isRichDiary = cleanContent.length >= 12;
+      // 用多轮 messages 格式，像朋友读完日记后自然回应
+      const systemContent = DIARY_CHAT_SYSTEM + checkInContext;
+      const userContent = content
+        ? `${content}${tags.length > 0 ? `\n（心情：${moodLabel}，标签：${tags.join('、')}）` : `\n（心情：${moodLabel}）`}`
+        : `（今天没写什么，心情：${moodLabel}）`;
 
-      const diaryBlock = `【今日日记】
-- 记录内容：${content || '（未填写详细内容）'}
-- 心情：${moodLabel}
-- 标签：${tags.length > 0 ? tags.join('、') : '无'}`;
-
-      const checkInBlock = `【今日打卡数据】
-${checkInSummary}`;
-
-      const prompt = isRichDiary
-        ? `你是一位有多年照护经验的温和陪伴者。${caregiverName}刚写完了今天的护理日记。
-
-${diaryBlock}
-
-${checkInBlock}
-
-回复原则：
-1. 主要回应日记“记录内容”里写的具体事情，自然提到日记中的具体场景
-2. 打卡数据只作为背景参考，不要主动罗列打卡数据，更不要报流水账
-3. 如有值得留意的护理点，自然地嵌在正文里提一句，不要单独列出
-4. 语气像熟人聊天，用口语，不要像报告或客服
-5. 不要臆想没写到的情节，不要揣测心理
-6. 禁用：“根据您的记录”“综合来看”“建议继续保持”“你一定”“你心里”
-7. 字数根据日记内容自然决定，不要硬凑，说完就停，不超过130字
-
-返回JSON（不要代码块标记）：
-{"reply": "<回复正文>", "emoji": "<1个emoji>"}}`
-        : `你是一位有多年照护经验的温和陪伴者。${caregiverName}刚写了一条简短的护理日记。
-
-${diaryBlock}
-
-${checkInBlock}
-
-回复原则：
-1. 自然地接一下日记内容，不要过度解读短内容
-2. 打卡数据只作为背景，最多补充1句轻量观察，不要罗列数据
-3. 语气像熟人聊天，简洁自然
-4. 不要臆想没写到的情节
-5. 禁用：“根据您的记录”“综合来看”“建议继续保持”“你一定”“你心里”
-6. 字数根据内容自然决定，短日记就短回复，说完就停，不要硬凑，不超过100字
-
-返回JSON（不要代码块标记）：
-{"reply": "<回复正文>", "emoji": "<1个emoji>"}}`;
+      const messages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [
+        { role: 'system', content: systemContent },
+        { role: 'user', content: userContent },
+      ];
 
       try {
-        const raw = await callQwen(prompt, SYSTEM_PROMPT, 2, 600);
-        const result = JSON.parse(raw);
-        return { success: true, ...result };
+        const reply = await callQwenChat(messages, 2, 400);
+        return { success: true, reply: reply || '嗯，今天辛苦了~', emoji: '💛' };
       } catch (e) {
         console.error("Diary reply error:", e instanceof Error ? e.message : e);
         return {
           success: false,
-          reply: `${caregiverName}，已收到您的护理记录。持续记录有助于了解${nickname}的状态变化，如有异常建议及时咨询专业医生。`,
-          emoji: "📋",
-          tip: "保持稳定的记录频率，便于追踪变化",
+          reply: `今天的记录收到了，${caregiverName}辛苦了。`,
+          emoji: "💛",
         };
       }
     }),
