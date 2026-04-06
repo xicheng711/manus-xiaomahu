@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Animated, Platform, Easing, Dimensions, Modal, Keyboard,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
@@ -1588,7 +1589,22 @@ function CheckinScreenContent() {
     ? { label: currentStep.roleLabel, color: AppColors.purple.strong, bgColor: AppColors.purple.soft }
     : { label: currentStep.roleLabel, color: '#059669', bgColor: '#ECFDF5' };
 
+  // 左滑返回手势
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([-20, 999])
+    .onEnd((e) => {
+      if (e.translationX > 60 && Math.abs(e.translationY) < 80) {
+        if (backfillDate) {
+          router.back();
+        } else {
+          setMode('landing');
+        }
+      }
+    })
+    .runOnJS(true);
+
   return (
+    <GestureDetector gesture={swipeGesture}>
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScrollBeginDrag={Keyboard.dismiss}>
         {/* Header */}
@@ -1647,6 +1663,7 @@ function CheckinScreenContent() {
         </View>
       </ScrollView>
     </ScreenContainer>
+    </GestureDetector>
   );
 }
 
