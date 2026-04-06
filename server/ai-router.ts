@@ -336,27 +336,26 @@ ${JSON.stringify(structuredInput, null, 2)}
       const medEmoji = checkIn.medicationTaken ? "💊✅" : "💊❌";
 
       const prompt = `
-为阿兹海默患者${nickname}生成今日护理简报，供家庭成员查看。
+为${nickname}生成今日护理简报，供家庭成员查看。
 照顾者：${caregiverName}，日期：${date}
 
 今日实际数据：
-- 护理指数：${careScore}/100
 - 睡眠：${checkIn.sleepHours}小时，质量${checkIn.sleepQuality === "good" ? "良好" : checkIn.sleepQuality === "fair" ? "一般" : "较差"}
 - 心情评分：${checkIn.moodScore}/10
 - 用药：${checkIn.medicationTaken ? "已按时服药" : "未按时服药"}
-	${checkIn.mealSituation ? `- 饮食：${checkIn.mealSituation === "good" ? "进食良好" : checkIn.mealSituation === "fair" ? "进食一般" : "进食较差"}` : "- 饮食：未记录"}
+${checkIn.mealSituation ? `- 饮食：${checkIn.mealSituation === "good" ? "进食良好" : checkIn.mealSituation === "fair" ? "进食一般" : "进食较差"}` : "- 饮食：未记录"}
 - 白天小睡：${checkIn.napMinutes != null && checkIn.napMinutes > 0 ? `${checkIn.napMinutes}分钟` : "无"}
 ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
 
 要求：
-- summary：客观描述今日整体状态，指出正常和异常指标，不超过60字
-- highlights：2-3条值得关注的事项，每条15字以内，基于数据事实
+- summary：客观描述今日整体状态，仅基于以上实际数据，不要提及护理指数、careScore等概念。结尾加一句温暖鼓励的话（如“辛苦了，谢谢你的用心呢”、“每一天的照顾都小小的不容易”这类自然温情的话），总共不超过80字
+- highlights：2-3条値得关注的事项，每条15字以内，基于数据事实
 - attention：如有异常指标（如睡眠不足、漏药、情绪低落），用一句话指出，无异常则留空字符串
 - shareText：适合直接发送到家人微信群的今日简报，格式清晰好读，包含：睡眠、心情、用药、饮食、是否有异常，语气温和可信，150字以内
 
 返回JSON格式（不要包含任何代码块标记）：
 {
-  "summary": "<基于数据的客观描述>",
+  "summary": "<基于数据的客观描述+结尾鼓励语>",
   "highlights": ["<关键事项1>", "<关键事项2>"],
   "attention": "<需要关注的异常，无则为空字符串>",
   "shareText": "<微信分享简报>"
