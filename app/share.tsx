@@ -808,8 +808,8 @@ export default function ShareScreen() {
       setTodayCi(today);
       setYesterdayCi(yesterday);
 
-      // 优先使用昨晚已完成的记录，其次今日已完成的记录
-      // 如果昨晚记录缺失，先提示用户补录，不生成总结
+      // 睡眠数据来自今日早间打卡，心情/用药/饮食来自昨晚打卡
+      // 如果两者都没有，提示用户先完成打卡
       const hasYesterdayEvening = yesterday?.eveningDone;
       const hasTodayMorning = today?.morningDone;
 
@@ -819,8 +819,31 @@ export default function ShareScreen() {
         return;
       }
 
-      // 如果有昨晚数据用昨晚，否则用今日早间
-      const ci = (hasYesterdayEvening ? yesterday : today)!;
+      // 合并数据：睡眠来自今日早间（today），心情/用药/饮食来自昨晚（yesterday）
+      // 如果今日早间没有数据则回退到 yesterday
+      const morningSource = hasTodayMorning ? today! : yesterday!;
+      const eveningSource = hasYesterdayEvening ? yesterday! : today!;
+      const ci: DailyCheckIn = {
+        ...eveningSource,
+        // 睡眠字段优先取今日早间打卡
+        sleepHours: morningSource.sleepHours,
+        sleepQuality: morningSource.sleepQuality,
+        sleepInput: morningSource.sleepInput,
+        sleepScore: morningSource.sleepScore,
+        sleepProblems: morningSource.sleepProblems,
+        sleepType: morningSource.sleepType,
+        sleepSegments: morningSource.sleepSegments,
+        awakeHours: morningSource.awakeHours,
+        nightWakings: morningSource.nightWakings,
+        napMinutes: morningSource.napMinutes,
+        daytimeNap: morningSource.daytimeNap,
+        sleepRange: morningSource.sleepRange,
+        nightAwakenings: morningSource.nightAwakenings,
+        nightAwakeTime: morningSource.nightAwakeTime,
+        napDuration: morningSource.napDuration,
+        morningNotes: morningSource.morningNotes,
+        morningDone: morningSource.morningDone,
+      };
       setViewMode(hasYesterdayEvening ? 'yesterday' : 'today');
 
       setCheckIn(ci);
