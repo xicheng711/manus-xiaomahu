@@ -1056,11 +1056,12 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             >
               <Text style={[styles.dateSwitchText, viewMode === 'today' && styles.dateSwitchTextActive, (!mergedTodayCi && !todayCi) && { opacity: 0.35 }]}>今日</Text>
             </TouchableOpacity>
+            {/* 只有昨日有打卡记录时才显示昨日按钮 */}
             <TouchableOpacity
               style={[styles.dateSwitchBtn, viewMode === 'yesterday' && styles.dateSwitchBtnActive]}
               onPress={() => {
+                setViewMode('yesterday');
                 if (yesterdayCi) {
-                  setViewMode('yesterday');
                   setCheckIn(yesterdayCi);
                   // 昨日简报：用昨日数据本地构建（只含有记录的字段）
                   if (!yesterdayBriefing) {
@@ -1072,14 +1073,23 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                   }
                 }
               }}
-              disabled={!yesterdayCi}
             >
-              <Text style={[styles.dateSwitchText, viewMode === 'yesterday' && styles.dateSwitchTextActive, !yesterdayCi && { opacity: 0.35 }]}>昨日</Text>
+              <Text style={[styles.dateSwitchText, viewMode === 'yesterday' && styles.dateSwitchTextActive]}>昨日</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {error ? (
+        {viewMode === 'yesterday' && !yesterdayCi ? (
+          <View style={styles.missingCheckinCard}>
+            <View style={styles.missingCheckinTop}>
+              <Text style={styles.missingCheckinEmoji}>📅</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.missingCheckinTitle}>昨日暂无打卡记录</Text>
+                <Text style={styles.missingCheckinDesc}>昨日还没有完成打卡，暂时无法显示昨日的护理分析</Text>
+              </View>
+            </View>
+          </View>
+        ) : error ? (
           <View style={styles.missingCheckinCard}>
             <View style={styles.missingCheckinTop}>
               <Text style={styles.missingCheckinEmoji}>🌙</Text>
