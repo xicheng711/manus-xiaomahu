@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet,
   Platform, TextInput, Image, Modal, Alert, ActivityIndicator,
-  Keyboard,
+  Keyboard, KeyboardAvoidingView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -607,7 +607,10 @@ export default function ProfileScreen() {
 
       {/* ── 详情编辑 Modal ── */}
       <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
@@ -618,7 +621,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {editTarget === 'caregiver' ? (
                 <>
                   <Text style={styles.modalLabel}>您的姓名</Text>
@@ -683,7 +686,7 @@ export default function ProfileScreen() {
               <View style={{ height: 20 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── 家庭管理 Modal ── */}
