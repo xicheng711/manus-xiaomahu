@@ -84,10 +84,19 @@ export default function JoinerPreview() {
 
   useEffect(() => {
     async function seed() {
+      const MOCK_MEMBERSHIP = {
+        familyId: 'room001',
+        myMemberId: 'joiner001',
+        role: 'joiner',
+        room: MOCK_ROOM,
+        joinedAt: new Date().toISOString(),
+      };
       await AsyncStorage.setItem('elder_profile_v3', JSON.stringify(MOCK_PROFILE));
       await AsyncStorage.setItem('family_room_v1', JSON.stringify(MOCK_ROOM));
       await AsyncStorage.setItem('current_family_member_v1', JSON.stringify(MOCK_MEMBER));
       await AsyncStorage.setItem('family_announcements_v1', JSON.stringify(MOCK_ANNOUNCEMENTS));
+      await AsyncStorage.setItem('family_memberships_v1', JSON.stringify([MOCK_MEMBERSHIP]));
+      await AsyncStorage.setItem('active_family_id_v1', 'room001');
       const dest = params.tab === 'family' ? '/(tabs)/family' : '/(tabs)';
       router.replace(dest as any);
     }
