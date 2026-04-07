@@ -25,15 +25,14 @@ interface TrendChartProps {
 }
 
 function getWeekRange(offset: number): { start: Date; end: Date; label: string } {
+  // 以今天为终点（最右边），往前推6天，今天始终在最右边
   const now = new Date();
-  const dayOfWeek = now.getDay();
-  // Start from Monday: if today is Sunday (0), go back 6 days; otherwise go back (dayOfWeek-1) days
-  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - daysToMonday + (offset * 7));
+  const endOfWeek = new Date(now);
+  endOfWeek.setDate(now.getDate() + (offset * 7));
+  endOfWeek.setHours(23, 59, 59, 999);
+  const startOfWeek = new Date(endOfWeek);
+  startOfWeek.setDate(endOfWeek.getDate() - 6);
   startOfWeek.setHours(0, 0, 0, 0);
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
   const label = `${startOfWeek.getMonth() + 1}月${startOfWeek.getDate()}日 至 ${endOfWeek.getMonth() + 1}月${endOfWeek.getDate()}日`;
   return { start: startOfWeek, end: endOfWeek, label };
 }
@@ -64,7 +63,7 @@ function MoodGauge({ avgMood, prevAvg }: { avgMood: number; prevAvg: number | nu
   const pct = Math.min(1, Math.max(0, avgMood / 10));
   const accentColor = avgMood >= 8 ? '#16A34A' : avgMood >= 5 ? '#F59E0B' : '#F97316';
   const emoji = avgMood >= 8 ? '😄' : avgMood >= 6 ? '😊' : avgMood >= 4 ? '😌' : avgMood >= 2 ? '😕' : '😢';
-  const statusLabel = avgMood >= 8 ? '本周心情很好' : avgMood >= 6 ? '本周心情不错' : avgMood >= 4 ? '本周心情平稳' : avgMood >= 2 ? '本周心情一般' : '本周需要关注';
+  const statusLabel = avgMood >= 8 ? '近7天心情很好' : avgMood >= 6 ? '近7天心情不错' : avgMood >= 4 ? '近7天心情平稳' : avgMood >= 2 ? '近7天心情一般' : '近7天需要关注';
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -539,7 +538,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
 
   const range = getWeekRange(offset);
   const dateRange = buildDateRange(range.start, range.end);
-  const periodLabel = offset === 0 ? '本周' : offset === -1 ? '上周' : `${Math.abs(offset)}周前`;
+  const periodLabel = offset === 0 ? '近7天' : `${Math.abs(offset) * 7}天前`;
 
   const periodCheckIns = dateRange.map(d => checkInMap.get(d)).filter(Boolean) as DailyCheckIn[];
 
