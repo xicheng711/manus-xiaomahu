@@ -34,6 +34,17 @@ export default function ProfileScreen() {
   const [editingElderNickname, setEditingElderNickname] = useState(false);
   const [elderNicknameDraft, setElderNicknameDraft] = useState('');
 
+  // 详情编辑 Modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<'caregiver' | 'elder'>('caregiver');
+  const [draftCaregiverName, setDraftCaregiverName] = useState('');
+  const [draftCaregiverBirthYear, setDraftCaregiverBirthYear] = useState('');
+  const [draftCity, setDraftCity] = useState('');
+  const [draftElderNickname, setDraftElderNickname] = useState('');
+  const [draftElderName, setDraftElderName] = useState('');
+  const [draftElderBirthDate, setDraftElderBirthDate] = useState('');
+  const [draftElderCity, setDraftElderCity] = useState('');
+
   // Family management modal state
   const [showFamilyModal, setShowFamilyModal] = useState(false);
   const [familyModalTab, setFamilyModalTab] = useState<'list' | 'join' | 'create'>('list');
@@ -118,6 +129,53 @@ export default function ProfileScreen() {
     const updated = await saveProfile({ ...profile, nickname: elderNicknameDraft.trim() });
     setProfile(updated);
     setEditingElderNickname(false);
+  };
+
+  const openEditModal = (target: 'caregiver' | 'elder') => {
+    if (!profile) return;
+    setEditTarget(target);
+    if (target === 'caregiver') {
+      setDraftCaregiverName(profile.caregiverName || '');
+      setDraftCaregiverBirthYear(profile.caregiverBirthYear || '');
+      setDraftCity(profile.city || '');
+    } else {
+      setDraftElderNickname(profile.nickname || profile.name || '');
+      setDraftElderName(profile.name || '');
+      setDraftElderBirthDate(profile.birthDate || '');
+      setDraftElderCity(profile.city || '');
+    }
+    setShowEditModal(true);
+  };
+
+  const saveEditModal = async () => {
+    if (!profile) return;
+    let updated: ElderProfile;
+    if (editTarget === 'caregiver') {
+      const year = parseInt(draftCaregiverBirthYear);
+      const zodiac = !isNaN(year) ? getZodiac(year) : null;
+      updated = await saveProfile({
+        ...profile,
+        caregiverName: draftCaregiverName.trim() || profile.caregiverName,
+        caregiverBirthYear: draftCaregiverBirthYear.trim() || profile.caregiverBirthYear,
+        caregiverZodiacEmoji: zodiac?.emoji || profile.caregiverZodiacEmoji,
+        caregiverZodiacName: zodiac?.name || profile.caregiverZodiacName,
+        city: draftCity.trim() || profile.city,
+      });
+    } else {
+      const birthYear = draftElderBirthDate ? new Date(draftElderBirthDate + 'T00:00:00').getFullYear() : new Date(profile.birthDate).getFullYear();
+      const zodiac = getZodiac(birthYear);
+      updated = await saveProfile({
+        ...profile,
+        nickname: draftElderNickname.trim() || profile.nickname,
+        name: draftElderName.trim() || profile.name,
+        birthDate: draftElderBirthDate.trim() || profile.birthDate,
+        zodiacEmoji: zodiac.emoji,
+        zodiacName: zodiac.name,
+        city: draftElderCity.trim() || profile.city,
+      });
+    }
+    setProfile(updated);
+    setShowEditModal(false);
   };
 
   const toggleNotifications = async (value: boolean) => {
@@ -307,6 +365,12 @@ export default function ProfileScreen() {
             )}
             <Text style={styles.cardSub}>属{caregiverZodiac.name} · {profile.caregiverBirthYear}年</Text>
             <Text style={styles.cardSub2}>照顾者</Text>
+            <TouchableOpacity
+              style={styles.editDetailBtn}
+              onPress={() => openEditModal('caregiver')}
+            >
+              <Text style={styles.editDetailBtnText}>编辑详情</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -363,6 +427,12 @@ export default function ProfileScreen() {
             )}
             <Text style={styles.cardSub}>属{elderZodiac.name} · {new Date(profile.birthDate).getFullYear()}年</Text>
             <Text style={styles.cardSub2}>{profile.name}</Text>
+            <TouchableOpacity
+              style={styles.editDetailBtn}
+              onPress={() => openEditModal('elder')}
+            >
+              <Text style={styles.editDetailBtnText}>编辑详情</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -534,6 +604,87 @@ export default function ProfileScreen() {
           <Text style={styles.deleteAccountBtnText}>注销账号</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── 详情编辑 Modal ── */}
+      <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {editTarget === 'caregiver' ? '📝 编辑照顾者信息' : '📝 编辑被照顾者信息'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)} style={styles.modalCloseBtn}>
+                <Text style={styles.modalCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
+              {editTarget === 'caregiver' ? (
+                <>
+                  <Text style={styles.modalLabel}>您的姓名</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={draftCaregiverName}
+                    onChangeText={setDraftCaregiverName}
+                    placeholder="输入您的姓名"
+                  />
+                  <Text style={styles.modalLabel}>出生年份</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={draftCaregiverBirthYear}
+                    onChangeText={setDraftCaregiverBirthYear}
+                    placeholder="例如：1985"
+                    keyboardType="number-pad"
+                  />
+                  <Text style={styles.modalLabel}>所在城市</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={draftCity}
+                    onChangeText={setDraftCity}
+                    placeholder="例如：北京"
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.modalLabel}>昵称（如：姥姥）</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={draftElderNickname}
+                    onChangeText={setDraftElderNickname}
+                    placeholder="输入昵称"
+                  />
+                  <Text style={styles.modalLabel}>真实姓名</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={draftElderName}
+                    onChangeText={setDraftElderName}
+                    placeholder="输入真实姓名"
+                  />
+                  <Text style={styles.modalLabel}>出生日期</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={draftElderBirthDate}
+                    onChangeText={setDraftElderBirthDate}
+                    placeholder="格式：YYYY-MM-DD"
+                  />
+                  <Text style={styles.modalLabel}>所在城市</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={draftElderCity}
+                    onChangeText={setDraftElderCity}
+                    placeholder="例如：北京"
+                  />
+                </>
+              )}
+              
+              <TouchableOpacity style={styles.modalSubmitBtn} onPress={saveEditModal}>
+                <Text style={styles.modalSubmitBtnText}>保存修改</Text>
+              </TouchableOpacity>
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── 家庭管理 Modal ── */}
       <Modal visible={showFamilyModal} transparent animationType="slide" onRequestClose={() => setShowFamilyModal(false)}>
@@ -768,7 +919,21 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   cardSub: { fontSize: 14, color: AppColors.text.secondary, marginBottom: 2 },
-  cardSub2: { fontSize: 13, color: AppColors.text.tertiary },
+  cardSub2: { fontSize: 13, color: AppColors.text.tertiary, marginBottom: 8 },
+  editDetailBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.4)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  editDetailBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: AppColors.text.primary,
+  },
 
   infoRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
