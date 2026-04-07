@@ -9,7 +9,7 @@ import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
@@ -912,17 +912,21 @@ export default function ShareScreen() {
         setMergedBriefing(result.briefing); // 保存今日简报
         setShareText(result.briefing.shareText ?? '');
         setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci);
+        // 持久化简报历史
+        saveBriefing({ date: getTodayKey(), careScore: result.briefing.careScore ?? 80, summary: result.briefing.summary ?? '', encouragement: result.briefing.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
       } else {
         const fallback = buildLocalBriefing(nickname, caregiver, ci);
         setBriefing(fallback);
         setMergedBriefing(fallback); // 保存今日简报
         setCachedBriefing(fallback, fallback.shareText, ci);
+        saveBriefing({ date: getTodayKey(), careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
       }
     } catch (e) {
       const fallback = buildLocalBriefing(nickname, caregiver, ci);
       setBriefing(fallback);
       setMergedBriefing(fallback); // 保存今日简报
       setCachedBriefing(fallback, fallback.shareText, ci);
+      saveBriefing({ date: getTodayKey(), careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
     } finally {
       setGenerating(false);
     }

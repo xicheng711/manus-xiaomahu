@@ -533,6 +533,10 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
 export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember, 'id' | 'joinedAt'>): Promise<FamilyRoom | null> {
   const room = await getFamilyRoom();
   if (!room || room.roomCode !== roomCode.toUpperCase()) return null;
+  // 如果当前用户已经是该家庭的 creator，拒绝加入，避免覆盖 creator membership
+  const existingMemberships = await getAllMemberships();
+  const alreadyCreator = existingMemberships.find(m => m.familyId === room.id && m.role === 'creator');
+  if (alreadyCreator) return null;
   const newMember: FamilyMember = {
     id: generateId(),
     ...member,

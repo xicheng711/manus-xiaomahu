@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     minWidth: 56,
   },
   tabItemFaded: {
-    opacity: 0.2,
+    opacity: 0.45,
   },
   iconCircle: {
     width: CIRCLE,
@@ -160,6 +160,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 58,
-    opacity: 0.3,
+    opacity: 0.5,
   },
 });

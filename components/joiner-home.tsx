@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Animated, Easing, Modal, TextInput, Platform,
-  Keyboard, KeyboardAvoidingView, TouchableWithoutFeedback,
+  Keyboard, KeyboardAvoidingView, TouchableWithoutFeedback, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -326,6 +327,9 @@ export function JoinerHomeScreen() {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [latestAnnounce, setLatestAnnounce] = useState<FamilyAnnouncement | null>(null);
   const [currentMember, setCurrentMember] = useState<FamilyMember | null>(null);
+  const [memberPhotoUri, setMemberPhotoUri] = useState<string | null>(null);
+  const [zodiacEmoji, setZodiacEmoji] = useState<string>('');
+  const [briefingSummary, setBriefingSummary] = useState<string | null>(null);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const { weatherData, buildGreeting } = useWeather();
 
@@ -351,6 +355,17 @@ export function JoinerHomeScreen() {
     }
     const member = await getCurrentMember();
     setCurrentMember(member);
+    // 头像统一：优先用 profile 的照片/生肖，与主照顾者首页保持一致
+    if (profile?.caregiverAvatarType === 'photo' && profile?.caregiverPhotoUri) {
+      setMemberPhotoUri(profile.caregiverPhotoUri);
+      setZodiacEmoji('');
+    } else if (member?.photoUri) {
+      setMemberPhotoUri(member.photoUri);
+      setZodiacEmoji('');
+    } else {
+      setMemberPhotoUri(null);
+      setZodiacEmoji(profile?.caregiverZodiacEmoji || member?.emoji || '👤');
+    }
 
     const checkIns = await getAllCheckIns();
     const latest = checkIns[0] ?? null;
@@ -362,6 +377,21 @@ export function JoinerHomeScreen() {
     setLatestAnnounce(announcements[0] ?? null);
 
     setFeed(buildFeed(checkIns.slice(0, 2), diaries.slice(0, 3), announcements.slice(0, 2), profile?.caregiverName || '照顾者'));
+    // 读取今日简报缓存
+    try {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const raw = await AsyncStorage.getItem('share_briefing_cache_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.date === todayKey && parsed.briefing?.summary) {
+          setBriefingSummary(parsed.briefing.summary);
+        } else {
+          setBriefingSummary(null);
+        }
+      } else {
+        setBriefingSummary(null);
+      }
+    } catch { setBriefingSummary(null); }
   }, [activeFamilyId]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
@@ -464,13 +494,17 @@ export function JoinerHomeScreen() {
             onPress={() => router.push('/profile' as any)}
             activeOpacity={0.8}
           >
-            <LinearGradient
-              colors={Gradients.coral}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.avatarGradient}
-            >
-              <Text style={{ fontSize: 24 }}>{currentMember?.emoji || '👤'}</Text>
-            </LinearGradient>
+            {memberPhotoUri ? (
+              <Image source={{ uri: memberPhotoUri }} style={styles.avatarPhoto} />
+            ) : (
+              <LinearGradient
+                colors={Gradients.coral}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={styles.avatarGradient}
+              >
+                <Text style={{ fontSize: 24 }}>{zodiacEmoji || currentMember?.emoji || '👤'}</Text>
+              </LinearGradient>
+            )}
           </TouchableOpacity>
         </Animated.View>
 
@@ -529,6 +563,30 @@ export function JoinerHomeScreen() {
             </View>
           </LinearGradient>
         </View>
+
+        {/* 今日简报入口 */}
+        {briefingSummary && (
+          <TouchableOpacity
+            style={styles.briefingEntryCard}
+            onPress={() => router.push('/share' as any)}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#FFF0F5', '#FFF5F0']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={styles.briefingEntryInner}
+            >
+              <View style={styles.briefingEntryIcon}>
+                <Text style={{ fontSize: 22 }}>🌸</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.briefingEntryTitle}>今日护理简报已生成</Text>
+                <Text style={styles.briefingEntrySummary} numberOfLines={2}>{briefingSummary}</Text>
+              </View>
+              <Text style={{ fontSize: 18, color: '#FB7185' }}>›</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
 
         <AnnouncementCard
           latest={latestAnnounce}
@@ -638,6 +696,13 @@ const styles = StyleSheet.create({
   familyPillArrow: { fontSize: 12, color: AppColors.green.strong, fontWeight: '800' },
   headerAvatar: { ...SHADOWS.md, borderRadius: 22, overflow: 'hidden' },
   avatarGradient: { width: 56, height: 56, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  avatarPhoto: { width: 56, height: 56, borderRadius: 22 },
+
+  briefingEntryCard: { marginBottom: 16, borderRadius: 16, overflow: 'hidden', ...SHADOWS.sm },
+  briefingEntryInner: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16 },
+  briefingEntryIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFE4EC', alignItems: 'center', justifyContent: 'center' },
+  briefingEntryTitle: { fontSize: 13, fontWeight: '700', color: '#B8426A', marginBottom: 3 },
+  briefingEntrySummary: { fontSize: 12, color: AppColors.text.secondary, lineHeight: 17 },
 
   tipBanner: { marginBottom: 16 },
   tipBannerInner: {
