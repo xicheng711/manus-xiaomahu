@@ -3,6 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { aiRouter } from "./ai-router";
+import { familyRouter } from "./family-router";
 import { deleteUserByOpenId } from "./db";
 
 export const appRouter = router({
@@ -31,6 +32,7 @@ export const appRouter = router({
   }),
   ai: aiRouter,
   smart: aiRouter,
+  family: familyRouter,  // <-- NEW: Family cloud sync routes
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,4 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  cloudSyncCheckIn,
+  cloudSyncDiary,
+  cloudSyncMedication,
+  cloudPostAnnouncement,
+  cloudSaveBriefing,
+  cloudCreateRoom,
+  cloudJoinRoom,
+  cloudUpdateElderProfile,
+} from './cloud-sync';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -277,6 +287,8 @@ export async function saveProfile(profile: Omit<ElderProfile, 'id'>): Promise<El
   const existing = await getProfile();
   const saved: ElderProfile = { id: existing?.id ?? generateId(), ...profile };
   await AsyncStorage.setItem(KEYS.PROFILE, JSON.stringify(saved));
+  // Cloud sync: update elder profile on server
+  cloudUpdateElderProfile(saved).catch(() => {});
   return saved;
 }
 
@@ -346,6 +358,8 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
   if (idx >= 0) all[idx] = checkIn;
   else all.unshift(checkIn);
   await AsyncStorage.setItem(KEYS.CHECK_INS, JSON.stringify(all));
+  // Cloud sync: sync check-in to server
+  cloudSyncCheckIn(checkIn).catch(() => {});
   return checkIn;
 }
 
@@ -412,6 +426,8 @@ export async function saveMedication(data: Omit<Medication, 'id'>): Promise<Medi
   const med: Medication = { id: generateId(), ...data };
   all.push(med);
   await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(all));
+  // Cloud sync: sync medication to server
+  cloudSyncMedication(med).catch(() => {});
   return med;
 }
 
@@ -425,6 +441,8 @@ export async function updateMedication(id: string, data: Partial<Medication>): P
   if (idx >= 0) {
     all[idx] = { ...all[idx], ...data };
     await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(all));
+    // Cloud sync: sync updated medication to server
+    cloudSyncMedication(all[idx]).catch(() => {});
   }
 }
 
@@ -445,6 +463,8 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>): Promise<Diar
   const entry: DiaryEntry = { id: generateId(), createdAt: new Date().toISOString(), ...data };
   all.unshift(entry);
   await AsyncStorage.setItem(KEYS.DIARY, JSON.stringify(all));
+  // Cloud sync: sync diary entry to server
+  cloudSyncDiary(entry).catch(() => {});
   return entry;
 }
 
@@ -454,6 +474,8 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>): P
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...data };
   await AsyncStorage.setItem(KEYS.DIARY, JSON.stringify(all));
+  // Cloud sync: sync updated diary entry to server
+  cloudSyncDiary(all[idx]).catch(() => {});
   return all[idx];
 }
 
@@ -527,6 +549,19 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
   };
   await addOrUpdateMembership(membership);
   await setActiveFamilyId(room.id);
+  // Cloud sync: create room on server
+  cloudCreateRoom({
+    roomCode: room.roomCode,
+    elderName: room.elderName,
+    elderEmoji: room.elderEmoji,
+    elderPhotoUri: room.elderPhotoUri,
+    memberName: member.name,
+    memberRole: member.role,
+    memberRoleLabel: member.roleLabel,
+    memberEmoji: member.emoji,
+    memberColor: member.color,
+    memberPhotoUri: member.photoUri,
+  }).catch(() => {});
   return room;
 }
 
@@ -559,6 +594,17 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
   };
   await addOrUpdateMembership(membership);
   await setActiveFamilyId(room.id);
+  // Cloud sync: join room on server
+  cloudJoinRoom({
+    roomCode: room.roomCode,
+    memberName: newMember.name,
+    memberRole: newMember.role,
+    memberRoleLabel: newMember.roleLabel,
+    memberEmoji: newMember.emoji,
+    memberColor: newMember.color,
+    memberPhotoUri: newMember.photoUri,
+    relationship: newMember.relationship,
+  }).catch(() => {});
   return room;
 }
 
@@ -629,6 +675,13 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
   // Keep only last 200 announcements
   if (all.length > 200) all.splice(200);
   await AsyncStorage.setItem(KEYS.FAMILY_ANNOUNCEMENTS, JSON.stringify(all));
+  // Cloud sync: post announcement to server
+  cloudPostAnnouncement({
+    content: announcement.content,
+    emoji: announcement.emoji,
+    type: announcement.type,
+    date: announcement.date,
+  }).catch(() => {});
   return announcement;
 }
 
@@ -759,6 +812,8 @@ export async function saveBriefing(briefing: CareBriefing): Promise<void> {
   else all.unshift(briefing);
   const trimmed = all.slice(0, 30);
   await AsyncStorage.setItem(KEYS.BRIEFINGS, JSON.stringify(trimmed));
+  // Cloud sync: save briefing to server
+  cloudSaveBriefing(briefing).catch(() => {});
 }
 
 export async function getTodayBriefing(): Promise<CareBriefing | null> {
