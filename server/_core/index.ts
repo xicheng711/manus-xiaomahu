@@ -55,6 +55,9 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+  // Serve static files from the public directory
+  app.use(express.static("public"));
+
   registerOAuthRoutes(app);
   registerAuthProviderRoutes(app);
 
