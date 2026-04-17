@@ -20,6 +20,7 @@ import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { FamilyProvider } from "@/lib/family-context";
 import { WeatherProvider } from "@/lib/weather-context";
+import { initCloudSync } from "@/lib/cloud-sync";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -65,7 +66,12 @@ export default function RootLayout() {
         },
       }),
   );
-  const [trpcClient] = useState(() => createTRPCClient());
+  const [trpcClient] = useState(() => {
+    const client = createTRPCClient();
+    // Initialize cloud sync layer with the tRPC client so family functions work
+    initCloudSync(client);
+    return client;
+  });
 
   // Ensure minimum 8px padding for top and bottom on mobile
   const providerInitialMetrics = useMemo(() => {

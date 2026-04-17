@@ -8,6 +8,7 @@ import {
   cloudCreateRoom,
   cloudJoinRoom,
   cloudUpdateElderProfile,
+  setCloudSyncState,
 } from './cloud-sync';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -550,28 +551,87 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
   await addOrUpdateMembership(membership);
   await setActiveFamilyId(room.id);
   // Cloud sync: create room on server
-  cloudCreateRoom({
-    roomCode: room.roomCode,
-    elderName: room.elderName,
-    elderEmoji: room.elderEmoji,
-    elderPhotoUri: room.elderPhotoUri,
-    memberName: member.name,
-    memberRole: member.role,
-    memberRoleLabel: member.roleLabel,
-    memberEmoji: member.emoji,
-    memberColor: member.color,
-    memberPhotoUri: member.photoUri,
-  }).catch(() => {});
+  try {
+    const cloudResult = await cloudCreateRoom({
+      roomCode: room.roomCode,
+      elderName: room.elderName,
+      elderEmoji: room.elderEmoji,
+      elderPhotoUri: room.elderPhotoUri,
+      memberName: member.name,
+      memberRole: member.role,
+      memberRoleLabel: member.roleLabel,
+      memberEmoji: member.emoji,
+      memberColor: member.color,
+      memberPhotoUri: member.photoUri,
+    });
+    if (cloudResult?.roomId) {
+      await setCloudSyncState({ activeRoomId: cloudResult.roomId });
+    }
+  } catch (e) {
+    console.warn('[Storage] createFamilyRoom cloud sync failed:', e);
+  }
   return room;
 }
 
 export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember, 'id' | 'joinedAt'>): Promise<FamilyRoom | null> {
-  const room = await getFamilyRoom();
-  if (!room || room.roomCode !== roomCode.toUpperCase()) return null;
+  const code = roomCode.toUpperCase();
+
+  // Step 1: Try to join via server first (cloud-first for cross-device sharing)
+  try {
+    const cloudResult = await cloudJoinRoom({
+      roomCode: code,
+      memberName: member.name,
+      memberRole: member.role,
+      memberRoleLabel: member.roleLabel,
+      memberEmoji: member.emoji,
+      memberColor: member.color,
+      memberPhotoUri: member.photoUri,
+      relationship: member.relationship,
+    });
+
+    if (cloudResult?.success && cloudResult.roomId) {
+      // Server join succeeded — build local room from server response
+      const newMember: FamilyMember = {
+        id: generateId(),
+        ...member,
+        isCreator: false,
+        joinedAt: new Date().toISOString(),
+        isCurrentUser: true,
+      };
+      const room: FamilyRoom = {
+        id: String(cloudResult.roomId),
+        roomCode: cloudResult.roomCode ?? code,
+        elderName: cloudResult.elderName ?? '家人',
+        members: [newMember],
+        createdAt: new Date().toISOString(),
+      };
+      await saveFamilyRoom(room);
+      await setCurrentMember(newMember);
+      await setCloudSyncState({ activeRoomId: cloudResult.roomId });
+      const membership: FamilyMembership = {
+        familyId: room.id,
+        myMemberId: newMember.id,
+        role: 'joiner',
+        room,
+        joinedAt: newMember.joinedAt,
+      };
+      await addOrUpdateMembership(membership);
+      await setActiveFamilyId(room.id);
+      return room;
+    }
+  } catch (e) {
+    console.warn('[Storage] joinFamilyRoom cloud join failed, trying local fallback:', e);
+  }
+
+  // Step 2: Fallback — check local storage (same-device scenario)
+  const localRoom = await getFamilyRoom();
+  if (!localRoom || localRoom.roomCode !== code) return null;
+
   // 如果当前用户已经是该家庭的 creator，拒绝加入，避免覆盖 creator membership
   const existingMemberships = await getAllMemberships();
-  const alreadyCreator = existingMemberships.find(m => m.familyId === room.id && m.role === 'creator');
+  const alreadyCreator = existingMemberships.find(m => m.familyId === localRoom.id && m.role === 'creator');
   if (alreadyCreator) return null;
+
   const newMember: FamilyMember = {
     id: generateId(),
     ...member,
@@ -579,33 +639,20 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
     joinedAt: new Date().toISOString(),
     isCurrentUser: true,
   };
-  // Mark all existing as not current user
-  room.members = room.members.map(m => ({ ...m, isCurrentUser: false }));
-  room.members.push(newMember);
-  await saveFamilyRoom(room);
+  localRoom.members = localRoom.members.map(m => ({ ...m, isCurrentUser: false }));
+  localRoom.members.push(newMember);
+  await saveFamilyRoom(localRoom);
   await setCurrentMember(newMember);
-  // Save membership record
   const membership: FamilyMembership = {
-    familyId: room.id,
+    familyId: localRoom.id,
     myMemberId: newMember.id,
     role: 'joiner',
-    room,
+    room: localRoom,
     joinedAt: newMember.joinedAt,
   };
   await addOrUpdateMembership(membership);
-  await setActiveFamilyId(room.id);
-  // Cloud sync: join room on server
-  cloudJoinRoom({
-    roomCode: room.roomCode,
-    memberName: newMember.name,
-    memberRole: newMember.role,
-    memberRoleLabel: newMember.roleLabel,
-    memberEmoji: newMember.emoji,
-    memberColor: newMember.color,
-    memberPhotoUri: newMember.photoUri,
-    relationship: newMember.relationship,
-  }).catch(() => {});
-  return room;
+  await setActiveFamilyId(localRoom.id);
+  return localRoom;
 }
 
 export async function addFamilyMember(member: Omit<FamilyMember, 'id' | 'joinedAt'>): Promise<FamilyMember> {

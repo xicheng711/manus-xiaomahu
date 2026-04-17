@@ -975,7 +975,7 @@ export default function FamilyScreen() {
               style={styles.inviteShareBtn}
               activeOpacity={0.85}
               onPress={async () => {
-                const link = `exp://6_vvva0-anonymous-8083.exp.direct/--/(tabs)/family?joinCode=${room.roomCode}`;
+                const link = `https://xtdtinthemorning.cn/join?code=${room.roomCode}`;
                 const msg = `🐾 我在用「小马虎」记录${room.elderName}的护理日常，邀请你加入我们的家庭空间！
 
 点击链接加入：${link}
