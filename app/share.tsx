@@ -312,7 +312,7 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
           <View style={cardStyles.elderAvatarWrap}>
             <Text style={cardStyles.elderEmoji}>{elderEmoji}</Text>
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={cardStyles.elderName}>{elderNickname}</Text>
             <Text style={cardStyles.elderSub}>今日护理简报</Text>
           </View>
@@ -947,8 +947,8 @@ export default function ShareScreen() {
     // 严格基于用户实际输入构建总结，不使用随机鼓励语
     const parts: string[] = [];
     if (ci.sleepHours) parts.push(`睡眠${ci.sleepHours}小时，质量${sleepLabel}`);
-    if (ci.moodScore !== undefined) parts.push(`心情${ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差'}（${ci.moodScore}/10）`);
-    if (ci.medicationTaken !== undefined) parts.push(ci.medicationTaken ? '用药完成' : '今日未按时服药');
+    if (ci.moodScore != null) parts.push(`心情${ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差'}（${ci.moodScore}/10）`);
+    if (ci.medicationTaken != null) parts.push(ci.medicationTaken ? '用药完成' : '今日未按时服药');
     if (ci.mealOption) parts.push(`进食${ci.mealOption.includes('正常') ? '正常' : ci.mealOption.includes('偏少') ? '偏少' : '较少'}`);
     if (napStr) parts.push(`白天小睡${napStr}`);
     const summary = parts.length > 0 ? parts.join('，') + '。' : `${nickname}今日照护记录已整理完毕。`;
@@ -1149,7 +1149,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                 >
                   <View style={styles.backfillLeft}>
                     <Text style={styles.backfillIcon}>🌙</Text>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.backfillTitle}>缺少昨晚打卡记录</Text>
                       <Text style={styles.backfillSub}>补完昨晚记录可获得更准确的健康分析</Text>
                     </View>
@@ -1297,7 +1297,7 @@ const styles = StyleSheet.create({
     marginBottom: 16, borderWidth: 1.5, borderColor: '#FDE68A',
     shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3,
   },
-  backfillLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  backfillLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, flexShrink: 1 },
   backfillIcon: { fontSize: 28 },
   backfillTitle: { fontSize: 15, fontWeight: '800', color: '#92400E', marginBottom: 3 },
   backfillSub: { fontSize: 12, color: '#B45309', opacity: 0.85, lineHeight: 17 },

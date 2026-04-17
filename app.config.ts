@@ -41,6 +41,7 @@ const config: ExpoConfig = {
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       LSApplicationQueriesSchemes: ['weixin', 'weixinULAPI'],
+      NSSpeechRecognitionUsageDescription: '允许小马虎使用语音识别功能，帮助您语音输入护理日记。',
     },
     associatedDomains: [
       'applinks:xtdtinthemorning.cn',

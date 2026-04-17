@@ -974,19 +974,14 @@ export default function FamilyScreen() {
             <TouchableOpacity
               style={styles.inviteShareBtn}
               activeOpacity={0.85}
-              onPress={async () => {
-                const link = `https://xtdtinthemorning.cn/join?code=${room.roomCode}`;
-                const msg = `🐾 我在用「小马虎」记录${room.elderName}的护理日常，邀请你加入我们的家庭空间！
-
-点击链接加入：${link}
-
-或手动输入邀请码：${room.roomCode}`;
-                try {
-                  await Share.share({ message: msg, title: '加入小马虎家庭空间' });
-                } catch (e) { /* ignore */ }
+              onPress={() => {
+                const text = `🐾 我在用「小马虎」记录${room.elderName}的护理日常，邀请你加入！\n\n邀请码：${room.roomCode}\n链接：https://xtdtinthemorning.cn/join?code=${room.roomCode}`;
+                Clipboard.setString(text );
+                if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                alert('已复制！去微信粘贴发给家人即可 🎉');
               }}
             >
-              <Text style={styles.inviteShareBtnText}>💬 分享到微信 / 其他应用</Text>
+              <Text style={styles.inviteShareBtnText}>📋 复制邀请链接</Text>
             </TouchableOpacity>
 
             <Text style={styles.inviteHint}>家人点链接后打开小马虎，输入名字即可自动加入</Text>

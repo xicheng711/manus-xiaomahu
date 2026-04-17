@@ -205,9 +205,16 @@ export function VoiceInput({ onResult, language = 'zh-CN' }: VoiceInputProps) {
       try {
         const perm = await _speechModule.requestPermissionsAsync();
         if (!perm.granted) {
-          showError('请在系统设置中允许麦克风权限');
+          showError('请在系统设置中允许麦克风和语音识别权限');
           return;
         }
+        // 同时请求语音识别权限
+        try {
+          const { ExpoSpeechRecognitionModule } = require('expo-speech-recognition');
+          if (ExpoSpeechRecognitionModule?.requestPermissionsAsync) {
+            await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+          }
+        } catch {}
         accumulatedText.current = '';
         registerNativeListeners();
         _speechModule.start({ lang: language, interimResults: true, continuous: false });
