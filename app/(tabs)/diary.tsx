@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator } from '@/lib/storage';
+import { cloudGetDiaries } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -748,7 +749,16 @@ function JoinerDiaryReadOnly() {
 
   useEffect(() => { fadeInUp(headerFade, headerSlide, { duration: 500 }); }, []);
   useFocusEffect(useCallback(() => {
-    getDiaryEntries().then(e => setEntries(e));
+    // joiner 视角：优先从云端拉取主照顾者的日记
+    cloudGetDiaries().then(cloudEntries => {
+      if (cloudEntries && cloudEntries.length > 0) {
+        setEntries(cloudEntries as DiaryEntry[]);
+      } else {
+        getDiaryEntries().then(e => setEntries(e));
+      }
+    }).catch(() => {
+      getDiaryEntries().then(e => setEntries(e));
+    });
   }, []));
 
   function openDetail(entryId: string) {

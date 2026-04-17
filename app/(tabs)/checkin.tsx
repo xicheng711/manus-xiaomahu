@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
+import { cloudSyncCheckIn } from '@/lib/cloud-sync';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -963,6 +964,8 @@ function CheckinScreenContent() {
       });
     }
     await upsertCheckIn(data);
+    // 云端同步（不阻塞 UI）
+    cloudSyncCheckIn(data).catch(e => console.warn('[CheckIn] cloud sync failed:', e));
     setSaving(false);
     if (mode === 'morning') {
       if (Platform.OS !== 'web') {

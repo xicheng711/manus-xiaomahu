@@ -18,6 +18,7 @@ import {
   getTodayCheckIn, DailyCheckIn, getCurrentUserIsCreator,
 } from '@/lib/storage';
 import { VoiceInput } from '@/components/voice-input';
+import { cloudSyncDiary } from '@/lib/cloud-sync';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
@@ -339,6 +340,8 @@ export default function DiaryEditScreen() {
     entryRef.current = savedEntry;
     setSubmitted(true);
     setSubmitting(false);
+    // 云端同步（不阻塞 UI）
+    cloudSyncDiary(savedEntry).catch(e => console.warn('[Diary] cloud sync failed:', e));
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     const userText = content.trim() ? content.trim() : '已记录今日护理情况';
