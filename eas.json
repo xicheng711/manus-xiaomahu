@@ -1,1 +1,21 @@
-{"cli":{"version":">= 3.0.0"},"build":{"development":{"developmentClient":true,"distribution":"internal"},"preview":{"distribution":"internal"},"production":{}},"submit":{"production":{"ios":{}}}}
+{
+  "cli": {
+    "version": ">= 3.0.0",
+    "pnpm": true
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {}
+  },
+  "submit": {
+    "production": {
+      "ios": {}
+    }
+  }
+}

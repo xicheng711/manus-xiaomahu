@@ -17,7 +17,6 @@ import {
   deleteDiaryEntry, todayStr, getProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn, getCurrentUserIsCreator,
 } from '@/lib/storage';
-import { VoiceInput } from '@/components/voice-input';
 import { cloudSyncDiary } from '@/lib/cloud-sync';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
@@ -311,11 +310,6 @@ export default function DiaryEditScreen() {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   }
 
-  function handleVoiceResult(text: string) {
-    setContent(prev => prev ? prev + text : text);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }
-
   async function persistConversation(conv: ConversationMessage[]) {
     if (!entryId) return;
     await updateDiaryEntry(entryId, { conversation: conv });
@@ -604,7 +598,6 @@ export default function DiaryEditScreen() {
                         <Text style={{ color: '#A07858' }}>💬 </Text>
                         用文字记下今天（可选）
                       </Text>
-                      <VoiceInput onResult={handleVoiceResult} />
                     </View>
                     <TextInput
                       style={styles.noteInput}
@@ -621,7 +614,6 @@ export default function DiaryEditScreen() {
                         }, 300);
                       }}
                     />
-                    <Text style={styles.noteHint}>🎙️ 可以点右上角语音按钮说给小马虎听</Text>
                   </View>
                 </>
               )}

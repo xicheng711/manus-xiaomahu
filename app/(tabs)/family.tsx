@@ -718,17 +718,17 @@ export default function FamilyScreen() {
                       </View>
                       <View style={styles.briefingDataBadge}>
                         <Text style={styles.briefingDataEmoji}>{item.checkIn.moodEmoji || '😊'}</Text>
-                        <Text style={styles.briefingDataValue}>{item.checkIn.moodScore}/10</Text>
+                        <Text style={styles.briefingDataValue}>{item.checkIn.eveningDone ? '已记录' : '未记录'}</Text>
                         <Text style={styles.briefingDataLabel}>心情</Text>
                       </View>
                       <View style={styles.briefingDataBadge}>
                         <Text style={styles.briefingDataEmoji}>💊</Text>
-                        <Text style={styles.briefingDataValue}>{item.checkIn.medicationTaken ? '✅' : '❌'}</Text>
+                        <Text style={styles.briefingDataValue}>{item.checkIn.eveningDone && item.checkIn.medicationTaken != null ? (item.checkIn.medicationTaken ? '✅' : '❌') : '未记录'}</Text>
                         <Text style={styles.briefingDataLabel}>用药</Text>
                       </View>
                       <View style={styles.briefingDataBadge}>
                         <Text style={styles.briefingDataEmoji}>🍽️</Text>
-                        <Text style={styles.briefingDataValue} numberOfLines={1}>{item.checkIn.mealNotes ? item.checkIn.mealNotes.slice(0,4) : '已记'}</Text>
+                        <Text style={styles.briefingDataValue} numberOfLines={1}>{item.checkIn.eveningDone ? (item.checkIn.mealNotes ? item.checkIn.mealNotes.slice(0,4) : '已记') : '未记录'}</Text>
                         <Text style={styles.briefingDataLabel}>饮食</Text>
                       </View>
                     </View>
@@ -769,7 +769,7 @@ export default function FamilyScreen() {
                 {/* ── Footer ── */}
                 <View style={styles.briefingCardFooter}>
                   <Text style={styles.briefingFooterLeft}>记录人：{briefingData?.profile?.caregiverName || '照顾者'}</Text>
-                  <Text style={styles.briefingFooterRight}>✨ 小马虎</Text>
+                  <Text style={styles.briefingFooterRight}>小马虎</Text>
                 </View>
 
                 {/* ── Actions ── */}

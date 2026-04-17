@@ -120,6 +120,7 @@ export default function RootLayout() {
                 <Stack.Screen name="assistant" />
                 <Stack.Screen name="profile" />
                 <Stack.Screen name="share" />
+                <Stack.Screen name="join" />
               </Stack>
             </WeatherProvider>
           </FamilyProvider>

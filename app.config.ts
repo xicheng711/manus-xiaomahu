@@ -41,7 +41,6 @@ const config: ExpoConfig = {
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       LSApplicationQueriesSchemes: ['weixin', 'weixinULAPI'],
-      NSSpeechRecognitionUsageDescription: '允许小马虎使用语音识别功能，帮助您语音输入护理日记。',
     },
     associatedDomains: [
       'applinks:xtdtinthemorning.cn',
@@ -77,10 +76,6 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-apple-authentication",
     [
-      "expo-audio",
-      { microphonePermission: "允许小马虎使用麦克风录音。" },
-    ],
-    [
       "expo-video",
       { supportsBackgroundPlayback: true, supportsPictureInPicture: true },
     ],
@@ -99,13 +94,6 @@ const config: ExpoConfig = {
       {
         locationAlwaysAndWhenInUsePermission: "允许小马虎获取您的位置，用于显示当地天气信息。",
         locationWhenInUsePermission: "允许小马虎获取您的位置，用于显示当地天气信息。",
-      },
-    ],
-    [
-      "expo-speech-recognition",
-      {
-        microphonePermission: "允许小马虎使用麦克风进行语音输入。",
-        speechRecognitionPermission: "允许小马虎使用语音识别功能。",
       },
     ],
     "expo-asset",

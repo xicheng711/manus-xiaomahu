@@ -298,8 +298,7 @@ function EnhancedSmartCard({
 
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <Text style={styles.aiLabel}>今日状态分析</Text>
-              <Text style={styles.aiSubLabel}>· 基于打卡数据</Text>
+              <Text style={styles.aiLabel}>今日记录摘要</Text>
             </View>
 
             {!morningDone ? (
@@ -310,7 +309,7 @@ function EnhancedSmartCard({
 
             {morningDone ? (
               <TouchableOpacity onPress={onPress} style={styles.aiDetailLink}>
-                <Text style={styles.aiDetailLinkText}>查看完整分析 ›</Text>
+                <Text style={styles.aiDetailLinkText}>查看记录详情 ›</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity onPress={onCheckinPress} style={[styles.aiDetailLink, { backgroundColor: AppColors.coral.primary }]}>

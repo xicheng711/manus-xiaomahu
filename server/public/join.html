@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加入小马虎家庭空间</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
+            background: linear-gradient(135deg, #f5f0ff 0%, #fff0f5 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 28px;
+            padding: 36px 28px 32px;
+            max-width: 380px;
+            width: 100%;
+            box-shadow: 0 12px 48px rgba(160, 100, 200, 0.15);
+            text-align: center;
+        }
+        .paw {
+            font-size: 52px;
+            margin-bottom: 12px;
+        }
+        .app-name {
+            font-size: 26px;
+            font-weight: 800;
+            color: #5B3A8E;
+            margin-bottom: 6px;
+        }
+        .subtitle {
+            font-size: 15px;
+            color: #888;
+            margin-bottom: 28px;
+            line-height: 1.5;
+        }
+        .divider {
+            border: none;
+            border-top: 1px dashed #E8D5F0;
+            margin: 0 0 24px;
+        }
+        .invite-label {
+            font-size: 13px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+        .invite-code {
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 10px;
+            color: #B8426A;
+            background: #FEF0F4;
+            border: 2px dashed #EDAABB;
+            border-radius: 16px;
+            padding: 14px 20px;
+            margin-bottom: 24px;
+            display: inline-block;
+            width: 100%;
+        }
+        .btn-open {
+            display: block;
+            background: linear-gradient(135deg, #B8426A, #D4608A);
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            padding: 16px 24px;
+            border-radius: 20px;
+            text-decoration: none;
+            margin-bottom: 12px;
+            cursor: pointer;
+            border: none;
+            width: 100%;
+        }
+        .btn-copy {
+            display: block;
+            background: #F3EDF8;
+            color: #5B3A8E;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 14px 24px;
+            border-radius: 20px;
+            text-decoration: none;
+            margin-bottom: 20px;
+            cursor: pointer;
+            border: none;
+            width: 100%;
+        }
+        .hint {
+            font-size: 12px;
+            color: #aaa;
+            line-height: 1.7;
+        }
+        .hint strong {
+            color: #888;
+        }
+        .copied-toast {
+            display: none;
+            background: #22C55E;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="paw">🐾</div>
+        <div class="app-name">小马虎</div>
+        <div class="subtitle">您的专业护理记录小助手</div>
+        <hr class="divider">
+
+        <div class="invite-label">家庭邀请码</div>
+        <div class="invite-code" id="codeDisplay">——</div>
+
+        <div class="copied-toast" id="copiedToast">✅ 邀请码已复制</div>
+
+        <button class="btn-open" id="btnOpen" onclick="openApp()">
+            📱 打开小马虎 App 加入
+        </button>
+        <button class="btn-copy" onclick="copyCode()">
+            📋 复制邀请码
+        </button>
+
+        <div class="hint">
+            还没有小马虎？在 App Store 搜索「小马虎」下载<br>
+            打开 App → <strong>家人共享</strong> → 输入邀请码
+        </div>
+    </div>
+
+    <script>
+        // 从 URL 参数读取邀请码
+        var code = '';
+        try {
+            var params = new URLSearchParams(window.location.search);
+            code = (params.get('code') || '').toUpperCase();
+        } catch(e) {}
+
+        if (code) {
+            document.getElementById('codeDisplay').textContent = code;
+        }
+
+        function openApp() {
+            if (!code) {
+                alert('邀请码无效，请重新获取邀请链接');
+                return;
+            }
+            // 使用 URL Scheme 打开 App 并传入邀请码
+            var scheme = 'manusxiaomahu://join?code=' + encodeURIComponent(code);
+            window.location.href = scheme;
+        }
+
+        function copyCode() {
+            if (!code) return;
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(code).then(showCopied).catch(fallbackCopy);
+                } else {
+                    fallbackCopy();
+                }
+            } catch(e) {
+                fallbackCopy();
+            }
+        }
+
+        function fallbackCopy() {
+            var el = document.createElement('textarea');
+            el.value = code;
+            el.style.position = 'fixed';
+            el.style.opacity = '0';
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            showCopied();
+        }
+
+        function showCopied() {
+            var toast = document.getElementById('copiedToast');
+            toast.style.display = 'block';
+            setTimeout(function() { toast.style.display = 'none'; }, 2000);
+        }
+    </script>
+</body>
+</html>

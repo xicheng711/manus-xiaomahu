@@ -126,7 +126,7 @@ function ShareLoadingScreen() {
 
   const STATUS = [
     { emoji: '📋', label: '整理数据', bg: AppColors.green.soft, pulse: pulse1 },
-    { emoji: '📊', label: '分析趋势', bg: AppColors.purple.soft, pulse: pulse2 },
+    { emoji: '📊', label: '汇总记录', bg: AppColors.purple.soft, pulse: pulse2 },
     { emoji: '📝', label: '生成简报', bg: AppColors.coral.soft, pulse: pulse3 },
   ];
 
@@ -276,7 +276,7 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
   const sleepLabel = sleepValue ? `${sleepValue} · ${sleepQualityLabel}` : '未记录';
 
   // 心情来自晚间打卡
-  const moodValue = hasEvening && checkIn.moodScore != null ? `${checkIn.moodScore}/10` : '未记录';
+  const moodValue = hasEvening && checkIn.moodScore != null ? (checkIn.moodScore >= 8 ? '良好' : checkIn.moodScore >= 6 ? '一般' : '较差') : '未记录';
   const moodEmoji = hasEvening && checkIn.moodEmoji ? checkIn.moodEmoji : '—';
 
   // 用药来自晚间打卡
@@ -333,7 +333,7 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
       <View style={cardStyles.summaryBox}>
         <View style={cardStyles.summaryHeader}>
           <Text style={cardStyles.summaryIcon}>📋</Text>
-          <Text style={cardStyles.summaryTitle}>今日状态总结</Text>
+          <Text style={cardStyles.summaryTitle}>今日记录摘要</Text>
         </View>
         <Text style={cardStyles.summaryText}>
           {briefing.summary && briefing.summary.trim().length > 0
@@ -893,11 +893,11 @@ export default function ShareScreen() {
         caregiverName: caregiver,
         date: dateStr,
         checkIn: {
-          sleepHours: ci.sleepHours ?? 7,
-          sleepQuality: ci.sleepQuality ?? 'fair',
-          moodScore: ci.moodScore ?? 5,
-          medicationTaken: ci.medicationTaken ?? true,
-          napMinutes: ci.napMinutes ?? (ci.daytimeNap ? 30 : 0),
+          sleepHours: ci.sleepHours ?? undefined,
+          sleepQuality: ci.sleepQuality ?? undefined,
+          moodScore: ci.moodScore ?? undefined,
+          medicationTaken: ci.medicationTaken ?? undefined,
+          napMinutes: ci.napMinutes ?? (ci.daytimeNap ? 30 : undefined),
           notes: ci.eveningNotes || ci.morningNotes || undefined,
           // 只有用户实际选择了饮食选项才传，否则不传（避免 AI 默认为较差）
           mealSituation: ci.mealOption
@@ -947,7 +947,7 @@ export default function ShareScreen() {
     // 严格基于用户实际输入构建总结，不使用随机鼓励语
     const parts: string[] = [];
     if (ci.sleepHours) parts.push(`睡眠${ci.sleepHours}小时，质量${sleepLabel}`);
-    if (ci.moodScore != null) parts.push(`心情${ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差'}（${ci.moodScore}/10）`);
+    if (ci.moodScore != null) parts.push(`心情${ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差'}`);
     if (ci.medicationTaken != null) parts.push(ci.medicationTaken ? '用药完成' : '今日未按时服药');
     if (ci.mealOption) parts.push(`进食${ci.mealOption.includes('正常') ? '正常' : ci.mealOption.includes('偏少') ? '偏少' : '较少'}`);
     if (napStr) parts.push(`白天小睡${napStr}`);
@@ -1034,7 +1034,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         {/* ── Header ── */}
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.title}>📋 {params.date ? `${params.date} 记录` : viewMode === 'today' ? '今日' : '昨日'}记录分析</Text>
+          <Text style={styles.title}>📋 {params.date ? `${params.date} 记录` : viewMode === 'today' ? '今日' : '昨日'}记录详情</Text>
           <View style={{ width: 40 }} />
         </View>
 
