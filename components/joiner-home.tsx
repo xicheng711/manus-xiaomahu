@@ -18,6 +18,7 @@ import {
   upsertCheckIn,
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember,
 } from '@/lib/storage';
+import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile } from '@/lib/cloud-sync';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -367,16 +368,36 @@ export function JoinerHomeScreen() {
       setZodiacEmoji(profile?.caregiverZodiacEmoji || member?.emoji || '👤');
     }
 
-    const checkIns = await getAllCheckIns();
+     // joiner 视角：从云端拉取主照顾者的打卡、日记和老人档案
+    let checkIns: DailyCheckIn[] = [];
+    let diaries: DiaryEntry[] = [];
+    let creatorName = profile?.caregiverName || '照顾者';
+    try {
+      const [cloudCheckIns, cloudDiaries, cloudProfile] = await Promise.all([
+        cloudGetCheckIns(undefined, 10),
+        cloudGetDiaries(undefined, 10),
+        cloudGetElderProfile(),
+      ]);
+      checkIns = (cloudCheckIns && cloudCheckIns.length > 0)
+        ? cloudCheckIns as DailyCheckIn[]
+        : await getAllCheckIns();
+      diaries = (cloudDiaries && cloudDiaries.length > 0)
+        ? cloudDiaries as DiaryEntry[]
+        : await getDiaryEntries();
+      if (cloudProfile?.nickname) setElderNickname(cloudProfile.nickname);
+      if (cloudProfile?.caregiverName) {
+        creatorName = cloudProfile.caregiverName;
+        setCaregiverName(cloudProfile.caregiverName);
+      }
+    } catch {
+      checkIns = await getAllCheckIns();
+      diaries = await getDiaryEntries();
+    }
     const latest = checkIns[0] ?? null;
-
     setLatestCheckIn(latest);
-
-    const diaries = await getDiaryEntries();
     const announcements = await getFamilyAnnouncements(30);
     setLatestAnnounce(announcements[0] ?? null);
-
-    setFeed(buildFeed(checkIns.slice(0, 2), diaries.slice(0, 3), announcements.slice(0, 2), profile?.caregiverName || '照顾者'));
+    setFeed(buildFeed(checkIns.slice(0, 2), diaries.slice(0, 3), announcements.slice(0, 2), creatorName));
     // 读取今日简报缓存
     try {
       const todayKey = new Date().toISOString().slice(0, 10);
