@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "587V77A4L6.space.manus.dementia.care.t20260311173557",
+        "paths": ["*"]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["587V77A4L6.space.manus.dementia.care.t20260311173557"]
+  }
+}
