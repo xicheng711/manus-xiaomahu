@@ -15,6 +15,37 @@ import {
   createBriefing, getBriefingsByRoom, getBriefingByDate,
   upsertMedication, getMedicationsByRoom, deleteMedication,
 } from "./family-db";
+import { updatePushToken, getUsersByIds } from "./db";
+
+// ─── Expo Push Notification Helper ──────────────────────────────────────────
+
+async function sendExpoPushNotifications(
+  pushTokens: string[],
+  title: string,
+  body: string,
+  data?: Record<string, unknown>,
+) {
+  const validTokens = pushTokens.filter(t => t && t.startsWith('ExponentPushToken['));
+  if (validTokens.length === 0) return;
+  try {
+    const messages = validTokens.map(to => ({
+      to,
+      title,
+      body,
+      sound: 'default' as const,
+      data: data ?? {},
+    }));
+    const resp = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(messages ),
+    });
+    const result = await resp.json();
+    console.log('[Push] Sent to', validTokens.length, 'devices:', JSON.stringify(result?.data?.slice(0,2)));
+  } catch (e) {
+    console.warn('[Push] Failed to send push notifications:', e);
+  }
+}
 
 // Helper: get current user ID from context, throw if not logged in
 function requireUser(ctx: any): { userId: number; openId: string } {
@@ -138,6 +169,30 @@ export const familyRouter = router({
         relationship: input.relationship ?? null,
         isCreator: false,
       });
+
+      // Send push notification to all other members in this room
+      try {
+        const allMembers = await getRoomMembers(room.id);
+        const otherUserIds = allMembers
+          .filter(m => m.userId !== userId)
+          .map(m => m.userId);
+        if (otherUserIds.length > 0) {
+          const otherUsers = await getUsersByIds(otherUserIds);
+          const pushTokens = otherUsers
+            .map(u => u.pushToken)
+            .filter((t): t is string => !!t);
+          if (pushTokens.length > 0) {
+            await sendExpoPushNotifications(
+              pushTokens,
+              `🎉 新成员加入了！`,
+              `${input.memberEmoji} ${input.memberName} 加入了你们的家庭空间`,
+              { type: 'new_member', screen: 'family', memberName: input.memberName },
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('[joinRoom] Push notification failed (non-fatal):', e);
+      }
 
       return {
         success: true,
@@ -534,5 +589,14 @@ export const familyRouter = router({
       const { userId } = requireUser(ctx);
       await requireRoomMember(userId, input.roomId);
       return getElderProfile(input.roomId);
+    }),
+
+  /** Register or update the Expo push token for the current user */
+  updatePushToken: publicProcedure
+    .input(z.object({ pushToken: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { userId } = requireUser(ctx);
+      await updatePushToken(userId, input.pushToken);
+      return { success: true };
     }),
 });

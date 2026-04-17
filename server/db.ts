@@ -104,4 +104,28 @@ export async function deleteUserByOpenId(openId: string): Promise<void> {
   }
 }
 
+
+/** Save or update the Expo push token for a user */
+export async function updatePushToken(userId: number, pushToken: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.update(users).set({ pushToken }).where(eq(users.id, userId));
+  } catch (error) {
+    console.error('[Database] Failed to update pushToken:', error);
+  }
+}
+
+/** Get users by a list of IDs (for sending push notifications) */
+export async function getUsersByIds(ids: number[]): Promise<typeof users.$inferSelect[]> {
+  if (ids.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  const result = [];
+  for (const id of ids) {
+    const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (rows[0]) result.push(rows[0]);
+  }
+  return result;
+}
 // TODO: add feature queries here as your schema grows.

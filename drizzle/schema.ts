@@ -12,6 +12,7 @@ export const users = mysqlTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  pushToken: varchar("pushToken", { length: 200 }),
 });
 
 export type User = typeof users.$inferSelect;
