@@ -105,7 +105,7 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen name="index"      options={{ title: "首页",    tabBarIcon: ({ focused }) => <TabIcon route="index"      focused={focused} isJoiner={isJoiner} /> }} />
+      <Tabs.Screen name="index"      options={{ title: "首页",    tabBarIcon: ({ focused }) => <TabIcon route="index"      focused={focused} isJoiner={isJoiner} />, gestureEnabled: false }} />
       <Tabs.Screen name="checkin"    options={{ title: "每日打卡", tabBarIcon: ({ focused }) => <TabIcon route="checkin"    focused={focused} isJoiner={isJoiner} />, ...(isJoiner ? { tabBarButton: () => <View style={styles.disabledTabBtn}><TabIcon route="checkin" focused={false} isJoiner={isJoiner} /></View> } : {}) }} />
       <Tabs.Screen name="medication" options={{ title: "用药记录", tabBarIcon: ({ focused }) => <TabIcon route="medication" focused={focused} isJoiner={isJoiner} />, ...(isJoiner ? { tabBarButton: () => <View style={styles.disabledTabBtn}><TabIcon route="medication" focused={false} isJoiner={isJoiner} /></View> } : {}) }} />
       <Tabs.Screen name="diary"      options={{ title: "日记",    tabBarIcon: ({ focused }) => <TabIcon route="diary"      focused={focused} isJoiner={isJoiner} /> }} />
