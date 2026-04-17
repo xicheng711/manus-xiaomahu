@@ -101,14 +101,14 @@ const config: ExpoConfig = {
     ],
     [
       "expo-speech-recognition",
-      "expo-asset",
-      "@react-native-community/datetimepicker",
-      "expo-font",
       {
         microphonePermission: "允许小马虎使用麦克风进行语音输入。",
         speechRecognitionPermission: "允许小马虎使用语音识别功能。",
       },
     ],
+    "expo-asset",
+    "@react-native-community/datetimepicker",
+    "expo-font",
     [
       "expo-media-library",
       {
