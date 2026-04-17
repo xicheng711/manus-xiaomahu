@@ -18,7 +18,7 @@ import {
   upsertCheckIn,
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember,
 } from '@/lib/storage';
-import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile } from '@/lib/cloud-sync';
+import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements } from '@/lib/cloud-sync';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -395,7 +395,16 @@ export function JoinerHomeScreen() {
     }
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest);
-    const announcements = await getFamilyAnnouncements(30);
+    // 公告也从云端拉取，确保看到所有家庭成员发的公告
+    let announcements: FamilyAnnouncement[] = [];
+    try {
+      const cloudAnns = await cloudGetAnnouncements(undefined, 30);
+      announcements = (cloudAnns && cloudAnns.length > 0)
+        ? cloudAnns as unknown as FamilyAnnouncement[]
+        : await getFamilyAnnouncements(30);
+    } catch {
+      announcements = await getFamilyAnnouncements(30);
+    }
     setLatestAnnounce(announcements[0] ?? null);
     setFeed(buildFeed(checkIns.slice(0, 2), diaries.slice(0, 3), announcements.slice(0, 2), creatorName));
     // 读取今日简报缓存

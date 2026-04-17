@@ -454,3 +454,18 @@ export async function pullFromServer(roomId?: number) {
     return { success: false, reason: 'network_error' };
   }
 }
+
+// ─── Push Token Registration ───────────────────────────────────────────────────
+
+/** Register or update the Expo push token on the server */
+export async function cloudUpdatePushToken(pushToken: string) {
+  try {
+    const client = getClient();
+    await client.family.updatePushToken.mutate({ pushToken });
+    console.log('[CloudSync] Push token registered successfully');
+    return true;
+  } catch (e) {
+    console.warn('[CloudSync] updatePushToken failed:', e);
+    return false;
+  }
+}

@@ -282,6 +282,29 @@ export const familyRouter = router({
       const { userId } = requireUser(ctx);
       await requireRoomMember(userId, input.roomId);
       const result = await upsertCheckIn({ ...input, authorUserId: userId });
+
+      // 推送通知给其他家庭成员
+      try {
+        const allMembers = await getRoomMembers(input.roomId);
+        const otherUserIds = allMembers.filter(m => m.userId !== userId).map(m => m.userId);
+        if (otherUserIds.length > 0) {
+          const member = allMembers.find(m => m.userId === userId);
+          const otherUsers = await getUsersByIds(otherUserIds);
+          const pushTokens = otherUsers.map(u => u.pushToken).filter((t): t is string => !!t);
+          if (pushTokens.length > 0) {
+            const period = input.morningDone ? '早间' : '晚间';
+            await sendExpoPushNotifications(
+              pushTokens,
+              `✅ ${member?.name || '照顾者'}完成了${period}打卡`,
+              input.morningNotes || input.eveningNotes || '点击查看今日照护记录',
+              { type: 'checkin', screen: 'home' },
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('[syncCheckIn] Push notification failed (non-fatal):', e);
+      }
+
       return { success: true, checkIn: result };
     }),
 
@@ -361,6 +384,29 @@ export const familyRouter = router({
         conversation: input.conversation ?? null,
         conversationFinished: input.conversationFinished ?? false,
       });
+
+      // 推送通知给其他家庭成员
+      try {
+        const allMembers = await getRoomMembers(input.roomId);
+        const otherUserIds = allMembers.filter(m => m.userId !== userId).map(m => m.userId);
+        if (otherUserIds.length > 0) {
+          const member = allMembers.find(m => m.userId === userId);
+          const otherUsers = await getUsersByIds(otherUserIds);
+          const pushTokens = otherUsers.map(u => u.pushToken).filter((t): t is string => !!t);
+          if (pushTokens.length > 0) {
+            const preview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
+            await sendExpoPushNotifications(
+              pushTokens,
+              `📖 ${member?.name || '照顾者'}写了一篇日记`,
+              preview,
+              { type: 'diary', screen: 'diary' },
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('[syncDiary] Push notification failed (non-fatal):', e);
+      }
+
       return { success: true, diaryId: entry.id };
     }),
 
@@ -399,6 +445,28 @@ export const familyRouter = router({
         type: input.type,
         date: input.date,
       });
+
+      // 推送通知给其他家庭成员
+      try {
+        const allMembers = await getRoomMembers(input.roomId);
+        const otherUserIds = allMembers.filter(m => m.userId !== userId).map(m => m.userId);
+        if (otherUserIds.length > 0) {
+          const otherUsers = await getUsersByIds(otherUserIds);
+          const pushTokens = otherUsers.map(u => u.pushToken).filter((t): t is string => !!t);
+          if (pushTokens.length > 0) {
+            const preview = input.content.length > 50 ? input.content.slice(0, 50) + '...' : input.content;
+            await sendExpoPushNotifications(
+              pushTokens,
+              `${member.emoji} ${member.name} 发布了家庭公告`,
+              preview,
+              { type: 'announcement', screen: 'family' },
+            );
+          }
+        }
+      } catch (e) {
+        console.warn('[postAnnouncement] Push notification failed (non-fatal):', e);
+      }
+
       return { success: true, announcement };
     }),
 

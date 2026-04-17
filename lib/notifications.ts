@@ -47,6 +47,31 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
+ * Get Expo push token and register it to the server for cross-device push notifications
+ */
+export async function registerPushToken(): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return null;
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: undefined, // uses the project ID from app.json automatically
+    });
+    const token = tokenData.data;
+    if (token) {
+      // Lazy import to avoid circular dependency
+      const { cloudUpdatePushToken } = require('./cloud-sync');
+      await cloudUpdatePushToken(token);
+      console.log('[Notifications] Push token registered:', token.slice(0, 30) + '...');
+    }
+    return token;
+  } catch (e) {
+    console.warn('[Notifications] Failed to register push token:', e);
+    return null;
+  }
+}
+
+/**
  * Check if notification permissions are granted
  */
 export async function hasNotificationPermission(): Promise<boolean> {

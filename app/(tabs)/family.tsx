@@ -26,6 +26,7 @@ import { sendFamilyAnnouncementNotification } from '@/lib/notifications';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { FamilySkeleton } from '@/components/skeleton-loader';
+import { cloudGetAnnouncements, cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile } from '@/lib/cloud-sync';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -291,24 +292,52 @@ export default function FamilyScreen() {
 
   async function loadData() {
     setLoading(true);
-    const [r, m, a, creatorFlag] = await Promise.all([
+    const [r, m, localAnns, creatorFlag, cloudAnns] = await Promise.all([
       getFamilyRoom(),
       getCurrentMember(),
       getFamilyAnnouncements(),
       getCurrentUserIsCreator(),
+      cloudGetAnnouncements(undefined, 50).catch(() => [] as any[]),
     ]);
     setRoom(r);
     setCurrentMemberState(m);
+    // 优先使用云端公告（包含所有家庭成员发的），失败时降级读本地
+    const a = (cloudAnns && cloudAnns.length > 0)
+      ? cloudAnns as unknown as FamilyAnnouncement[]
+      : localAnns;
     setAnnouncements(a);
     setIsCreator(creatorFlag);
 
-    // Load briefing data
-    const [todayCheckIn, allCheckIns, diaryEntries, profile] = await Promise.all([
-      getTodayCheckIn(),
-      getAllCheckIns(),
-      getDiaryEntries(),
-      getProfile(),
-    ]);
+    // Load briefing data — joiner 从云端拉取主照顾者的数据
+    let todayCheckIn: any = null;
+    let allCheckIns: DailyCheckIn[] = [];
+    let diaryEntries: any[] = [];
+    let profile: any = null;
+    if (!creatorFlag) {
+      // Joiner: pull from cloud
+      const [cloudCIs, cloudDiaries, cloudProfile] = await Promise.all([
+        cloudGetCheckIns().catch(() => []),
+        cloudGetDiaries().catch(() => []),
+        cloudGetElderProfile().catch(() => null),
+      ]);
+      allCheckIns = (cloudCIs as any[]) ?? [];
+      const todayDate = todayStr();
+      todayCheckIn = allCheckIns.find((ci: any) => ci.date === todayDate) ?? null;
+      diaryEntries = (cloudDiaries as any[]) ?? [];
+      profile = cloudProfile ?? await getProfile();
+    } else {
+      // Creator: read local
+      const [localToday, localAll, localDiaries, localProfile] = await Promise.all([
+        getTodayCheckIn(),
+        getAllCheckIns(),
+        getDiaryEntries(),
+        getProfile(),
+      ]);
+      todayCheckIn = localToday;
+      allCheckIns = localAll;
+      diaryEntries = localDiaries;
+      profile = localProfile;
+    }
     const today = todayStr();
     setBriefingData({ checkIn: todayCheckIn, profile, todayAnnouncements: a.filter(ann => ann.date === today) });
     setElderNickname(profile?.nickname || profile?.name || '家人');

@@ -21,6 +21,7 @@ import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-run
 import { FamilyProvider } from "@/lib/family-context";
 import { WeatherProvider } from "@/lib/weather-context";
 import { initCloudSync } from "@/lib/cloud-sync";
+import { registerPushToken } from "@/lib/notifications";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -39,6 +40,15 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+  }, []);
+
+  // Register push token for cross-device notifications (after cloud sync is ready)
+  useEffect(() => {
+    // Delay to ensure cloud sync is initialized
+    const timer = setTimeout(() => {
+      registerPushToken().catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
