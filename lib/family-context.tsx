@@ -12,6 +12,7 @@ import {
   removeMembership,
   deleteFamilyAndData,
 } from './storage';
+import { setCloudSyncState } from './cloud-sync';
 
 export interface FamilyContextValue {
   memberships: FamilyMembership[];
@@ -68,6 +69,11 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     await saveFamilyRoom(target.room);
     const myMember = target.room.members.find(m => m.id === target.myMemberId);
     if (myMember) await setCurrentMember(myMember);
+    // 同步更新云端 activeRoomId，确保云端同步指向正确的家庭
+    const serverRoomId = parseInt(target.room.id);
+    if (!isNaN(serverRoomId)) {
+      await setCloudSyncState({ activeRoomId: serverRoomId });
+    }
     setActiveMembership(target);
   }, []);
 
