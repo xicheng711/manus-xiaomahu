@@ -343,7 +343,9 @@ export default function FamilyScreen() {
     setElderNickname(profile?.nickname || profile?.name || '家人');
     setElderEmoji(profile?.zodiacEmoji || '🐯');
 
-    // Build briefing history (today + past 6 days) — use actual check-in data for each day
+    // Build briefing history (today + past 6 days)
+    // 新逻辑：简报只展示有晚间打卡（eveningDone）的日期
+    // 今日始终显示（即使还没有晚间打卡）
     const checkInMap = new Map<string, DailyCheckIn>();
     for (const ci of allCheckIns) { checkInMap.set(ci.date, ci); }
 
@@ -356,14 +358,16 @@ export default function FamilyScreen() {
       const dayCheckIn = checkInMap.get(dateKey) || null;
       const dayDiary = diaryEntries.find(e => e.date === dateKey);
       const dayAnnouncements = a.filter(ann => ann.date === dateKey);
-      if (dayCheckIn || dayDiary || dayAnnouncements.length > 0 || i === 0) {
+      // 今日始终展示；历史日期只展示有晚间打卡的
+      if (i === 0 || dayCheckIn?.eveningDone) {
         history.push({ date: dateKey, label, checkIn: dayCheckIn, diary: dayDiary, announcements: dayAnnouncements });
       }
     }
     setBriefingHistory(history);
 
-    // Auto-select the most recent day with data
-    const latestWithData = history.find(item => item.checkIn);
+    // Auto-select the most recent day with evening check-in data
+    const latestWithEvening = history.find(item => item.checkIn?.eveningDone);
+    const latestWithData = latestWithEvening || history[0]; // fallback to today
     if (latestWithData) setSelectedBriefingDate(latestWithData.date);
 
     setLoading(false);
@@ -735,13 +739,21 @@ export default function FamilyScreen() {
                   </>
                 ) : (
                   <View style={styles.briefingEmpty}>
-                    <Text style={styles.emptyEmoji}>📝</Text>
-                    <Text style={styles.emptyText}>{isToday ? '今日尚未打卡' : '该日无打卡记录'}</Text>
+                    <Text style={styles.emptyEmoji}>🌙</Text>
+                    <Text style={styles.emptyText}>
+                      {isToday
+                        ? (item.checkIn?.morningDone ? '晚间打卡后生成简报' : '今日尚未打卡')
+                        : '该日无晚间打卡记录'}
+                    </Text>
                     {isToday && (
                       <>
-                        <Text style={styles.emptySubText}>完成今日打卡后，简报将自动生成</Text>
+                        <Text style={styles.emptySubText}>
+                          {item.checkIn?.morningDone
+                            ? `睡眠已记录！完成晚间打卡后，${elderNickname}的今日简报就会自动生成`
+                            : '完成晚间打卡，记录心情、用药和饮食，就能看到今日完整简报'}
+                        </Text>
                         <TouchableOpacity style={styles.goCheckinBtn} onPress={() => router.push('/(tabs)/checkin')}>
-                          <Text style={styles.goCheckinBtnText}>去打卡 →</Text>
+                          <Text style={styles.goCheckinBtnText}>去完成晚间打卡 →</Text>
                         </TouchableOpacity>
                       </>
                     )}

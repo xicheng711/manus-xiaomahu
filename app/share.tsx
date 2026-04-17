@@ -707,7 +707,7 @@ export default function ShareScreen() {
       loadedRef.current = true;
       loadAndGenerate(false);
     } else if (error) {
-      // 之前是错误状态（缺少昨晚记录），用户可能已经去补卡了，强制刷新
+      // 之前是错误状态（晚间打卡未完成），用户可能已经去完成打卡了，强制刷新
       _briefingCache = null;
       AsyncStorage.removeItem('share_briefing_cache_v1').catch(() => {});
       loadAndGenerate(true);
@@ -815,44 +815,41 @@ export default function ShareScreen() {
       setTodayCi(today);
       setYesterdayCi(yesterday);
 
-      // 睡眠数据来自今日早间打卡，心情/用药/饮食来自昨晚打卡
-      // 如果两者都没有，提示用户先完成打卡
-      const hasYesterdayEvening = yesterday?.eveningDone;
+      // 新逻辑：简报使用当天早间睡眠 + 当天晚间数据生成
+      // 必须完成当天晚间打卡（eveningDone）才能生成简报
+      const hasTodayEvening = today?.eveningDone;
       const hasTodayMorning = today?.morningDone;
 
-      if (!hasYesterdayEvening && !hasTodayMorning) {
-        setError('请先完成今日打卡，再生成简报');
+      if (!hasTodayEvening) {
+        setError('完成晚间打卡后，就能看到今日完整简报了！');
         setLoading(false);
         return;
       }
 
-      // 合并数据：睡眠来自今日早间（today），心情/用药/饮食来自昨晚（yesterday）
-      // 如果今日早间没有数据则回退到 yesterday
-      const morningSource = hasTodayMorning ? today! : yesterday!;
-      const eveningSource = hasYesterdayEvening ? yesterday! : today!;
+      // 简报数据：心情/用药/饮食来自当天晚间，睡眠来自当天早间（如有）
       const ci: DailyCheckIn = {
-        ...eveningSource,
-        // 睡眠字段优先取今日早间打卡
-        sleepHours: morningSource.sleepHours,
-        sleepQuality: morningSource.sleepQuality,
-        sleepInput: morningSource.sleepInput,
-        sleepScore: morningSource.sleepScore,
-        sleepProblems: morningSource.sleepProblems,
-        sleepType: morningSource.sleepType,
-        sleepSegments: morningSource.sleepSegments,
-        awakeHours: morningSource.awakeHours,
-        nightWakings: morningSource.nightWakings,
-        napMinutes: morningSource.napMinutes,
-        daytimeNap: morningSource.daytimeNap,
-        sleepRange: morningSource.sleepRange,
-        nightAwakenings: morningSource.nightAwakenings,
-        nightAwakeTime: morningSource.nightAwakeTime,
-        napDuration: morningSource.napDuration,
-        morningNotes: morningSource.morningNotes,
-        morningDone: morningSource.morningDone,
+        ...today!,
+        // 睡眠字段：如果当天早间打卡有数据则使用，否则保持 today 原有字段（可能为 null/undefined）
+        sleepHours: hasTodayMorning ? today!.sleepHours : undefined,
+        sleepQuality: hasTodayMorning ? today!.sleepQuality : undefined,
+        sleepInput: hasTodayMorning ? today!.sleepInput : undefined,
+        sleepScore: hasTodayMorning ? today!.sleepScore : undefined,
+        sleepProblems: hasTodayMorning ? today!.sleepProblems : undefined,
+        sleepType: hasTodayMorning ? today!.sleepType : undefined,
+        sleepSegments: hasTodayMorning ? today!.sleepSegments : undefined,
+        awakeHours: hasTodayMorning ? today!.awakeHours : undefined,
+        nightWakings: hasTodayMorning ? today!.nightWakings : undefined,
+        napMinutes: today!.napMinutes, // 午休数据来自晚间打卡
+        daytimeNap: today!.daytimeNap,
+        sleepRange: hasTodayMorning ? today!.sleepRange : undefined,
+        nightAwakenings: hasTodayMorning ? today!.nightAwakenings : undefined,
+        nightAwakeTime: hasTodayMorning ? today!.nightAwakeTime : undefined,
+        napDuration: hasTodayMorning ? today!.napDuration : undefined,
+        morningNotes: hasTodayMorning ? today!.morningNotes : undefined,
+        morningDone: hasTodayMorning,
       };
-      setViewMode('today'); // 今日分析始终默认显示今日视图（今天早间+昨晚记录合并）
-      setMergedTodayCi(ci); // 保存合并记录，供今日按钮切换回来时使用
+      setViewMode('today');
+      setMergedTodayCi(ci);
 
       setCheckIn(ci);
       loadSupplementaryData();
@@ -952,11 +949,17 @@ export default function ShareScreen() {
     if (ci.mealOption) parts.push(`进食${ci.mealOption.includes('正常') ? '正常' : ci.mealOption.includes('偏少') ? '偏少' : '较少'}`);
     if (napStr) parts.push(`白天小睡${napStr}`);
     const summary = parts.length > 0 ? parts.join('，') + '。' : `${nickname}今日照护记录已整理完毕。`;
+    const moodText = ci.eveningDone && ci.moodScore != null
+      ? (ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差')
+      : '未记录';
+    const medText = ci.eveningDone && ci.medicationTaken != null
+      ? (ci.medicationTaken ? '已完成' : '未按时服药')
+      : '未记录';
     return {
       summary,
       highlights: [],
       attention: '',
-      shareText: `【${nickname}今日照护简报】\n${dateStr}\n\n睡眠：${ci.sleepHours ?? '--'}小时（${sleepLabel}）${napStr ? `\n午休：${napStr}` : ''}\n心情：${ci.moodScore ?? '--'}/10\n用药：${ci.medicationTaken ? '已完成' : '未完成'}${ci.mealOption ? `\n饮食：${ci.mealOption}` : ''}\n\n记录人：${caregiver}`,
+      shareText: `【${nickname}今日护理简报】\n${dateStr}\n\n睡眠：${ci.morningDone && ci.sleepHours ? `${ci.sleepHours}小时（${sleepLabel}）` : '未记录'}${napStr ? `\n午休：${napStr}` : ''}\n心情：${moodText}\n用药：${medText}${ci.mealOption ? `\n饮食：${ci.mealOption}` : ''}\n\n记录人：${caregiver}`,
     };
   }
 
@@ -1002,14 +1005,20 @@ export default function ShareScreen() {
   function buildFallbackShareText(): string {
     if (!checkIn) return `【小马虎护理日报】${elderNickname}今日照护记录`;
     const sleepLabel = checkIn.sleepQuality === 'good' ? '良好' : checkIn.sleepQuality === 'fair' ? '一般' : '较差';
+    const moodText = checkIn.eveningDone && checkIn.moodScore != null
+      ? (checkIn.moodScore >= 8 ? '良好' : checkIn.moodScore >= 6 ? '一般' : '较差')
+      : '未记录';
+    const medText = checkIn.eveningDone && checkIn.medicationTaken != null
+      ? (checkIn.medicationTaken ? '已完成' : '未按时服药')
+      : '未记录';
     return `【${elderNickname}今日照护简报】
 
 ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}
 
-睡眠：${checkIn.sleepHours}小时（${sleepLabel}）
-心情：${checkIn.moodScore}/10
-用药：${checkIn.medicationTaken ? '已完成' : '未完成'}
-饮食：${checkIn.mealNotes || '已记录'}
+睡眠：${checkIn.morningDone && checkIn.sleepHours ? `${checkIn.sleepHours}小时（${sleepLabel}）` : '未记录'}
+心情：${moodText}
+用药：${medText}
+饮食：${checkIn.eveningDone ? (checkIn.mealNotes || '已记录') : '未记录'}
 
 记录人：${caregiverName}`;
   }
@@ -1039,12 +1048,12 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         </View>
 
         {/* ── 日期切换 ── */}
-        {!params.date && (todayCi || yesterdayCi) && (
+        {!params.date && (todayCi?.eveningDone || yesterdayCi?.eveningDone) && (
           <View style={styles.dateSwitchRow}>
+            {/* 今日按鈕：只有晚间打卡完成后才可点 */}
             <TouchableOpacity
               style={[styles.dateSwitchBtn, viewMode === 'today' && styles.dateSwitchBtnActive]}
               onPress={() => {
-                // 今日按钮：显示合并的今日分析记录（早间睡眠+昨晚心情/用药/饮食）
                 const target = mergedTodayCi || todayCi;
                 if (target) {
                   setViewMode('today');
@@ -1052,30 +1061,31 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                   if (mergedBriefing) setBriefing(mergedBriefing);
                 }
               }}
-              disabled={!mergedTodayCi && !todayCi}
+              disabled={!todayCi?.eveningDone}
             >
-              <Text style={[styles.dateSwitchText, viewMode === 'today' && styles.dateSwitchTextActive, (!mergedTodayCi && !todayCi) && { opacity: 0.35 }]}>今日</Text>
+              <Text style={[styles.dateSwitchText, viewMode === 'today' && styles.dateSwitchTextActive, !todayCi?.eveningDone && { opacity: 0.35 }]}>今日</Text>
             </TouchableOpacity>
-            {/* 只有昨日有打卡记录时才显示昨日按钮 */}
-            <TouchableOpacity
-              style={[styles.dateSwitchBtn, viewMode === 'yesterday' && styles.dateSwitchBtnActive]}
-              onPress={() => {
-                setViewMode('yesterday');
-                if (yesterdayCi) {
-                  setCheckIn(yesterdayCi);
-                  // 昨日简报：用昨日数据本地构建（只含有记录的字段）
-                  if (!yesterdayBriefing) {
-                    const yb = buildLocalBriefing(elderNickname, caregiverName, yesterdayCi);
-                    setYesterdayBriefing(yb);
-                    setBriefing(yb);
-                  } else {
-                    setBriefing(yesterdayBriefing);
+            {/* 昨日按鈕：只有昨日有晚间打卡时才显示 */}
+            {yesterdayCi?.eveningDone && (
+              <TouchableOpacity
+                style={[styles.dateSwitchBtn, viewMode === 'yesterday' && styles.dateSwitchBtnActive]}
+                onPress={() => {
+                  setViewMode('yesterday');
+                  if (yesterdayCi) {
+                    setCheckIn(yesterdayCi);
+                    if (!yesterdayBriefing) {
+                      const yb = buildLocalBriefing(elderNickname, caregiverName, yesterdayCi);
+                      setYesterdayBriefing(yb);
+                      setBriefing(yb);
+                    } else {
+                      setBriefing(yesterdayBriefing);
+                    }
                   }
-                }
-              }}
-            >
-              <Text style={[styles.dateSwitchText, viewMode === 'yesterday' && styles.dateSwitchTextActive]}>昨日</Text>
-            </TouchableOpacity>
+                }}
+              >
+                <Text style={[styles.dateSwitchText, viewMode === 'yesterday' && styles.dateSwitchTextActive]}>昨日</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -1094,22 +1104,17 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             <View style={styles.missingCheckinTop}>
               <Text style={styles.missingCheckinEmoji}>🌙</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.missingCheckinTitle}>缺少昨晚打卡记录</Text>
-                <Text style={styles.missingCheckinDesc}>补完昨晚的睡眠、用药、饮食记录后，才能生成完整的今日护理简报</Text>
+                <Text style={styles.missingCheckinTitle}>晚间打卡后生成简报</Text>
+                <Text style={styles.missingCheckinDesc}>完成晚间打卡，记录{elderNickname}的心情、用药和饮食情况，就能看到今日完整简报了！</Text>
               </View>
             </View>
             {!isJoiner && (
               <TouchableOpacity
                 style={styles.missingCheckinBtn}
-                onPress={() => {
-                  const y = new Date();
-                  y.setDate(y.getDate() - 1);
-                  const yDate = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
-                  router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: yDate } } as any);
-                }}
+                onPress={() => router.push('/(tabs)/checkin' as any)}
               >
                 <LinearGradient colors={['#A78BFA', '#7C3AED']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.missingCheckinBtnGradient}>
-                  <Text style={styles.missingCheckinBtnText}>补打昨晚卡 →</Text>
+                  <Text style={styles.missingCheckinBtnText}>去完成晚间打卡 →</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
@@ -1132,15 +1137,11 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
               />
             </View>
 
-            {!params.date && !(yesterdayCi?.eveningDone) && !isJoiner && (
+            {/* 如果早间没打卡，提示补录睡眠数据 */}
+            {!params.date && !checkIn?.morningDone && !isJoiner && (
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => {
-                  const y = new Date();
-                  y.setDate(y.getDate() - 1);
-                  const yDate = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
-                  router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: yDate } } as any);
-                }}
+                onPress={() => router.push('/(tabs)/checkin' as any)}
               >
                 <LinearGradient
                   colors={['#FFF7ED', '#FEF3C7']}
@@ -1148,14 +1149,14 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                   style={styles.backfillNotice}
                 >
                   <View style={styles.backfillLeft}>
-                    <Text style={styles.backfillIcon}>🌙</Text>
+                    <Text style={styles.backfillIcon}>🌅</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.backfillTitle}>缺少昨晚打卡记录</Text>
-                      <Text style={styles.backfillSub}>补完昨晚记录可获得更准确的健康分析</Text>
+                      <Text style={styles.backfillTitle}>还没有早间打卡哦</Text>
+                      <Text style={styles.backfillSub}>补录睡眠数据，让简报更完整</Text>
                     </View>
                   </View>
                   <View style={styles.backfillCtaBtn}>
-                    <Text style={styles.backfillCtaBtnText}>去补卡</Text>
+                    <Text style={styles.backfillCtaBtnText}>去补录</Text>
                   </View>
                 </LinearGradient>
               </TouchableOpacity>

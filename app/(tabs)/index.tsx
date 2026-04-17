@@ -240,9 +240,9 @@ function EnhancedCheckinBanner({
 
 // ─── 智能卡片：增强版 ────────────────────────────────────────────────
 function EnhancedSmartCard({
-  morningDone, encouragement, motivation, onPress, onCheckinPress,
+  morningDone, eveningDone, encouragement, motivation, onPress, onCheckinPress,
 }: {
-  morningDone: boolean; encouragement: string; motivation: string;
+  morningDone: boolean; eveningDone: boolean; encouragement: string; motivation: string;
   onPress: () => void; onCheckinPress: () => void;
 }) {
   const iconScale = useRef(new Animated.Value(1)).current;
@@ -301,15 +301,11 @@ function EnhancedSmartCard({
               <Text style={styles.aiLabel}>今日记录摘要</Text>
             </View>
 
-            {!morningDone ? (
-              <Text style={styles.aiMessage}>完成今日打卡后，自动整理状态摘要</Text>
-            ) : (
-              <Text style={styles.aiMessage} numberOfLines={2}>{encouragement}</Text>
-            )}
+            <Text style={styles.aiMessage} numberOfLines={2}>{encouragement}</Text>
 
             {morningDone ? (
-              <TouchableOpacity onPress={onPress} style={styles.aiDetailLink}>
-                <Text style={styles.aiDetailLinkText}>查看记录详情 ›</Text>
+              <TouchableOpacity onPress={onPress} style={[styles.aiDetailLink, { backgroundColor: AppColors.purple.strong }]}>
+                <Text style={styles.aiDetailLinkText}>{eveningDone ? '查看今日简报 ›' : '查看记录详情 ›'}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity onPress={onCheckinPress} style={[styles.aiDetailLink, { backgroundColor: AppColors.coral.primary }]}>
@@ -562,11 +558,17 @@ function CreatorHomeScreen() {
   const eveningDone = todayCheckIn?.eveningDone ?? false;
   const todayDone = morningDone;
 
-  const encouragement = briefingSummary
+  // 首页智能卡片文案：三种状态
+  // 1. 晚间已完成 → 显示简报摘要（如有缓存）
+  // 2. 早间已完成但晚间未完成 → 提示晚上打卡
+  // 3. 未打卡 → 引导去打卡
+  const encouragement = eveningDone && briefingSummary
     ? briefingSummary
-    : morningDone
-      ? '今日记录已完成，点击查看完整分析'
-      : '完成打卡后，自动生成今日状态总结';
+    : eveningDone
+      ? '晚间记录已完成，点击查看今日简报'
+      : morningDone
+        ? '睡眠已记录！今晚完成晚间打卡，就能看到今日简报啊'
+        : '完成晚间打卡后，自动生成今日护理简报';
 
   const quickActions = [
     { emoji: '💊', label: '用药记录', route: '/medication', gradientStart: Gradients.coral[0], gradientEnd: Gradients.coral[1], bgColor: AppColors.coral.soft, pulse: false },
@@ -687,6 +689,7 @@ function CreatorHomeScreen() {
          {/* ── 智能卡片 ── */}
          <EnhancedSmartCard
           morningDone={morningDone}
+          eveningDone={eveningDone}
           encouragement={encouragement}
           motivation={getDailyStatusHint(todayCheckIn)}
           onPress={() => router.push('/share' as any)}

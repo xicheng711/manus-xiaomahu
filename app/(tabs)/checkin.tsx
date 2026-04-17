@@ -971,7 +971,16 @@ function CheckinScreenContent() {
       if (Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      router.push('/share?refresh=1' as any);
+      // 早间打卡完成：显示正能量完成页，不生成简报
+      setShowCelebration(true);
+      doneFade.setValue(0);
+      doneScale.setValue(0.8);
+      setDone(true);
+      Animated.parallel([
+        Animated.timing(doneFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.spring(doneScale, { toValue: 1, speed: 8, bounciness: 10, useNativeDriver: true }),
+      ]).start();
+      setTimeout(() => setShowCelebration(false), 2500);
       return;
     }
     // 保存完成后重新计算连续打卡天数（包含刚刚保存的这次）
@@ -1052,11 +1061,20 @@ function CheckinScreenContent() {
               <Text style={styles.nightTitle}>{backfillDate ? '昨晚记录已补录' : '晚间记录已保存'}</Text>
 
               <View style={styles.nightSparkleRow}>
-                <Text style={styles.nightSparkle}>今日照护记录完整</Text>
+                <Text style={styles.nightSparkle}>今日简报已生成，可以查看了！</Text>
               </View>
 
+              {/* 无早间打卡时提示补卡 */}
+              {!checkIn?.morningDone && (
+                <View style={{ backgroundColor: 'rgba(251,191,36,0.15)', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(251,191,36,0.4)' }}>
+                  <Text style={{ fontSize: 13, color: '#92400E', textAlign: 'center', lineHeight: 19 }}>
+                    👋 还没有早间打卡哦！补录一下睡眠数据，简报会更完整哦
+                  </Text>
+                </View>
+              )}
+
               <Text style={styles.nightSub}>
-                {'今天的数据已整理完毕\n可以写一篇护理日记，记录详细情况'}
+                {'今天的记录已整理完毕\n可以写一篇护理日记，记录更多细节'}
               </Text>
 
               {/* Streak badge */}
@@ -1069,29 +1087,34 @@ function CheckinScreenContent() {
                 <Text style={styles.nightStreakText}>已连续打卡 {streak} 天</Text>
               </View>
 
-              {/* Main diary button — pink/rose gradient */}
+              {/* Main button — view briefing */}
               <TouchableOpacity
                 style={styles.nightDiaryBtn}
-                onPress={() => {
-                  if (backfillDate) {
-                    router.push('/share?refresh=1' as any);
-                  } else {
-                    router.push('/diary-edit' as any);
-                  }
-                }}
+                onPress={() => router.push('/share?refresh=1' as any)}
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={['#EC4899', '#F43F5E', '#F97316']}
+                  colors={['#7C3AED', '#6D28D9', '#5B21B6']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={styles.nightDiaryBtnInner}
                 >
-                  <Text style={styles.nightDiaryIcon}>{backfillDate ? '📊' : '📖'}</Text>
-                  <Text style={styles.nightDiaryBtnText}>{backfillDate ? '查看今日护理简报 →' : '写今天的护理日记 →'}</Text>
+                  <Text style={styles.nightDiaryIcon}>📋</Text>
+                  <Text style={styles.nightDiaryBtnText}>查看今日护理简报 →</Text>
                 </LinearGradient>
               </TouchableOpacity>
 
-              {/* Secondary home button */}
+              {/* Secondary diary button */}
+              {!backfillDate && (
+                <TouchableOpacity
+                  style={[styles.nightHomeBtn, { backgroundColor: 'rgba(236,72,153,0.12)', borderWidth: 1, borderColor: 'rgba(236,72,153,0.3)' }]}
+                  onPress={() => router.push('/diary-edit' as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.nightHomeBtnText, { color: '#EC4899' }]}>📖 写今天的护理日记</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Home button */}
               <TouchableOpacity style={styles.nightHomeBtn} onPress={() => router.replace('/(tabs)' as any)} activeOpacity={0.7}>
                 <Text style={styles.nightHomeBtnText}>🏠 回到首页</Text>
               </TouchableOpacity>
@@ -1104,24 +1127,30 @@ function CheckinScreenContent() {
     }
 
     return (
-      <ScreenContainer containerClassName="bg-[#F7F1F3]">
+      <ScreenContainer containerClassName="bg-[#FFF8F0]">
         <Animated.View style={[styles.doneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
           {showCelebration && <CelebrationEffect />}
-          <View style={styles.doneEmojiCircle}>
+          <View style={[styles.doneEmojiCircle, { backgroundColor: 'rgba(255,149,0,0.12)' }]}>
             <Text style={styles.doneEmoji}>🌅</Text>
           </View>
-          <Text style={styles.doneTitle}>早间记录已保存</Text>
+          <Text style={styles.doneTitle}>睡眠记录已保存</Text>
           <Text style={styles.doneSub}>
-            {`${elderNickname}今日照护数据已整理完毕\n可查看详细分析报告`}
+            {`早安！${elderNickname}昨晚的睡眠已记录好了 🌙\n\n今晚完成晚间打卡后\n就会生成今日完整简报！`}
           </Text>
-          <TouchableOpacity style={styles.doneBtn} onPress={() => router.push('/share?refresh=1' as any)}>
-            <Text style={styles.doneBtnText}>查看今日分析报告 →</Text>
-          </TouchableOpacity>
+          {/* 提示展望卡片 */}
+          <View style={{ backgroundColor: 'rgba(255,149,0,0.1)', borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,149,0,0.25)', width: '100%' }}>
+            <Text style={{ fontSize: 14, color: '#92400E', textAlign: 'center', lineHeight: 22 }}>
+              💡 今天记得完成晚间打卡，记录{elderNickname}的心情、用药和饮食情况，就能看到今日简报啊！
+            </Text>
+          </View>
           <TouchableOpacity style={styles.doneBtnSecondary} onPress={() => {
             setDone(false);
             setMode('landing');
           }}>
-            <Text style={styles.doneBtnSecondaryText}>查看今日打卡状态</Text>
+            <Text style={styles.doneBtnSecondaryText}>查看打卡状态</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.doneBtnSecondary, { marginTop: 8 }]} onPress={() => router.replace('/(tabs)' as any)} activeOpacity={0.7}>
+            <Text style={styles.doneBtnSecondaryText}>🏠 回到首页</Text>
           </TouchableOpacity>
         </Animated.View>
       </ScreenContainer>
