@@ -19,6 +19,7 @@ import {
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember,
 } from '@/lib/storage';
 import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements } from '@/lib/cloud-sync';
+import { TrendChart } from '@/components/trend-chart';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -332,6 +333,8 @@ export function JoinerHomeScreen() {
   const [zodiacEmoji, setZodiacEmoji] = useState<string>('');
   const [briefingSummary, setBriefingSummary] = useState<string | null>(null);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
+  const [allDiaries, setAllDiaries] = useState<DiaryEntry[]>([]);
   const { weatherData, buildGreeting } = useWeather();
 
   const headerFade = useRef(new Animated.Value(0)).current;
@@ -395,6 +398,8 @@ export function JoinerHomeScreen() {
     }
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest);
+    setAllCheckIns(checkIns);
+    setAllDiaries(diaries);
     // 公告也从云端拉取，确保看到所有家庭成员发的公告
     let announcements: FamilyAnnouncement[] = [];
     try {
@@ -634,6 +639,16 @@ export function JoinerHomeScreen() {
               <FeedRow key={item.id} item={item} isLast={i === feed.length - 1} />
             ))}
           </View>
+        )}
+
+        {/* 趋势图表 — 与主照顾者首页完全一致，显示被照顾者的睡眠/心情等趋势 */}
+        {allCheckIns.length > 0 && (
+          <TrendChart
+            checkIns={allCheckIns}
+            diaryEntries={allDiaries}
+            patientNickname={elderNickname}
+            caregiverName={caregiverName}
+          />
         )}
 
         {feed.length === 0 && (
