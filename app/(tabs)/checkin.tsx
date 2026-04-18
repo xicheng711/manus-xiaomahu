@@ -392,78 +392,49 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                 </View>
                 <View style={calStyles.popupDivider} />
 
-                {/* ── Loading state ── */}
-                {briefingLoading && (
-                  <View style={calStyles.briefingLoadingRow}>
-                    <Text style={calStyles.briefingLoadingText}>加载简报中…</Text>
-                  </View>
-                )}
-
-                {/* ── Briefing content (primary) ── */}
-                {!briefingLoading && selectedBriefing && (
-                  <View style={calStyles.briefingContent}>
-                    <View style={calStyles.briefingSummaryBox}>
-                      <Text style={calStyles.briefingSummaryLabel}>📋 今日简报</Text>
-                      <Text style={calStyles.briefingSummaryText}>{selectedBriefing.summary}</Text>
-                    </View>
-                    <View style={calStyles.briefingEncouragementBox}>
-                      <Text style={calStyles.briefingEncouragementText}>💜 {selectedBriefing.encouragement}</Text>
-                    </View>
-                    {/* Key stats row */}
-                    <View style={calStyles.briefingStatsRow}>
-                      {selectedDay?.eveningDone && (
-                        <>
-                          <View style={calStyles.briefingStat}>
-                            <Text style={calStyles.briefingStatEmoji}>{selectedDay.moodEmoji || '😊'}</Text>
-                            <Text style={calStyles.briefingStatLabel}>心情 {selectedDay.moodScore}/10</Text>
-                          </View>
-                          <View style={calStyles.briefingStat}>
-                            <Text style={calStyles.briefingStatEmoji}>{selectedDay.medicationTaken ? '✅' : '❌'}</Text>
-                            <Text style={calStyles.briefingStatLabel}>{selectedDay.medicationTaken ? '已服药' : '未服药'}</Text>
-                          </View>
-                        </>
+                {/* ── 打卡记录内容 ── */}
+                <View>
+                  {/* 早间打卡 */}
+                  {selectedDay?.morningDone ? (
+                    <View style={calStyles.popupSection}>
+                      <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
+                      <Text style={calStyles.popupItem}>
+                        💤 睡眠：{selectedDay.sleepHours ? `${selectedDay.sleepHours}小时` : '未记录'}
+                        {selectedDay.sleepQuality ? ` · ${selectedDay.sleepQuality === 'good' ? '良好' : selectedDay.sleepQuality === 'fair' ? '一般' : '较差'}` : ''}
+                      </Text>
+                      {selectedDay.nightAwakenings ? (
+                        <Text style={calStyles.popupItem}>🌙 夜醒：{selectedDay.nightAwakenings}</Text>
+                      ) : null}
+                      {selectedDay.napDuration && selectedDay.napDuration !== '没有' && (
+                        <Text style={calStyles.popupItem}>☀️ 白天小睡：{selectedDay.napDuration}</Text>
                       )}
-                      {selectedDay?.morningDone && (
-                        <View style={calStyles.briefingStat}>
-                          <Text style={calStyles.briefingStatEmoji}>💤</Text>
-                          <Text style={calStyles.briefingStatLabel}>{selectedDay.sleepRange ?? `${selectedDay.sleepHours}h`}</Text>
-                        </View>
-                      )}
+                      {selectedDay.morningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.morningNotes}</Text> : null}
                     </View>
-                  </View>
-                )}
+                  ) : (
+                    <View style={calStyles.popupSection}>
+                      <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
+                      <Text style={[calStyles.popupItem, { color: '#aaa' }]}>未完成早间打卡</Text>
+                    </View>
+                  )}
 
-                {/* ── Fallback: no briefing, show raw check-in data ── */}
-                {!briefingLoading && !selectedBriefing && (
-                  <View>
-                    <Text style={calStyles.noBriefingHint}>当天未生成智能简报</Text>
-                    {selectedDay?.morningDone && (
-                      <View style={calStyles.popupSection}>
-                        <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
-                        <Text style={calStyles.popupItem}>
-                          💤 睡眠：{selectedDay.sleepRange ?? `${selectedDay.sleepHours}小时`}
-                          {selectedDay.nightAwakenings ? ` · 夜醒${selectedDay.nightAwakenings}` : ` · ${selectedDay.sleepQuality === 'good' ? '良好' : selectedDay.sleepQuality === 'fair' ? '一般' : '较差'}`}
-                        </Text>
-                        {selectedDay.napDuration && selectedDay.napDuration !== '没有' && (
-                          <Text style={calStyles.popupItem}>☀️ 白天小睡：{selectedDay.napDuration}</Text>
-                        )}
-                        {selectedDay.caregiverMoodEmoji && (
-                          <Text style={calStyles.popupItem}>{selectedDay.caregiverMoodEmoji} {caregiverName}心情已记录</Text>
-                        )}
-                        {selectedDay.morningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.morningNotes}</Text> : null}
-                      </View>
-                    )}
-                    {selectedDay?.eveningDone && (
-                      <View style={calStyles.popupSection}>
-                        <Text style={calStyles.popupSectionTitle}>🌙 晚间记录</Text>
-                        <Text style={calStyles.popupItem}>{selectedDay.moodEmoji} 心情：{selectedDay.moodScore}/10</Text>
-                        <Text style={calStyles.popupItem}>💊 用药：{selectedDay.medicationTaken ? '✅ 已按时服药' : '❌ 未服药'}</Text>
-                        {selectedDay.mealNotes ? <Text style={calStyles.popupItem}>🍽️ {selectedDay.mealNotes}</Text> : null}
-                        {selectedDay.eveningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.eveningNotes}</Text> : null}
-                      </View>
-                    )}
-                  </View>
-                )}
+                  {/* 晚间打卡 */}
+                  {selectedDay?.eveningDone ? (
+                    <View style={calStyles.popupSection}>
+                      <Text style={calStyles.popupSectionTitle}>🌙 晚间打卡</Text>
+                      <Text style={calStyles.popupItem}>
+                        {selectedDay.moodEmoji || '😊'} 心情：{selectedDay.moodScore != null ? (selectedDay.moodScore >= 8 ? '良好' : selectedDay.moodScore >= 6 ? '一般' : '较差') : '未记录'}
+                      </Text>
+                      <Text style={calStyles.popupItem}>💊 用药：{selectedDay.medicationTaken != null ? (selectedDay.medicationTaken ? '✅ 已按时服药' : '❌ 未服药') : '未记录'}</Text>
+                      {selectedDay.mealNotes ? <Text style={calStyles.popupItem}>🍽️ 饮食：{selectedDay.mealNotes}</Text> : selectedDay.mealOption ? <Text style={calStyles.popupItem}>🍽️ 饮食：{selectedDay.mealOption}</Text> : null}
+                      {selectedDay.eveningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.eveningNotes}</Text> : null}
+                    </View>
+                  ) : (
+                    <View style={calStyles.popupSection}>
+                      <Text style={calStyles.popupSectionTitle}>🌙 晚间打卡</Text>
+                      <Text style={[calStyles.popupItem, { color: '#aaa' }]}>未完成晚间打卡</Text>
+                    </View>
+                  )}
+                </View>
 
                 <TouchableOpacity style={calStyles.popupClose} onPress={closeDayDetail}>
                   <Text style={calStyles.popupCloseText}>关闭</Text>
