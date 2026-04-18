@@ -329,29 +329,6 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
         <AnimatedBadge emoji="🍽️" label="饮食" value={mealValue} color={AppColors.coral.primary} delay={300} />
       </View>
 
-       {/* ── 智能总结 ── */}
-      <View style={cardStyles.summaryBox}>
-        <View style={cardStyles.summaryHeader}>
-          <Text style={cardStyles.summaryIcon}>📋</Text>
-          <Text style={cardStyles.summaryTitle}>今日记录摘要</Text>
-        </View>
-        <Text style={cardStyles.summaryText}>
-          {briefing.summary && briefing.summary.trim().length > 0
-            ? briefing.summary
-            : (() => {
-                const parts: string[] = [];
-                if (hasMorning && checkIn.sleepHours) parts.push(`睡眠${checkIn.sleepHours}小时，质量${sleepQualityLabel}`);
-                if (hasEvening && checkIn.moodScore != null) parts.push(`心情${checkIn.moodScore >= 8 ? '良好' : checkIn.moodScore >= 6 ? '一般' : '较差'}`);
-                if (hasEvening && checkIn.medicationTaken != null) parts.push(checkIn.medicationTaken ? '用药完成' : '未按时服药');
-                if (hasEvening && checkIn.mealOption) parts.push(`进食${checkIn.mealOption.includes('正常') ? '正常' : checkIn.mealOption.includes('偏少') ? '偏少' : '较少'}`);
-                return parts.length > 0 ? parts.join('，') + '。' : '暂无足够数据生成总结。';
-              })()
-          }
-        </Text>
-      </View>
-
-      {/* Highlights 已移除，避免与今日状态总结重复 */}
-
       {/* ── Footer ── */}
       <View style={cardStyles.footer}>
         <Text style={cardStyles.footerLeft}>记录人：{caregiverName}</Text>
@@ -1043,7 +1020,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         {/* ── Header ── */}
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.title}>📋 {params.date ? `${params.date} 记录` : viewMode === 'today' ? '今日' : '昨日'}记录详情</Text>
+          <Text style={styles.title}>📋 {params.date ? `${params.date} 打卡总结` : viewMode === 'today' ? '今日' : '昨日'}打卡总结</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -1104,8 +1081,8 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             <View style={styles.missingCheckinTop}>
               <Text style={styles.missingCheckinEmoji}>🌙</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.missingCheckinTitle}>晚间打卡后生成简报</Text>
-                <Text style={styles.missingCheckinDesc}>完成晚间打卡，记录{elderNickname}的心情、用药和饮食情况，就能看到今日完整简报了！</Text>
+                <Text style={styles.missingCheckinTitle}>完成今日打卡即可查看完整记录</Text>
+                <Text style={styles.missingCheckinDesc}>完成早间和晚间打卡后，今日打卡总结就会自动生成，包含睡眠、心情、用药、饮食全部记录</Text>
               </View>
             </View>
             {!isJoiner && (
