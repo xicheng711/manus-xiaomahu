@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
   createFamilyRoom, getFamilyRoomByCode, getFamilyRoomById, getUserFamilyRooms,
   addFamilyMember, getRoomMembers, getMemberByUserId,
@@ -65,7 +65,7 @@ export const familyRouter = router({
   // ─── Room Management ─────────────────────────────────────────────────────
 
   /** Create a new family room (called after onboarding by creator) */
-  createRoom: publicProcedure
+  createRoom: protectedProcedure
     .input(z.object({
       roomCode: z.string().min(4).max(10),
       elderName: z.string(),
@@ -140,7 +140,7 @@ export const familyRouter = router({
     }),
 
   /** Join an existing family room by invite code */
-  joinRoom: publicProcedure
+  joinRoom: protectedProcedure
     .input(z.object({
       roomCode: z.string().min(4).max(10),
       memberName: z.string(),
