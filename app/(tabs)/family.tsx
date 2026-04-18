@@ -58,6 +58,24 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
   const [roomCode, setRoomCode] = useState(initialCode ?? '');
   const [loading, setLoading] = useState(false);
   const [patientNickname, setPatientNickname] = useState('家人');
+  const [customPhotoUri, setCustomPhotoUri] = useState<string | null>(null);
+
+  async function handlePickPhoto() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('需要权限', '请允许访问相册以上传头像');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setCustomPhotoUri(result.assets[0].uri);
+    }
+  }
 
   useEffect(() => {
     getProfile().then(p => {
@@ -76,6 +94,7 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
         roleLabel: memberRoleLabel,
         emoji: memberEmoji,
         color: memberColor,
+        photoUri: customPhotoUri ?? undefined,
       });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSetupComplete();
@@ -94,6 +113,7 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
         roleLabel: memberRoleLabel,
         emoji: memberEmoji,
         color: memberColor,
+        photoUri: customPhotoUri ?? undefined,
       });
       if (!result) {
         Alert.alert('加入失败', '邀请码不正确，请检查后重试');
@@ -172,17 +192,47 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
 
       <View style={setup.inputGroup}>
         <Text style={setup.label}>选择头像</Text>
-        <View style={setup.emojiRow}>
-          {MEMBER_EMOJIS.map(e => (
+        {/* 自定义照片预览 + 上传按钮 */}
+        <TouchableOpacity style={setup.photoUploadRow} onPress={handlePickPhoto} activeOpacity={0.8}>
+          <View style={[setup.photoUploadPreview, customPhotoUri ? { borderColor: memberColor } : {}]}>
+            {customPhotoUri ? (
+              <Image source={{ uri: customPhotoUri }} style={setup.photoUploadImg} />
+            ) : (
+              <Text style={setup.photoUploadIcon}>📷</Text>
+            )}
+          </View>
+          <View style={setup.photoUploadInfo}>
+            <Text style={[setup.photoUploadTitle, customPhotoUri ? { color: memberColor } : {}]}>
+              {customPhotoUri ? '已选择自定义头像' : '上传自定义头像'}
+            </Text>
+            <Text style={setup.photoUploadSub}>
+              {customPhotoUri ? '点击重新选择' : '从相册选择照片（可选）'}
+            </Text>
+          </View>
+          {customPhotoUri && (
             <TouchableOpacity
-              key={e}
-              style={[setup.emojiBtn, memberEmoji === e && { borderColor: memberColor, backgroundColor: memberColor + '20' }]}
-              onPress={() => setMemberEmoji(e)}
+              style={setup.photoUploadClear}
+              onPress={(e) => { e.stopPropagation?.(); setCustomPhotoUri(null); }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={setup.emojiBtnText}>{e}</Text>
+              <Text style={setup.photoUploadClearText}>×</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          )}
+        </TouchableOpacity>
+        {/* 没有自定义照片时显示 emoji 选择 */}
+        {!customPhotoUri && (
+          <View style={[setup.emojiRow, { marginTop: 10 }]}>
+            {MEMBER_EMOJIS.map(e => (
+              <TouchableOpacity
+                key={e}
+                style={[setup.emojiBtn, memberEmoji === e && { borderColor: memberColor, backgroundColor: memberColor + '20' }]}
+                onPress={() => setMemberEmoji(e)}
+              >
+                <Text style={setup.emojiBtnText}>{e}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={setup.inputGroup}>
@@ -1451,4 +1501,27 @@ const setup = StyleSheet.create({
   cancelBtn: { flex: 1, padding: 16, borderRadius: 20, backgroundColor: AppColors.bg.secondary, alignItems: 'center' },
   cancelBtnText: { fontSize: 16, fontWeight: '600', color: AppColors.text.secondary },
   disabledBtn: { opacity: 0.5 },
+  // 自定义头像上传
+  photoUploadRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: AppColors.bg.secondary, borderRadius: 16,
+    padding: 12, borderWidth: 1.5, borderColor: AppColors.border.soft,
+  },
+  photoUploadPreview: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: AppColors.surface.whiteStrong,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: AppColors.border.soft,
+    overflow: 'hidden',
+  },
+  photoUploadImg: { width: 56, height: 56, borderRadius: 28 },
+  photoUploadIcon: { fontSize: 26 },
+  photoUploadInfo: { flex: 1 },
+  photoUploadTitle: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary, marginBottom: 2 },
+  photoUploadSub: { fontSize: 12, color: AppColors.text.tertiary },
+  photoUploadClear: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
+  },
+  photoUploadClearText: { fontSize: 18, color: '#9CA3AF', lineHeight: 22, fontWeight: '600' },
 });
