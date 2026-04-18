@@ -18,6 +18,7 @@ import { WeeklyEcho } from '@/components/weekly-echo';
 import { JoinerHomeScreen } from '@/components/joiner-home';
 import { useFamilyContext } from '@/lib/family-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Auth from '@/lib/_core/auth';
 
 const { width } = Dimensions.get('window');
 
@@ -637,7 +638,7 @@ function CreatorHomeScreen() {
             <View style={styles.appNameRow}>
               <Text style={styles.appName}>一起照顾好每一天</Text>
             </View>
-            {memberships.length > 0 && (
+            {memberships.length > 0 ? (
               <TouchableOpacity
                 onPress={() => setShowSwitcher(true)}
                 activeOpacity={0.75}
@@ -653,6 +654,20 @@ function CreatorHomeScreen() {
                   🏠 {activeMembership?.room.elderName || elderNickname}的家庭
                 </Text>
                 <Text style={{ fontSize: 11, color: AppColors.text.tertiary, fontWeight: '600' }}>⌄</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => { setJoinCode(''); setJoinName(''); setJoinError(''); setShowJoinSheet(true); }}
+                activeOpacity={0.75}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6,
+                  backgroundColor: AppColors.purple.soft,
+                  borderWidth: 1, borderColor: AppColors.purple.primary + '60',
+                  borderRadius: 14, paddingHorizontal: 9, paddingVertical: 4,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Text style={{ fontSize: 12, color: AppColors.purple.strong, fontWeight: '600' }}>🔗 加入家庭</Text>
               </TouchableOpacity>
             )}
             <Text style={styles.greeting}>{greeting}</Text>
@@ -830,6 +845,22 @@ function CreatorHomeScreen() {
               style={[switStyles.joinSubmitBtn, (joinCode.length < 6 || !joinName.trim() || joinLoading) && { opacity: 0.5 }]}
               disabled={joinCode.length < 6 || !joinName.trim() || joinLoading}
               onPress={async () => {
+                // 检查登录状态
+                const token = await Auth.getSessionToken();
+                if (!token) {
+                  setShowJoinSheet(false);
+                  setTimeout(() => {
+                    Alert.alert(
+                      '需要登录',
+                      '家庭共享功能需要登录账号，请先登录再加入家庭。',
+                      [
+                        { text: '取消', style: 'cancel' },
+                        { text: '去登录', onPress: () => router.push('/login' as any) },
+                      ]
+                    );
+                  }, 300);
+                  return;
+                }
                 setJoinLoading(true);
                 try {
                   const result = await joinFamilyRoom(joinCode, { name: joinName.trim(), role: 'family', roleLabel: '家庭成员', emoji: '👤', color: AppColors.purple.primary });

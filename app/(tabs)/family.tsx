@@ -176,7 +176,7 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <ScrollView
@@ -275,6 +275,8 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
         </View>
       </View>
 
+      {/* 仅创建模式显示身份选择，加入模式固定为家庭成员 */}
+      {mode === 'create' && (
       <View style={setup.inputGroup}>
         <Text style={setup.label}>身份</Text>
         <View style={setup.roleRow}>
@@ -291,6 +293,7 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
           ))}
         </View>
       </View>
+      )}
 
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
         <TouchableOpacity style={setup.cancelBtn} onPress={() => setMode('choose')}>
