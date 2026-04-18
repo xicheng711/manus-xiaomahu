@@ -151,9 +151,9 @@ function SmartNameRow() {
       <View>
         <Text style={styles.smartName}>小马虎</Text>
         <View style={styles.smartBadgeRow}>
-          <LinearGradient colors={['#3B82F6', '#8B5CF6']} style={styles.smartBadge}>
-            <Text style={styles.smartBadgeText}>✨ 智能分析</Text>
-          </LinearGradient>
+            <LinearGradient colors={['#3B82F6', '#8B5CF6']} style={styles.smartBadge}>
+              <Text style={styles.smartBadgeText}>✨ 小马虎回复</Text>
+            </LinearGradient>
         </View>
       </View>
     </View>

@@ -1095,7 +1095,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
               <Text style={styles.missingCheckinEmoji}>📅</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.missingCheckinTitle}>昨日暂无打卡记录</Text>
-                <Text style={styles.missingCheckinDesc}>昨日还没有完成打卡，暂时无法显示昨日的护理分析</Text>
+                <Text style={styles.missingCheckinDesc}>昨日还没有完成晚间打卡，暂时无法显示昨日简报</Text>
               </View>
             </View>
           </View>

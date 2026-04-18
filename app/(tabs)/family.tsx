@@ -428,16 +428,19 @@ export default function FamilyScreen() {
         const date = new Date(selectedItem.date).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
         let text = `🌸 护理简报 · ${date}\n\n`;
         if (selectedItem.checkIn) {
-          text += `💤 睡眠：${selectedItem.checkIn.sleepHours}小时\n`;
-          text += `${selectedItem.checkIn.moodEmoji} 心情：${selectedItem.checkIn.moodScore}/10分\n`;
-          text += `💊 用药：${selectedItem.checkIn.medicationTaken ? '✅ 按时服药' : '⚠️ 未服药'}\n`;
+          const moodLabel = selectedItem.checkIn.eveningDone && selectedItem.checkIn.moodScore != null
+            ? (selectedItem.checkIn.moodScore >= 8 ? '良好' : selectedItem.checkIn.moodScore >= 6 ? '一般' : '较差')
+            : '未记录';
+          text += `💤 睡眠：${selectedItem.checkIn.morningDone && selectedItem.checkIn.sleepHours ? `${selectedItem.checkIn.sleepHours}小时` : '未记录'}\n`;
+          text += `${selectedItem.checkIn.moodEmoji || '😊'} 心情：${moodLabel}\n`;
+          text += `💊 用药：${selectedItem.checkIn.eveningDone && selectedItem.checkIn.medicationTaken != null ? (selectedItem.checkIn.medicationTaken ? '✅ 按时服药' : '⚠️ 未服药') : '未记录'}\n`;
         }
         if (selectedItem.diary) text += `📔 日记：${selectedItem.diary.content}\n\n`;
         if (selectedItem.announcements.length > 0) {
           text += `📢 家庭公告：\n`;
           selectedItem.announcements.forEach((a: FamilyAnnouncement) => { text += `${a.authorEmoji} ${a.authorName}：${a.content}\n`; });
         }
-        text += `\n💕 由小马虎护理助手生成`;
+        text += `\n💕 小马虎`;
         await Share.share({ message: text, title: '护理简报' });
       } else {
         // Native: capture the hidden briefing card as image
