@@ -88,14 +88,30 @@ export function registerAuthProviderRoutes(app: Express) {
   });
 
   app.post('/api/auth/apple/callback', async (req: Request, res: Response) => {
-    const { identityToken, fullName, email } = req.body;
+    const { identityToken: rawIdentityToken, fullName, email } = req.body;
 
-    if (!identityToken) {
+    if (!rawIdentityToken) {
       res.status(400).json({ error: '缺少 Apple 登录凭证' });
       return;
     }
 
+    // 清理 identityToken：确保是字符串并去除空白字符
+    const identityToken = typeof rawIdentityToken === 'string'
+      ? rawIdentityToken.trim()
+      : String(rawIdentityToken).trim();
+
+    // 调试日志：打印 token 格式信息
+    const tokenParts = identityToken.split('.');
+    console.log('[Apple] identityToken type:', typeof rawIdentityToken, 'parts:', tokenParts.length, 'length:', identityToken.length);
+
+    if (tokenParts.length !== 3) {
+      console.error('[Apple] Invalid identityToken format, parts:', tokenParts.length, 'preview:', identityToken.substring(0, 80));
+      res.status(400).json({ error: 'Apple 身份令牌格式无效' });
+      return;
+    }
+
     const expectedAudience = ENV.appleServiceId || ENV.appId;
+    console.log('[Apple] expectedAudience:', expectedAudience);
     if (!expectedAudience) {
       console.error('[Apple] No APPLE_SERVICE_ID or APP_ID configured for audience check');
       res.status(500).json({ error: 'Apple 登录未配置' });
@@ -122,6 +138,7 @@ export function registerAuthProviderRoutes(app: Express) {
         appleName = parts.join('') || null;
       }
 
+      console.log('[Apple] Login success, openId:', appleOpenId);
       await createSessionAndRespond(req, res, appleOpenId, appleName, appleEmail, 'apple');
     } catch (error: any) {
       if (error?.code === 'ERR_JWT_EXPIRED') {
@@ -130,6 +147,11 @@ export function registerAuthProviderRoutes(app: Express) {
       }
       if (error?.code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED') {
         res.status(401).json({ error: 'Apple 身份令牌签名验证失败' });
+        return;
+      }
+      if (error?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
+        console.error('[Apple] JWT claim validation failed:', error.message);
+        res.status(401).json({ error: `Apple 身份令牌验证失败: ${error.message}` });
         return;
       }
       console.error('[Apple] Login failed:', error);
