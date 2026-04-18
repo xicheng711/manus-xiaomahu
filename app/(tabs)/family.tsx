@@ -27,6 +27,7 @@ import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { FamilySkeleton } from '@/components/skeleton-loader';
 import { cloudGetAnnouncements, cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudPostAnnouncement } from '@/lib/cloud-sync';
+import { getSessionToken } from '@/lib/_core/auth';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,19 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
 
   async function handleCreate() {
     if (!memberName.trim()) return;
+    // 检查登录状态，家庭共享功能需要登录
+    const token = await getSessionToken();
+    if (!token) {
+      Alert.alert(
+        '需要登录',
+        '家庭共享功能需要登录账号，登录后才能与家人共享数据。',
+        [
+          { text: '暂不登录', style: 'cancel' },
+          { text: '去登录', onPress: () => router.push('/login' as any) },
+        ]
+      );
+      return;
+    }
     setLoading(true);
     try {
       const profile = await getProfile();
@@ -105,6 +119,19 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
 
   async function handleJoin() {
     if (!memberName.trim() || roomCode.length < 6) return;
+    // 检查登录状态，加入家庭空间需要登录
+    const token = await getSessionToken();
+    if (!token) {
+      Alert.alert(
+        '需要登录',
+        '加入家庭空间需要登录账号，登录后才能与家人共享数据。',
+        [
+          { text: '暂不登录', style: 'cancel' },
+          { text: '去登录', onPress: () => router.push('/login' as any) },
+        ]
+      );
+      return;
+    }
     setLoading(true);
     try {
       const result = await joinFamilyRoom(roomCode, {
