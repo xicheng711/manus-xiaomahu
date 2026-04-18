@@ -770,26 +770,40 @@ export default function ProfileScreen() {
             {/* 创建家庭表单 */}
             {familyModalTab === 'create' && (
               <View style={styles.modalForm}>
-                <View style={styles.createInfoCard}>
-                  <Text style={styles.createInfoEmoji}>🏠</Text>
-                  <Text style={styles.createInfoText}>
-                    将以 <Text style={{ fontWeight: '700' }}>{profile?.caregiverName || '您'}</Text> 的身份，
-                    为 <Text style={{ fontWeight: '700' }}>{profile?.nickname || profile?.name || '家人'}</Text> 创建一个新的护理家庭。
-                  </Text>
-                  <Text style={styles.createInfoSub}>系统会自动生成邀请码，您可以邀请其他家人加入。</Text>
-                </View>
-                {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
-                <TouchableOpacity
-                  style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
-                  onPress={handleCreateFamily}
-                  disabled={joinLoading}
-                >
-                  {joinLoading ? (
-                    <ActivityIndicator color={AppColors.surface.whiteStrong} />
-                  ) : (
-                    <Text style={styles.modalSubmitBtnText}>创建家庭</Text>
-                  )}
-                </TouchableOpacity>
+                {memberships.some(m => m.role === 'caregiver' || m.role === 'creator') ? (
+                  <View style={[styles.createInfoCard, { backgroundColor: '#FFF5F5', borderColor: '#FFE0E0' }]}>
+                    <Text style={styles.createInfoEmoji}>⚠️</Text>
+                    <Text style={[styles.createInfoText, { color: '#E53E3E' }]}>
+                      您当前已经是一个家庭的主照顾者。
+                    </Text>
+                    <Text style={styles.createInfoSub}>
+                      为了避免数据混乱，每个账号只能创建一个家庭。如需创建新家庭，请先解散当前家庭。
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.createInfoCard}>
+                      <Text style={styles.createInfoEmoji}>🏠</Text>
+                      <Text style={styles.createInfoText}>
+                        将以 <Text style={{ fontWeight: '700' }}>{profile?.caregiverName || '您'}</Text> 的身份，
+                        为 <Text style={{ fontWeight: '700' }}>{profile?.nickname || profile?.name || '家人'}</Text> 创建一个新的护理家庭。
+                      </Text>
+                      <Text style={styles.createInfoSub}>系统会自动生成邀请码，您可以邀请其他家人加入。</Text>
+                    </View>
+                    {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
+                    <TouchableOpacity
+                      style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
+                      onPress={handleCreateFamily}
+                      disabled={joinLoading}
+                    >
+                      {joinLoading ? (
+                        <ActivityIndicator color={AppColors.surface.whiteStrong} />
+                      ) : (
+                        <Text style={styles.modalSubmitBtnText}>创建家庭</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             )}
                 </View>

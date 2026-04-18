@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getCurrentUserIsCreator } from "./storage";
 
 const NOTIFICATION_PERM_KEY = "@xiaomahuNotifPerm";
 const MORNING_NOTIF_ID_KEY = "@xiaomahuMorningNotifId";
@@ -85,6 +86,10 @@ export async function hasNotificationPermission(): Promise<boolean> {
  */
 export async function scheduleMorningReminder(elderNickname?: string): Promise<string | null> {
   if (Platform.OS === "web") return null;
+  
+  // Only caregivers (creators) should have local reminders scheduled
+  const isCreator = await getCurrentUserIsCreator();
+  if (!isCreator) return null;
 
   const name = elderNickname || '家人';
 
@@ -128,6 +133,10 @@ export async function scheduleMorningReminder(elderNickname?: string): Promise<s
  */
 export async function scheduleEveningReminder(elderNickname?: string): Promise<string | null> {
   if (Platform.OS === "web") return null;
+
+  // Only caregivers (creators) should have local reminders scheduled
+  const isCreator = await getCurrentUserIsCreator();
+  if (!isCreator) return null;
 
   const name = elderNickname || '家人';
 
@@ -250,6 +259,10 @@ export async function scheduleMedicationReminder(
   minute: number,
 ): Promise<string | null> {
   if (Platform.OS === "web") return null;
+
+  // Only caregivers (creators) should have local reminders scheduled
+  const isCreator = await getCurrentUserIsCreator();
+  if (!isCreator) return null;
 
   const hasPermission = await hasNotificationPermission();
   if (!hasPermission) return null;

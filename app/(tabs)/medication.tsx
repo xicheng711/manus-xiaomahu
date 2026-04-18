@@ -20,7 +20,7 @@ const FREQ_ICONS = ['1️⃣', '2️⃣', '3️⃣', '📅', '📆', '⚡'];
 const MED_ICONS = ['💊', '💉', '🩺', '🌡️', '🧴', '🫁', '🧠', '❤️', '🦴', '👁️'];
 
 // ─── Animated Med Card ───────────────────────────────────────────────────────
-function MedCard({ med, onToggle, onDelete, onEdit, index }: { med: Medication; onToggle: () => void; onDelete: () => void; onEdit: () => void; index: number }) {
+function MedCard({ med, onToggle, onDelete, onEdit, index, isCreator }: { med: Medication; onToggle: () => void; onDelete: () => void; onEdit: () => void; index: number; isCreator: boolean }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -65,22 +65,24 @@ function MedCard({ med, onToggle, onDelete, onEdit, index }: { med: Medication; 
           </View>
         )}
 
-        <View style={styles.medCardActions}>
-          <TouchableOpacity style={styles.editBtn} onPress={onEdit}>
-            <Text style={styles.editBtnText}>✏️ 修改</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: med.active ? AppColors.coral.soft : AppColors.green.soft }]}
-            onPress={() => pressAnimation(scaleAnim, onToggle)}
-          >
-            <Text style={[styles.actionBtnText, { color: med.active ? '#991B1B' : '#166534' }]}>
-              {med.active ? '停用' : '启用'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteBtn} onPress={onDelete}>
-            <Text style={styles.deleteBtnText}>🗑️</Text>
-          </TouchableOpacity>
-        </View>
+        {isCreator && (
+          <View style={styles.medCardActions}>
+            <TouchableOpacity style={styles.editBtn} onPress={onEdit}>
+              <Text style={styles.editBtnText}>✏️ 修改</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: med.active ? AppColors.coral.soft : AppColors.green.soft }]}
+              onPress={() => pressAnimation(scaleAnim, onToggle)}
+            >
+              <Text style={[styles.actionBtnText, { color: med.active ? '#991B1B' : '#166534' }]}>
+                {med.active ? '停用' : '启用'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.deleteBtn} onPress={onDelete}>
+              <Text style={styles.deleteBtnText}>🗑️</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </Animated.View>
   );
@@ -93,6 +95,11 @@ function MedicationScreenContent() {
   const [careNeeds, setCareNeeds] = useState<CareNeedType[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingMed, setEditingMed] = useState<Medication | null>(null);
+  const [isCreator, setIsCreator] = useState(true);
+
+  useFocusEffect(useCallback(() => {
+    getCurrentUserIsCreator().then(setIsCreator);
+  }, []));
   const [name, setName] = useState('');
   const [dosage, setDosage] = useState('');
   const [freqIdx, setFreqIdx] = useState(0);
@@ -237,27 +244,37 @@ function MedicationScreenContent() {
 
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
-        {/* Header */}
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistT        {/* Header */}
         <Animated.View style={{ opacity: headerFade, transform: [{ translateY: headerSlide }] }}>
           <PageHeader
             theme={PAGE_THEMES.medication}
             subtitle={`${activeCount} 种药物启用中`}
-            right={
+            right={isCreator ? (
               <Animated.View style={{ transform: [{ scale: addBtnScale }] }}>
                 <TouchableOpacity
                   style={styles.addBtn}
-                  onPress={() => pressAnimation(addBtnScale, () => setAdding(true))}
-                  activeOpacity={0.85}
+                  onPress={() => {
+                    setAdding(true);
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }}
                 >
-                  <Text style={styles.addBtnText}>+ 添加药物</Text>
+                  <Text style={styles.addBtnText}>＋ 添加</Text>
                 </TouchableOpacity>
               </Animated.View>
-            }
+            ) : null}
           />
         </Animated.View>
 
-        {/* Add Form */}
+        {!isCreator && (
+          <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' }}>
+              <Text style={{ fontSize: 16 }}>🔒</Text>
+              <Text style={{ fontSize: 13, color: AppColors.text.secondary, flex: 1 }}>
+                您当前为家庭成员身份，仅可查看用药记录。如需修改，请联系主照顾者。
+              </Text>
+            </View>
+          </View>
+        )}orm */}
         {adding && (
           <Animated.View style={[styles.addForm, { opacity: formFade, transform: [{ translateY: formSlide }] }]}>
             <View style={styles.formTitleRow}>
@@ -369,7 +386,7 @@ function MedicationScreenContent() {
               </View>
             </View>
             {meds.map((med, i) => (
-              <MedCard key={med.id} med={med} onToggle={() => handleToggle(med.id)} onDelete={() => handleDelete(med.id)} onEdit={() => openEdit(med)} index={i} />
+              <MedCard key={med.id} med={med} onToggle={() => handleToggle(med.id)} onDelete={() => handleDelete(med.id)} onEdit={() => openEdit(med)} index={i} isCreator={isCreator} />
             ))}
           </View>
         ) : null}
@@ -579,15 +596,5 @@ const styles = StyleSheet.create({
 });
 
 export default function MedicationScreen() {
-  const [isCreator, setIsCreator] = useState<boolean | null>(null);
-  useFocusEffect(useCallback(() => { getCurrentUserIsCreator().then(v => setIsCreator(v)); }, []));
-  if (isCreator === null) return null;
-  if (!isCreator) return (
-    <JoinerLockedScreen
-      icon="💊"
-      title="用药管理"
-      description="记录和管理家人的用药是主要照顾者的专属功能。"
-    />
-  );
   return <MedicationScreenContent />;
 }
