@@ -148,13 +148,27 @@
             document.getElementById('codeDisplay').textContent = code;
         }
 
+        // App Store 链接（小马虎 App ID）
+        var APP_STORE_URL = 'https://apps.apple.com/app/id6761438580';
+
         function openApp() {
             if (!code) {
                 alert('邀请码无效，请重新获取邀请链接');
                 return;
             }
-            // 使用 URL Scheme 打开 App 并传入邀请码
+            // 先尝试用 URL Scheme 打开 App
             var scheme = 'manusxiaomahu://join?code=' + encodeURIComponent(code);
+            var start = Date.now();
+            // 设置定时：如果 1.5 秒内页面没有被隐藏（说明 App 没有安装），则跳转 App Store
+            var timer = setTimeout(function() {
+                if (Date.now() - start < 2000) {
+                    // App 没有安装，跳转 App Store
+                    window.location.href = APP_STORE_URL;
+                }
+            }, 1500);
+            // 页面被隐藏说明 App 已打开，取消跳转
+            window.addEventListener('pagehide', function() { clearTimeout(timer); });
+            window.addEventListener('blur', function() { clearTimeout(timer); });
             window.location.href = scheme;
         }
 
