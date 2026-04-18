@@ -42,6 +42,7 @@ const config: ExpoConfig = {
       ITSAppUsesNonExemptEncryption: false,
       LSApplicationQueriesSchemes: ['weixin', 'weixinULAPI'],
       NSSpeechRecognitionUsageDescription: 'This app does not use speech recognition.',
+      NSPhotoLibraryUsageDescription: '允许小马虎访问您的相册，用于上传头像和家庭照片。',
     },
     associatedDomains: [
       'applinks:xtdtinthemorning.cn',
