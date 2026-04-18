@@ -296,7 +296,7 @@ const curveStyles = StyleSheet.create({
   xLabel: { fontSize: 10, color: AppColors.text.tertiary, textAlign: 'center', flex: 1 },
 });
 
-function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean; isToday?: boolean; nightWakings?: number; nightAwakeShort?: string | null }[] }) {
+function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean; isToday?: boolean; nightWakings?: number; nightAwakeShort?: string | null; awakeHours?: number }[] }) {
   const chartH = 110;
   const maxVal = 12;
   const barW = 22;
@@ -313,7 +313,11 @@ function SleepChart({ data }: { data: { label: string; value: number; hasData: b
       {/* Bars */}
       <View style={sleepStyles.barsArea}>
         {data.map((d, i) => {
-          const fillH = d.hasData ? Math.max(6, (d.value / maxVal) * chartH) : 0;
+          const sleepH = d.hasData ? Math.max(6, (d.value / maxVal) * chartH) : 0;
+          const awakeH = (d.hasData && (d.awakeHours ?? 0) > 0)
+            ? Math.max(4, ((d.awakeHours ?? 0) / maxVal) * chartH)
+            : 0;
+          const totalFillH = sleepH + awakeH;
           const barColor = !d.hasData
             ? 'transparent'
             : d.value >= 7 ? AppColors.green.primary
@@ -325,6 +329,7 @@ function SleepChart({ data }: { data: { label: string; value: number; hasData: b
             : AppColors.coral.primary;
           const isToday = d.isToday ?? false;
           const hasWaking = d.hasData && (d.nightWakings ?? 0) > 0;
+          const hasAwake = d.hasData && (d.awakeHours ?? 0) > 0;
 
           return (
             <View key={i} style={sleepStyles.barCol}>
@@ -332,17 +337,29 @@ function SleepChart({ data }: { data: { label: string; value: number; hasData: b
               <Text style={[sleepStyles.valueLabel, { color: labelColor, opacity: d.hasData ? 1 : 0 }]}>
                 {d.hasData ? `${d.value}h` : ''}
               </Text>
-              {/* track + fill */}
+              {/* track + stacked fill */}
               <View style={[sleepStyles.track, { height: chartH, width: barW }]}>
-                <View style={[sleepStyles.fill, { height: fillH, width: barW, backgroundColor: barColor }]} />
+                {/* 底部：睡眠时间（绿/橙/红） */}
+                <View style={{ width: barW, height: totalFillH, borderRadius: 8, overflow: 'hidden', justifyContent: 'flex-start' }}>
+                  {/* 顶部：清醒时间（橙红色） */}
+                  {hasAwake && (
+                    <View style={{ height: awakeH, width: barW, backgroundColor: '#FB923C' }} />
+                  )}
+                  {/* 底部：睡眠时间 */}
+                  <View style={{ height: sleepH, width: barW, backgroundColor: barColor }} />
+                </View>
               </View>
               {/* day label */}
               <Text style={[sleepStyles.dayLabel, isToday && sleepStyles.dayLabelToday]}>
                 {d.label}
               </Text>
-              {/* night waking indicator */}
+              {/* night waking / awake time indicator */}
               <View style={sleepStyles.wakeRow}>
-                {hasWaking ? (
+                {hasAwake ? (
+                  <Text style={sleepStyles.wakeLabel}>
+                    {'🌙'}{(d.awakeHours ?? 0).toFixed(1)}h
+                  </Text>
+                ) : hasWaking ? (
                   <Text style={sleepStyles.wakeLabel}>
                     {'🌙'}{d.nightWakings}{d.nightAwakeShort ? ` ${d.nightAwakeShort}` : '次'}
                   </Text>
@@ -560,6 +577,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       isToday: date === todayStr,
       nightWakings: c?.nightWakings ?? 0,
       nightAwakeShort: wakeShort,
+      awakeHours: c?.awakeHours ?? 0,
     };
   });
 
