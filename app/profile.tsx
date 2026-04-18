@@ -50,7 +50,6 @@ export default function ProfileScreen() {
   const [familyModalTab, setFamilyModalTab] = useState<'list' | 'join' | 'create'>('list');
   const [joinCode, setJoinCode] = useState('');
   const [joinName, setJoinName] = useState('');
-  const [joinRole, setJoinRole] = useState<'caregiver' | 'family' | 'nurse'>('caregiver');
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -216,8 +215,8 @@ export default function ProfileScreen() {
       }
       await joinFamilyRoom(joinCode.trim().toUpperCase(), {
         name: joinName.trim(),
-        role: joinRole,
-        emoji: joinRole === 'nurse' ? '👩‍⚕️' : joinRole === 'family' ? '👨' : '🧑',
+        role: 'family',
+        emoji: '👨',
       });
       await refresh();
       setJoinCode('');
@@ -696,15 +695,21 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* ── 家庭管理 Modal ── */}
-      <Modal visible={showFamilyModal} transparent animationType="slide" onRequestClose={() => setShowFamilyModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
+      <Modal visible={showFamilyModal} transparent animationType="slide" onRequestClose={() => { Keyboard.dismiss(); setShowFamilyModal(false); }}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ width: '100%', justifyContent: 'flex-end' }}
+            >
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={styles.modalBox}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
                 {familyModalTab === 'join' ? '🔗 加入家庭' : '🏠 创建新家庭'}
               </Text>
-              <TouchableOpacity onPress={() => setShowFamilyModal(false)} style={styles.modalCloseBtn}>
+              <TouchableOpacity onPress={() => { Keyboard.dismiss(); setShowFamilyModal(false); }} style={styles.modalCloseBtn}>
                 <Text style={styles.modalCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -727,7 +732,7 @@ export default function ProfileScreen() {
 
             {/* 加入家庭表单 */}
             {familyModalTab === 'join' && (
-              <View style={styles.modalForm}>
+              <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <Text style={styles.modalLabel}>邀请码（6位）</Text>
                 <TextInput
                   style={styles.modalInput}
@@ -746,23 +751,6 @@ export default function ProfileScreen() {
                   placeholder="请输入您的名字"
                   placeholderTextColor={AppColors.text.tertiary}
                 />
-                <Text style={styles.modalLabel}>您的身份</Text>
-                <View style={styles.roleRow}>
-                  {([
-                    { key: 'caregiver', label: '照顾者', emoji: '🧑' },
-                    { key: 'family', label: '家庭成员', emoji: '👨' },
-                    { key: 'nurse', label: '护理人员', emoji: '👩‍⚕️' },
-                  ] as const).map(r => (
-                    <TouchableOpacity
-                      key={r.key}
-                      style={[styles.roleChip, joinRole === r.key && styles.roleChipActive]}
-                      onPress={() => setJoinRole(r.key)}
-                    >
-                      <Text style={styles.roleChipEmoji}>{r.emoji}</Text>
-                      <Text style={[styles.roleChipText, joinRole === r.key && styles.roleChipTextActive]}>{r.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
                 {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
                 <TouchableOpacity
                   style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
@@ -775,7 +763,8 @@ export default function ProfileScreen() {
                     <Text style={styles.modalSubmitBtnText}>加入家庭</Text>
                   )}
                 </TouchableOpacity>
-              </View>
+                <View style={{ height: 16 }} />
+              </ScrollView>
             )}
 
             {/* 创建家庭表单 */}
@@ -803,8 +792,11 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
             )}
+                </View>
+              </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* ── 注销账号确认 Modal ── */}
