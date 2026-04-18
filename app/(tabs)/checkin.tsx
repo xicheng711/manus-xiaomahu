@@ -1093,31 +1093,44 @@ function CheckinScreenContent() {
     }
 
     return (
-      <ScreenContainer containerClassName="bg-[#FFF8F0]">
-        <Animated.View style={[styles.doneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
+      <ScreenContainer containerClassName="bg-[#F0FDF4]">
+        <Animated.View style={[styles.morningDoneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
           {showCelebration && <CelebrationEffect />}
-          <View style={[styles.doneEmojiCircle, { backgroundColor: 'rgba(255,149,0,0.12)' }]}>
-            <Text style={styles.doneEmoji}>🌅</Text>
+
+          {/* 图标区 */}
+          <View style={styles.morningDoneIconWrap}>
+            <View style={styles.morningDoneIconCircle}>
+              <Text style={{ fontSize: 52 }}>🌿</Text>
+            </View>
+            <View style={styles.morningDoneCheckBadge}>
+              <Text style={{ fontSize: 16 }}>✅</Text>
+            </View>
           </View>
-          <Text style={styles.doneTitle}>睡眠记录已保存</Text>
-          <Text style={styles.doneSub}>
-            {`早安！${elderNickname}昨晚的睡眠已记录好了 🌙\n\n今晚完成晚间打卡后\n就会生成今日完整简报！`}
+
+          {/* 标题 */}
+          <Text style={styles.morningDoneTitle}>早上打卡已完成</Text>
+          <Text style={styles.morningDoneSub}>
+            等今晚打卡后即可查看今日完整记录
           </Text>
-          {/* 提示展望卡片 */}
-          <View style={{ backgroundColor: 'rgba(255,149,0,0.1)', borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,149,0,0.25)', width: '100%' }}>
-            <Text style={{ fontSize: 14, color: '#92400E', textAlign: 'center', lineHeight: 22 }}>
-              💡 今天记得完成晚间打卡，记录{elderNickname}的心情、用药和饮食情况，就能看到今日简报啊！
-            </Text>
+
+          {/* 按钮区 */}
+          <View style={styles.morningDoneBtnGroup}>
+            <TouchableOpacity
+              style={styles.morningDonePrimaryBtn}
+              onPress={() => router.replace('/(tabs)' as any)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.morningDonePrimaryBtnText}>🏠  回到首页</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.morningDoneSecondaryBtn}
+              onPress={() => { setDone(false); setMode('landing'); }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.morningDoneSecondaryBtnText}>查看打卡状态</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.doneBtnSecondary} onPress={() => {
-            setDone(false);
-            setMode('landing');
-          }}>
-            <Text style={styles.doneBtnSecondaryText}>查看打卡状态</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.doneBtnSecondary, { marginTop: 8 }]} onPress={() => router.replace('/(tabs)' as any)} activeOpacity={0.7}>
-            <Text style={styles.doneBtnSecondaryText}>🏠 回到首页</Text>
-          </TouchableOpacity>
         </Animated.View>
       </ScreenContainer>
     );
@@ -2094,6 +2107,38 @@ const styles = StyleSheet.create({
   },
   nextBtnDisabled: { backgroundColor: '#D1D5DB', shadowOpacity: 0 },
   nextBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+
+  // Morning Done (new green design)
+  morningDoneContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 40 },
+  morningDoneIconWrap: { position: 'relative', marginBottom: 28 },
+  morningDoneIconCircle: {
+    width: 110, height: 110, borderRadius: 55,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 8,
+  },
+  morningDoneCheckBadge: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 4,
+  },
+  morningDoneTitle: { fontSize: 26, fontWeight: '800', color: '#14532D', marginBottom: 10, letterSpacing: -0.3 },
+  morningDoneSub: { fontSize: 15, color: '#4ADE80', textAlign: 'center', lineHeight: 24, marginBottom: 40, fontWeight: '500' },
+  morningDoneBtnGroup: { width: '100%', gap: 12 },
+  morningDonePrimaryBtn: {
+    backgroundColor: '#22C55E', borderRadius: 16,
+    paddingVertical: 16, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+  },
+  morningDonePrimaryBtnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
+  morningDoneSecondaryBtn: {
+    backgroundColor: '#fff', borderRadius: 14,
+    paddingVertical: 14, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#BBF7D0',
+  },
+  morningDoneSecondaryBtnText: { fontSize: 15, fontWeight: '600', color: '#16A34A' },
 
   // Done
   doneContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
