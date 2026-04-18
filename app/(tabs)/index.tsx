@@ -567,8 +567,8 @@ function CreatorHomeScreen() {
     : eveningDone
       ? '晚间记录已完成，点击查看今日简报'
       : morningDone
-        ? '睡眠已记录！今晚完成晚间打卡，就能看到今日简报啊'
-        : '完成晚间打卡后，自动生成今日护理简报';
+        ? '早间打卡已完成，完成晚间打卡后就能看到今日记录'
+        : '完成今日打卡，就能看到今日记录';
 
   const quickActions = [
     { emoji: '💊', label: '用药记录', route: '/medication', gradientStart: Gradients.coral[0], gradientEnd: Gradients.coral[1], bgColor: AppColors.coral.soft, pulse: false },
