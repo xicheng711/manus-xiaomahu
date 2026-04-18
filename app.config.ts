@@ -41,6 +41,7 @@ const config: ExpoConfig = {
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       LSApplicationQueriesSchemes: ['weixin', 'weixinULAPI'],
+      NSSpeechRecognitionUsageDescription: 'This app does not use speech recognition.',
     },
     associatedDomains: [
       'applinks:xtdtinthemorning.cn',
