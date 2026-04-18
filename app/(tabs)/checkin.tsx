@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Animated, Platform, Easing, Dimensions, Modal, Keyboard,
+  StyleSheet, Animated, Platform, Easing, Dimensions, Modal, Keyboard, KeyboardAvoidingView,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
@@ -997,103 +997,98 @@ function CheckinScreenContent() {
     if (!isMorning) {
       const streakDots = Math.min(streak, 7);
       return (
-        <LinearGradient colors={['#3B0D7A', AppColors.purple.strong, AppColors.purple.strong, '#8B5CF6']} style={{ flex: 1 }}>
+        <ScreenContainer containerClassName="bg-[#F5F0FA]">
           {showCelebration && <CelebrationEffect />}
-          {/* Star field */}
-          <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-            {[
-              { top: '6%', left: '12%' }, { top: '11%', left: '78%' }, { top: '18%', left: '45%' },
-              { top: '8%', left: '60%' }, { top: '25%', left: '88%' }, { top: '32%', left: '5%' },
-              { top: '15%', left: '28%' }, { top: '4%', left: '92%' }, { top: '22%', left: '70%' },
-              { top: '38%', left: '55%' }, { top: '12%', left: '38%' }, { top: '30%', left: '20%' },
-              { top: '42%', left: '80%' }, { top: '48%', left: '10%' }, { top: '35%', left: '65%' },
-              { top: '50%', left: '40%' }, { top: '55%', left: '90%' }, { top: '60%', left: '25%' },
-              { top: '65%', left: '70%' }, { top: '70%', left: '50%' },
-            ].map((pos, i) => (
-              <Text key={i} style={{
-                position: 'absolute', top: pos.top as any, left: pos.left as any,
-                color: '#fff', opacity: 0.3 + (i % 4) * 0.15,
-                fontSize: i % 4 === 0 ? 5 : i % 3 === 0 ? 4 : 3,
-              }}>●</Text>
-            ))}
-          </View>
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, paddingBottom: 48 }}
+            showsVerticalScrollIndicator={false}
+          >
+          <Animated.View style={{ opacity: doneFade, transform: [{ scale: doneScale }], alignItems: 'center' }}>
 
-          <Animated.View style={[styles.doneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
-            {/* Moon icon + check badge */}
-            <View style={{ position: 'relative', marginBottom: 28 }}>
-              <Text style={{ fontSize: 90, lineHeight: 100 }}>🌙</Text>
+            {/* 顶部图标区 */}
+            <View style={styles.nightIconWrap}>
+              <LinearGradient
+                colors={['#EDE9FE', '#DDD6FE']}
+                style={styles.nightIconCircle}
+              >
+                <Text style={{ fontSize: 52 }}>🌙</Text>
+              </LinearGradient>
               <View style={styles.nightCheckBadge}>
-                <Text style={{ fontSize: 20, color: '#fff', fontWeight: '900' }}>✓</Text>
+                <Text style={{ fontSize: 18, color: '#fff', fontWeight: '900' }}>✓</Text>
               </View>
             </View>
 
-            {/* White card */}
-            <View style={styles.nightCard}>
-              <Text style={styles.nightTitle}>{backfillDate ? '昨晚记录已补录' : '晚间记录已保存'}</Text>
+            {/* 标题 */}
+            <Text style={styles.nightTitleNew}>{backfillDate ? '昨晚记录已补录' : '晚间记录已保存'}</Text>
+            <Text style={styles.nightSubNew}>今天的护理记录已整理完毕</Text>
 
-              <View style={styles.nightSparkleRow}>
-                <Text style={styles.nightSparkle}>今日简报已生成，可以查看了！</Text>
+            {/* 简报生成提示 */}
+            <View style={styles.nightBriefingBanner}>
+              <Text style={styles.nightBriefingBannerEmoji}>📋</Text>
+              <Text style={styles.nightBriefingBannerText}>今日护理简报已生成</Text>
+            </View>
+
+            {/* 无早间打卡提示 */}
+            {!checkIn?.morningDone && (
+              <View style={styles.nightWarnBox}>
+                <Text style={styles.nightWarnText}>👋 还没有早间打卡哦，补录睡眠数据后简报会更完整</Text>
               </View>
+            )}
 
-              {/* 无早间打卡时提示补卡 */}
-              {!checkIn?.morningDone && (
-                <View style={{ backgroundColor: 'rgba(251,191,36,0.15)', borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(251,191,36,0.4)' }}>
-                  <Text style={{ fontSize: 13, color: '#92400E', textAlign: 'center', lineHeight: 19 }}>
-                    👋 还没有早间打卡哦！补录一下睡眠数据，简报会更完整哦
-                  </Text>
-                </View>
-              )}
-
-              <Text style={styles.nightSub}>
-                {'今天的记录已整理完毕\n可以写一篇护理日记，记录更多细节'}
-              </Text>
-
-              {/* Streak badge */}
-              <View style={styles.nightStreakBadge}>
-                <View style={styles.nightStreakDots}>
-                  {Array.from({ length: streakDots }).map((_, i) => (
-                    <View key={i} style={styles.nightStreakDot} />
-                  ))}
-                </View>
-                <Text style={styles.nightStreakText}>已连续打卡 {streak} 天</Text>
+            {/* 连续打卡 */}
+            <View style={styles.nightStreakBadgeNew}>
+              <View style={styles.nightStreakDots}>
+                {Array.from({ length: streakDots }).map((_, i) => (
+                  <View key={i} style={styles.nightStreakDotNew} />
+                ))}
               </View>
+              <Text style={styles.nightStreakTextNew}>已连续打卡 {streak} 天</Text>
+            </View>
 
-              {/* Main button — view briefing */}
+            {/* 按钮组 */}
+            <View style={styles.nightBtnGroup}>
+              {/* 主按钮 - 查看简报 */}
               <TouchableOpacity
-                style={styles.nightDiaryBtn}
+                style={styles.nightPrimaryBtn}
                 onPress={() => router.push('/share?refresh=1' as any)}
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={['#7C3AED', '#6D28D9', '#5B21B6']}
+                  colors={['#7C3AED', '#6D28D9']}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={styles.nightDiaryBtnInner}
+                  style={styles.nightPrimaryBtnInner}
                 >
-                  <Text style={styles.nightDiaryIcon}>📋</Text>
-                  <Text style={styles.nightDiaryBtnText}>查看今日护理简报 →</Text>
+                  <Text style={{ fontSize: 20 }}>📋</Text>
+                  <Text style={styles.nightPrimaryBtnText}>查看今日护理简报</Text>
                 </LinearGradient>
               </TouchableOpacity>
 
-              {/* Secondary diary button */}
+              {/* 写日记按钮 */}
               {!backfillDate && (
                 <TouchableOpacity
-                  style={[styles.nightHomeBtn, { backgroundColor: 'rgba(236,72,153,0.12)', borderWidth: 1, borderColor: 'rgba(236,72,153,0.3)' }]}
+                  style={styles.nightSecondaryBtn}
                   onPress={() => router.push('/diary-edit' as any)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.8}
                 >
-                  <Text style={[styles.nightHomeBtnText, { color: '#EC4899' }]}>📖 写今天的护理日记</Text>
+                  <Text style={{ fontSize: 18 }}>📖</Text>
+                  <Text style={styles.nightSecondaryBtnText}>写今天的护理日记</Text>
                 </TouchableOpacity>
               )}
 
-              {/* Home button */}
-              <TouchableOpacity style={styles.nightHomeBtn} onPress={() => router.replace('/(tabs)' as any)} activeOpacity={0.7}>
-                <Text style={styles.nightHomeBtnText}>🏠 回到首页</Text>
+              {/* 回首页按钮 */}
+              <TouchableOpacity
+                style={styles.nightGhostBtn}
+                onPress={() => router.replace('/(tabs)' as any)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.nightGhostBtnText}>🏠  回到首页</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.nightFooter}>持续记录有助于掌握长期变化趋势</Text>
+            <Text style={styles.nightFooterNew}>持续记录，掌握长期健康变化</Text>
           </Animated.View>
-        </LinearGradient>
+          </ScrollView>
+        </ScreenContainer>
       );
     }
 
@@ -1639,6 +1634,11 @@ function CheckinScreenContent() {
   return (
     <GestureDetector gesture={swipeGesture}>
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScrollBeginDrag={Keyboard.dismiss}>
         {/* Header */}
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
@@ -1695,6 +1695,7 @@ function CheckinScreenContent() {
           </Animated.View>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
     </GestureDetector>
   );
@@ -2117,28 +2118,84 @@ const styles = StyleSheet.create({
   },
   doneBtnSecondaryText: { fontSize: 14, color: COLORS.textMuted, fontWeight: '600' },
 
-  // ── Night / Evening done screen ──
-  nightMoonOuter: {
-    width: 210, height: 210, borderRadius: 105,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 28,
-    shadowColor: '#C4B5FD', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 50, elevation: 30,
+  // ── Night / Evening done screen (new clean design) ──
+  nightIconWrap: {
+    position: 'relative', marginBottom: 20, marginTop: 8,
   },
-  nightMoonInner: {
-    width: 160, height: 160, borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)',
+  nightIconCircle: {
+    width: 110, height: 110, borderRadius: 55,
     alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 8,
   },
   nightCheckBadge: {
-    position: 'absolute', bottom: -8, right: -12,
-    width: 44, height: 44, borderRadius: 22,
+    position: 'absolute', bottom: -4, right: -8,
+    width: 38, height: 38, borderRadius: 19,
     backgroundColor: '#22C55E',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 8,
+    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 6, elevation: 6,
   },
+  nightTitleNew: {
+    fontSize: 26, fontWeight: '800', color: '#1A1A2E',
+    textAlign: 'center', marginBottom: 6, letterSpacing: -0.5,
+  },
+  nightSubNew: {
+    fontSize: 15, color: '#6B7280', textAlign: 'center',
+    marginBottom: 20, lineHeight: 22,
+  },
+  nightBriefingBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#EDE9FE', borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 20,
+    marginBottom: 14, width: '100%', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#DDD6FE',
+  },
+  nightBriefingBannerEmoji: { fontSize: 18 },
+  nightBriefingBannerText: {
+    fontSize: 15, fontWeight: '700', color: '#5B21B6',
+  },
+  nightWarnBox: {
+    backgroundColor: '#FFFBEB', borderRadius: 12,
+    padding: 12, marginBottom: 14, width: '100%',
+    borderWidth: 1, borderColor: '#FDE68A',
+  },
+  nightWarnText: {
+    fontSize: 13, color: '#92400E', textAlign: 'center', lineHeight: 20,
+  },
+  nightStreakBadgeNew: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, backgroundColor: '#F0FDF4',
+    borderRadius: 20, paddingVertical: 9, paddingHorizontal: 16, marginBottom: 24,
+    borderWidth: 1, borderColor: '#BBF7D0', width: '100%',
+  },
+  nightStreakDotNew: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
+  nightStreakTextNew: { fontSize: 14, color: '#15803D', fontWeight: '700' },
+  nightBtnGroup: { width: '100%', gap: 10, marginBottom: 20 },
+  nightPrimaryBtn: {
+    borderRadius: 18, overflow: 'hidden',
+    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+  },
+  nightPrimaryBtnInner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 17, paddingHorizontal: 24, gap: 10,
+  },
+  nightPrimaryBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  nightSecondaryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 15, paddingHorizontal: 24, gap: 8,
+    backgroundColor: '#fff', borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#E5E7EB',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  nightSecondaryBtnText: { fontSize: 16, fontWeight: '700', color: '#374151' },
+  nightGhostBtn: {
+    alignItems: 'center', paddingVertical: 14,
+    backgroundColor: 'transparent',
+  },
+  nightGhostBtnText: { fontSize: 15, color: '#9CA3AF', fontWeight: '600' },
+  nightFooterNew: {
+    fontSize: 12, color: '#C4C9D4', textAlign: 'center', marginTop: 4,
+  },
+  // Legacy (kept for compatibility)
   nightCard: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.12)',
