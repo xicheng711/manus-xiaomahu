@@ -152,7 +152,40 @@ export async function cloudGetRoomDetail(roomId: number) {
   }
 }
 
-// ─── Check-in Sync ───────────────────────────────────────────────────────────
+/** Leave a family room (joiner) */
+export async function cloudLeaveRoom(roomId: number) {
+  try {
+    const client = getClient();
+    return await client.family.leaveRoom.mutate({ roomId });
+  } catch (e) {
+    console.warn('[CloudSync] leaveRoom failed:', e);
+    return null;
+  }
+}
+
+/** Delete a family room (creator only) */
+export async function cloudDeleteRoom(roomId: number) {
+  try {
+    const client = getClient();
+    return await client.family.deleteRoom.mutate({ roomId });
+  } catch (e) {
+    console.warn('[CloudSync] deleteRoom failed:', e);
+    return null;
+  }
+}
+
+/** Delete an announcement (creator or author only) */
+export async function cloudDeleteAnnouncement(announcementId: number, roomId: number) {
+  try {
+    const client = getClient();
+    return await client.family.deleteAnnouncement.mutate({ announcementId, roomId });
+  } catch (e) {
+    console.warn('[CloudSync] deleteAnnouncement failed:', e);
+    return null;
+  }
+}
+
+// ─── Check-in Sync ─────────────────────────────────────────────────────────────────────
 
 /** Sync a check-in to the server (call after local save) */
 export async function cloudSyncCheckIn(checkIn: any) {

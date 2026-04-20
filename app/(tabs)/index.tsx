@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   ScrollView, View, Text, TouchableOpacity, Modal, TextInput,
-  StyleSheet, Dimensions, Animated, Easing, Platform, Image, Keyboard, KeyboardAvoidingView,
+  StyleSheet, Dimensions, Animated, Easing, Platform, Image, Keyboard, KeyboardAvoidingView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -106,7 +106,7 @@ function EnhancedCheckinBanner({
   ).current;
 
   // 星星位置固定（不在渲染时用 Math.random）
-  const starPositions: Array<{ top: string | number; left: string | number }> = useMemo(() => [
+  const starPositions: Array<{ top: number | string; left: number | string; position?: 'absolute' | 'relative' }> = useMemo(() => [
     { top: '22%', left: '18%' }, { top: '55%', left: '64%' },
     { top: '28%', left: '78%' }, { top: '68%', left: '38%' },
   ], []);
@@ -183,7 +183,7 @@ function EnhancedCheckinBanner({
               {starAnimations.map((star, i) => {
                 const starRot = star.rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
                 return (
-                  <Animated.View key={i} style={[styles.starDecor, starPositions[i], { opacity: star.opacity, transform: [{ scale: star.scale }, { rotate: starRot }] }]}>
+                  <Animated.View key={i} style={[styles.starDecor, starPositions[i] as any, { opacity: star.opacity, transform: [{ scale: star.scale }, { rotate: starRot }] }]}>
                     <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.95)' }}>✦</Text>
                   </Animated.View>
                 );

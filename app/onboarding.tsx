@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Animated, Dimensions, Platform, Image, Keyboard,
+  StyleSheet, Animated, Dimensions, Platform, Image, Keyboard, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -369,8 +369,9 @@ export default function OnboardingScreen() {
       relationship: rel || undefined,
     });
     if (!result) {
-      // Room not found on this device — create a minimal placeholder so the family tab shows something
-      // In a real app, this would sync from server
+      // Cloud join failed — show error and stay on onboarding
+      Alert.alert('加入失败', '邀请码无效或已过期，请确认后重试。');
+      return;
     }
     router.replace('/(tabs)/family');
   }

@@ -8,10 +8,12 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
   createFamilyRoom, getFamilyRoomByCode, getFamilyRoomById, getUserFamilyRooms,
   addFamilyMember, getRoomMembers, getMemberByUserId,
+  removeFamilyMember, deleteFamilyRoom,
   upsertElderProfile, getElderProfile,
   upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
   createDiaryEntry, updateDiaryEntry, getDiaryEntriesByRoom,
   createAnnouncement, getAnnouncementsByRoom, addReaction,
+  deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
   upsertMedication, getMedicationsByRoom, deleteMedication,
 } from "./family-db";
@@ -657,6 +659,64 @@ export const familyRouter = router({
       const { userId } = requireUser(ctx);
       await requireRoomMember(userId, input.roomId);
       return getElderProfile(input.roomId);
+    }),
+
+  /** Leave a family room (joiner) */
+  leaveRoom: protectedProcedure
+    .input(z.object({ roomId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const { userId } = requireUser(ctx);
+      await requireRoomMember(userId, input.roomId);
+      await removeFamilyMember(input.roomId, userId);
+      return { success: true };
+    }),
+
+  /** Delete a family room and all its data (creator only) */
+  deleteRoom: protectedProcedure
+    .input(z.object({ roomId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const { userId } = requireUser(ctx);
+      const member = await requireRoomMember(userId, input.roomId);
+      if (!member.isCreator) throw new Error("只有创建者可以解散家庭");
+      await deleteFamilyRoom(input.roomId);
+      return { success: true };
+    }),
+
+  /** Delete an announcement (creator or original author) */
+  deleteAnnouncement: protectedProcedure
+    .input(z.object({ announcementId: z.number(), roomId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const { userId } = requireUser(ctx);
+      const member = await requireRoomMember(userId, input.roomId);
+      // Allow creator or the announcement author to delete
+      const announceList = await getAnnouncementsByRoom(input.roomId, 200);
+      const target = announceList.find(a => a.id === input.announcementId);
+      if (!target) throw new Error("公告不存在");
+      if (!member.isCreator && target.authorUserId !== userId) {
+        throw new Error("无权删除此公告");
+      }
+      await deleteAnnouncement(input.announcementId);
+      return { success: true };
+    }),
+
+  /** Toggle reaction on an announcement (add if not present, remove if present) */
+  toggleReaction: protectedProcedure
+    .input(z.object({
+      announcementId: z.number(),
+      roomId: z.number(),
+      emoji: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { userId } = requireUser(ctx);
+      const member = await requireRoomMember(userId, input.roomId);
+      const reactions = await toggleReaction(
+        input.announcementId,
+        member.id,
+        member.name,
+        member.emoji,
+        input.emoji,
+      );
+      return { success: true, reactions };
     }),
 
   /** Register or update the Expo push token for the current user */

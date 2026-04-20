@@ -7,6 +7,8 @@ import {
   cloudSaveBriefing,
   cloudCreateRoom,
   cloudJoinRoom,
+  cloudGetRoomDetail,
+  cloudLookupRoom,
   cloudUpdateElderProfile,
   setCloudSyncState,
 } from './cloud-sync';
@@ -250,16 +252,29 @@ export interface FamilyMembership {
 
 const KEYS = {
   PROFILE: 'elder_profile_v3',
-  CHECK_INS: 'daily_checkins_v2',
-  MEDICATIONS: 'medications',
-  DIARY: 'diary_entries',
+  // Global (non-room-scoped) keys:
   FAMILY_ROOM: 'family_room_v1',
-  FAMILY_ANNOUNCEMENTS: 'family_announcements_v1',
   CURRENT_MEMBER: 'current_family_member_v1',
   MEMBERSHIPS: 'family_memberships_v1',
   ACTIVE_FAMILY_ID: 'active_family_id_v1',
+  // Legacy (non-scoped) keys — kept for migration only:
+  CHECK_INS: 'daily_checkins_v2',
+  MEDICATIONS: 'medications',
+  DIARY: 'diary_entries',
+  FAMILY_ANNOUNCEMENTS: 'family_announcements_v1',
   BRIEFINGS: 'care_briefings_v1',
 } as const;
+
+// Room-scoped key helpers — all family data is isolated per roomId
+function roomKey(base: string, roomId: string | null | undefined): string {
+  if (!roomId) return base; // fallback to legacy key for backward compat
+  return `${base}:${roomId}`;
+}
+
+/** Get the active roomId from the active membership (sync-safe helper) */
+let _activeRoomIdCache: string | null = null;
+export function setActiveRoomIdCache(id: string | null) { _activeRoomIdCache = id; }
+export function getActiveRoomIdCache(): string | null { return _activeRoomIdCache; }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -308,32 +323,46 @@ function normalizeMoodScore(c: DailyCheckIn): DailyCheckIn {
   return c;
 }
 
-export async function getAllCheckIns(): Promise<DailyCheckIn[]> {
-  const raw = await AsyncStorage.getItem(KEYS.CHECK_INS);
+export async function getAllCheckIns(roomId?: string): Promise<DailyCheckIn[]> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.CHECK_INS, rid);
+  const raw = await AsyncStorage.getItem(key);
+  // If scoped key is empty but we have a rid, try migrating from legacy
+  if (!raw && rid) {
+    const legacy = await AsyncStorage.getItem(KEYS.CHECK_INS);
+    if (legacy) {
+      await AsyncStorage.setItem(key, legacy);
+      await AsyncStorage.removeItem(KEYS.CHECK_INS);
+      const list: DailyCheckIn[] = JSON.parse(legacy);
+      return list.map(normalizeMoodScore);
+    }
+  }
   const list: DailyCheckIn[] = raw ? JSON.parse(raw) : [];
   return list.map(normalizeMoodScore);
 }
 
-export async function getTodayCheckIn(): Promise<DailyCheckIn | null> {
-  const all = await getAllCheckIns();
+export async function getTodayCheckIn(roomId?: string): Promise<DailyCheckIn | null> {
+  const all = await getAllCheckIns(roomId);
   return all.find(c => c.date === todayStr()) ?? null;
 }
 
-export async function getCheckInByDate(dateStr: string): Promise<DailyCheckIn | null> {
-  const all = await getAllCheckIns();
+export async function getCheckInByDate(dateStr: string, roomId?: string): Promise<DailyCheckIn | null> {
+  const all = await getAllCheckIns(roomId);
   return all.find(c => c.date === dateStr) ?? null;
 }
 
-export async function getYesterdayCheckIn(): Promise<DailyCheckIn | null> {
-  const all = await getAllCheckIns();
+export async function getYesterdayCheckIn(roomId?: string): Promise<DailyCheckIn | null> {
+  const all = await getAllCheckIns(roomId);
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
   return all.find(c => c.date === yStr) ?? null;
 }
 
-export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string }): Promise<DailyCheckIn> {
-  const all = await getAllCheckIns();
+export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string }, roomId?: string): Promise<DailyCheckIn> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.CHECK_INS, rid);
+  const all = await getAllCheckIns(rid ?? undefined);
   const idx = all.findIndex(c => c.date === data.date);
   const defaults: DailyCheckIn = {
     id: generateId(),
@@ -358,14 +387,14 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     : { ...defaults, ...data };
   if (idx >= 0) all[idx] = checkIn;
   else all.unshift(checkIn);
-  await AsyncStorage.setItem(KEYS.CHECK_INS, JSON.stringify(all));
+  await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync check-in to server
   cloudSyncCheckIn(checkIn).catch(() => {});
   return checkIn;
 }
 
-export async function getRecentCheckIns(days = 7): Promise<DailyCheckIn[]> {
-  const all = await getAllCheckIns();
+export async function getRecentCheckIns(days = 7, roomId?: string): Promise<DailyCheckIn[]> {
+  const all = await getAllCheckIns(roomId);
   return all.slice(0, days);
 }
 
@@ -417,77 +446,111 @@ export async function getWeeklySleepData(days = 7): Promise<Array<{
 
 // ─── Medications ──────────────────────────────────────────────────────────────
 
-export async function getMedications(): Promise<Medication[]> {
-  const raw = await AsyncStorage.getItem(KEYS.MEDICATIONS);
+export async function getMedications(roomId?: string): Promise<Medication[]> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.MEDICATIONS, rid);
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw && rid) {
+    const legacy = await AsyncStorage.getItem(KEYS.MEDICATIONS);
+    if (legacy) {
+      await AsyncStorage.setItem(key, legacy);
+      await AsyncStorage.removeItem(KEYS.MEDICATIONS);
+      return JSON.parse(legacy);
+    }
+  }
   return raw ? JSON.parse(raw) : [];
 }
 
-export async function saveMedication(data: Omit<Medication, 'id'>): Promise<Medication> {
-  const all = await getMedications();
+export async function saveMedication(data: Omit<Medication, 'id'>, roomId?: string): Promise<Medication> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.MEDICATIONS, rid);
+  const all = await getMedications(rid ?? undefined);
   const med: Medication = { id: generateId(), ...data };
   all.push(med);
-  await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(all));
+  await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync medication to server
   cloudSyncMedication(med).catch(() => {});
   return med;
 }
 
-export async function saveMedications(meds: Medication[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(meds));
+export async function saveMedications(meds: Medication[], roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.MEDICATIONS, rid);
+  await AsyncStorage.setItem(key, JSON.stringify(meds));
 }
 
-export async function updateMedication(id: string, data: Partial<Medication>): Promise<void> {
-  const all = await getMedications();
+export async function updateMedication(id: string, data: Partial<Medication>, roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.MEDICATIONS, rid);
+  const all = await getMedications(rid ?? undefined);
   const idx = all.findIndex(m => m.id === id);
   if (idx >= 0) {
     all[idx] = { ...all[idx], ...data };
-    await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(all));
+    await AsyncStorage.setItem(key, JSON.stringify(all));
     // Cloud sync: sync updated medication to server
     cloudSyncMedication(all[idx]).catch(() => {});
   }
 }
 
-export async function deleteMedication(id: string): Promise<void> {
-  const filtered = (await getMedications()).filter(m => m.id !== id);
-  await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(filtered));
+export async function deleteMedication(id: string, roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.MEDICATIONS, rid);
+  const filtered = (await getMedications(rid ?? undefined)).filter(m => m.id !== id);
+  await AsyncStorage.setItem(key, JSON.stringify(filtered));
 }
 
 // ─── Diary Entries ────────────────────────────────────────────────────────────
 
-export async function getDiaryEntries(): Promise<DiaryEntry[]> {
-  const raw = await AsyncStorage.getItem(KEYS.DIARY);
+export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.DIARY, rid);
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw && rid) {
+    const legacy = await AsyncStorage.getItem(KEYS.DIARY);
+    if (legacy) {
+      await AsyncStorage.setItem(key, legacy);
+      await AsyncStorage.removeItem(KEYS.DIARY);
+      return JSON.parse(legacy);
+    }
+  }
   return raw ? JSON.parse(raw) : [];
 }
 
-export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>): Promise<DiaryEntry> {
-  const all = await getDiaryEntries();
+export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: string): Promise<DiaryEntry> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.DIARY, rid);
+  const all = await getDiaryEntries(rid ?? undefined);
   const entry: DiaryEntry = { id: generateId(), createdAt: new Date().toISOString(), ...data };
   all.unshift(entry);
-  await AsyncStorage.setItem(KEYS.DIARY, JSON.stringify(all));
+  await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync diary entry to server
   cloudSyncDiary(entry).catch(() => {});
   return entry;
 }
 
-export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>): Promise<DiaryEntry | null> {
-  const all = await getDiaryEntries();
+export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, roomId?: string): Promise<DiaryEntry | null> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.DIARY, rid);
+  const all = await getDiaryEntries(rid ?? undefined);
   const idx = all.findIndex(e => e.id === id);
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...data };
-  await AsyncStorage.setItem(KEYS.DIARY, JSON.stringify(all));
+  await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync updated diary entry to server
   cloudSyncDiary(all[idx]).catch(() => {});
   return all[idx];
 }
 
-export async function getDiaryEntryById(id: string): Promise<DiaryEntry | null> {
-  const all = await getDiaryEntries();
+export async function getDiaryEntryById(id: string, roomId?: string): Promise<DiaryEntry | null> {
+  const all = await getDiaryEntries(roomId);
   return all.find(e => e.id === id) ?? null;
 }
 
-export async function deleteDiaryEntry(id: string): Promise<void> {
-  const filtered = (await getDiaryEntries()).filter(e => e.id !== id);
-  await AsyncStorage.setItem(KEYS.DIARY, JSON.stringify(filtered));
+export async function deleteDiaryEntry(id: string, roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.DIARY, rid);
+  const filtered = (await getDiaryEntries(rid ?? undefined)).filter(e => e.id !== id);
+  await AsyncStorage.setItem(key, JSON.stringify(filtered));
 }
 
 // ─── Family Room ──────────────────────────────────────────────────────────────
@@ -511,9 +574,28 @@ export async function saveFamilyRoom(room: FamilyRoom): Promise<void> {
 }
 
 export async function lookupFamilyByCode(code: string): Promise<FamilyRoom | null> {
+  const upper = code.toUpperCase();
+  // Cloud-first: look up room on server by invite code
+  try {
+    const cloudResult = await cloudLookupRoom(upper);
+    if (cloudResult?.room) {
+      return {
+        id: String(cloudResult.room.id),
+        roomCode: cloudResult.room.roomCode ?? upper,
+        elderName: cloudResult.room.elderName ?? '家人',
+        elderEmoji: cloudResult.room.elderEmoji,
+        elderPhotoUri: cloudResult.room.elderPhotoUri,
+        members: [],
+        createdAt: cloudResult.room.createdAt ?? new Date().toISOString(),
+      };
+    }
+  } catch (e) {
+    console.warn('[Storage] lookupFamilyByCode cloud lookup failed, trying local:', e);
+  }
+  // Local fallback (same-device scenario)
   const room = await getFamilyRoom();
   if (!room) return null;
-  return room.roomCode === code.toUpperCase() ? room : null;
+  return room.roomCode === upper ? room : null;
 }
 
 export async function getCurrentUserIsCreator(): Promise<boolean> {
@@ -529,9 +611,34 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
     joinedAt: new Date().toISOString(),
     isCurrentUser: true,
   };
+  // Step 1: Create on server first (cloud-first for shared invite code)
+  let serverRoomId: number | null = null;
+  let serverRoomCode: string | null = null;
+  try {
+    const cloudResult = await cloudCreateRoom({
+      roomCode: existingCode ?? generateRoomCode(),
+      elderName,
+      elderEmoji: elderOpts?.emoji,
+      elderPhotoUri: elderOpts?.photoUri,
+      memberName: member.name,
+      memberRole: member.role,
+      memberRoleLabel: member.roleLabel,
+      memberEmoji: member.emoji,
+      memberColor: member.color,
+      memberPhotoUri: member.photoUri,
+    });
+    if (cloudResult?.roomId) {
+      serverRoomId = cloudResult.roomId;
+      serverRoomCode = cloudResult.roomCode ?? null;
+      await setCloudSyncState({ activeRoomId: cloudResult.roomId });
+    }
+  } catch (e) {
+    console.warn('[Storage] createFamilyRoom cloud create failed, using local id:', e);
+  }
+  // Step 2: Build local room — use server roomId if available, else local fallback
   const room: FamilyRoom = {
-    id: generateId(),
-    roomCode: existingCode ?? generateRoomCode(),
+    id: serverRoomId ? String(serverRoomId) : generateId(),
+    roomCode: serverRoomCode ?? existingCode ?? generateRoomCode(),
     elderName,
     elderEmoji: elderOpts?.emoji,
     elderPhotoUri: elderOpts?.photoUri,
@@ -540,7 +647,7 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
   };
   await saveFamilyRoom(room);
   await setCurrentMember(member);
-  // Save membership record
+  // Step 3: Save membership and activate room-scoped cache
   const membership: FamilyMembership = {
     familyId: room.id,
     myMemberId: member.id,
@@ -550,33 +657,14 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
   };
   await addOrUpdateMembership(membership);
   await setActiveFamilyId(room.id);
-  // Cloud sync: create room on server
-  try {
-    const cloudResult = await cloudCreateRoom({
-      roomCode: room.roomCode,
-      elderName: room.elderName,
-      elderEmoji: room.elderEmoji,
-      elderPhotoUri: room.elderPhotoUri,
-      memberName: member.name,
-      memberRole: member.role,
-      memberRoleLabel: member.roleLabel,
-      memberEmoji: member.emoji,
-      memberColor: member.color,
-      memberPhotoUri: member.photoUri,
-    });
-    if (cloudResult?.roomId) {
-      await setCloudSyncState({ activeRoomId: cloudResult.roomId });
-    }
-  } catch (e) {
-    console.warn('[Storage] createFamilyRoom cloud sync failed:', e);
-  }
+  setActiveRoomIdCache(room.id);
   return room;
 }
 
 export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember, 'id' | 'joinedAt'>): Promise<FamilyRoom | null> {
   const code = roomCode.toUpperCase();
 
-  // Step 1: Try to join via server first (cloud-first for cross-device sharing)
+  // Step 1: Join via server (cloud-first for cross-device sharing)
   try {
     const cloudResult = await cloudJoinRoom({
       roomCode: code,
@@ -590,7 +678,41 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
     });
 
     if (cloudResult?.success && cloudResult.roomId) {
-      // Server join succeeded — build local room from server response
+      await setCloudSyncState({ activeRoomId: cloudResult.roomId });
+
+      // Step 1a: Pull full room detail from server (members + elder profile)
+      let fullRoom: FamilyRoom | null = null;
+      try {
+        const detail = await cloudGetRoomDetail(cloudResult.roomId);
+        if (detail && detail.room) {
+          const serverMembers: FamilyMember[] = (detail.members ?? []).map((m: any) => ({
+            id: String(m.id),
+            name: m.name,
+            role: m.role ?? 'family',
+            roleLabel: m.roleLabel ?? m.role ?? '家人',
+            emoji: m.emoji ?? '👤',
+            color: m.color ?? '#888',
+            photoUri: m.photoUri,
+            joinedAt: m.joinedAt ?? new Date().toISOString(),
+            isCreator: m.isCreator ?? false,
+            isCurrentUser: m.userId === cloudResult.myUserId,
+            relationship: m.relationship,
+          }));
+          fullRoom = {
+            id: String(cloudResult.roomId),
+            roomCode: detail.room.roomCode ?? code,
+            elderName: detail.room.elderName ?? '家人',
+            elderEmoji: detail.room.elderEmoji,
+            elderPhotoUri: detail.room.elderPhotoUri,
+            members: serverMembers.length > 0 ? serverMembers : [],
+            createdAt: detail.room.createdAt ?? new Date().toISOString(),
+          };
+        }
+      } catch (detailErr) {
+        console.warn('[Storage] joinFamilyRoom getRoomDetail failed, using minimal room:', detailErr);
+      }
+
+      // Step 1b: Fallback to minimal room if detail fetch failed
       const newMember: FamilyMember = {
         id: generateId(),
         ...member,
@@ -598,16 +720,22 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
         joinedAt: new Date().toISOString(),
         isCurrentUser: true,
       };
-      const room: FamilyRoom = {
+      const room: FamilyRoom = fullRoom ?? {
         id: String(cloudResult.roomId),
         roomCode: cloudResult.roomCode ?? code,
         elderName: cloudResult.elderName ?? '家人',
         members: [newMember],
         createdAt: new Date().toISOString(),
       };
+
+      // Ensure current user is marked in member list
+      if (fullRoom) {
+        const myEntry = room.members.find(m => m.isCurrentUser);
+        if (!myEntry) room.members.push(newMember);
+      }
+
       await saveFamilyRoom(room);
       await setCurrentMember(newMember);
-      await setCloudSyncState({ activeRoomId: cloudResult.roomId });
       const membership: FamilyMembership = {
         familyId: room.id,
         myMemberId: newMember.id,
@@ -617,17 +745,18 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
       };
       await addOrUpdateMembership(membership);
       await setActiveFamilyId(room.id);
+      setActiveRoomIdCache(room.id);
       return room;
     }
   } catch (e) {
-    console.warn('[Storage] joinFamilyRoom cloud join failed, trying local fallback:', e);
+    console.warn('[Storage] joinFamilyRoom cloud join failed:', e);
   }
 
-  // Step 2: Fallback — check local storage (same-device scenario)
+  // Step 2: Fallback — check local storage (same-device scenario only)
   const localRoom = await getFamilyRoom();
   if (!localRoom || localRoom.roomCode !== code) return null;
 
-  // 如果当前用户已经是该家庭的 creator，拒绝加入，避免覆盖 creator membership
+  // 如果当前用户已经是该家庭的 creator，拒绝加入
   const existingMemberships = await getAllMemberships();
   const alreadyCreator = existingMemberships.find(m => m.familyId === localRoom.id && m.role === 'creator');
   if (alreadyCreator) return null;
@@ -652,6 +781,7 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
   };
   await addOrUpdateMembership(membership);
   await setActiveFamilyId(localRoom.id);
+  setActiveRoomIdCache(localRoom.id);
   return localRoom;
 }
 
@@ -695,8 +825,10 @@ export async function setCurrentMember(member: FamilyMember): Promise<void> {
 
 // ─── Family Announcements ─────────────────────────────────────────────────────
 
-export async function getFamilyAnnouncements(days = 30): Promise<FamilyAnnouncement[]> {
-  const raw = await AsyncStorage.getItem(KEYS.FAMILY_ANNOUNCEMENTS);
+export async function getFamilyAnnouncements(days = 30, roomId?: string): Promise<FamilyAnnouncement[]> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
+  const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
   // Return last N days
   const cutoff = new Date();
@@ -704,13 +836,15 @@ export async function getFamilyAnnouncements(days = 30): Promise<FamilyAnnouncem
   return all.filter(a => new Date(a.createdAt) >= cutoff);
 }
 
-export async function getTodayAnnouncements(): Promise<FamilyAnnouncement[]> {
-  const all = await getFamilyAnnouncements(1);
+export async function getTodayAnnouncements(roomId?: string): Promise<FamilyAnnouncement[]> {
+  const all = await getFamilyAnnouncements(1, roomId);
   return all.filter(a => a.date === todayStr());
 }
 
-export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id' | 'createdAt' | 'date'>): Promise<FamilyAnnouncement> {
-  const raw = await AsyncStorage.getItem(KEYS.FAMILY_ANNOUNCEMENTS);
+export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id' | 'createdAt' | 'date'>, roomId?: string): Promise<FamilyAnnouncement> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
+  const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
   const announcement: FamilyAnnouncement = {
     id: generateId(),
@@ -721,7 +855,7 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
   all.unshift(announcement);
   // Keep only last 200 announcements
   if (all.length > 200) all.splice(200);
-  await AsyncStorage.setItem(KEYS.FAMILY_ANNOUNCEMENTS, JSON.stringify(all));
+  await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: post announcement to server
   cloudPostAnnouncement({
     content: announcement.content,
@@ -732,19 +866,24 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
   return announcement;
 }
 
-export async function deleteFamilyAnnouncement(id: string): Promise<void> {
-  const raw = await AsyncStorage.getItem(KEYS.FAMILY_ANNOUNCEMENTS);
+export async function deleteFamilyAnnouncement(id: string, roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
+  const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
   const filtered = all.filter(a => a.id !== id);
-  await AsyncStorage.setItem(KEYS.FAMILY_ANNOUNCEMENTS, JSON.stringify(filtered));
+  await AsyncStorage.setItem(key, JSON.stringify(filtered));
 }
 
 export async function toggleAnnouncementReaction(
   announcementId: string,
   emoji: string,
-  member: { memberId: string; memberName: string; memberEmoji: string }
+  member: { memberId: string; memberName: string; memberEmoji: string },
+  roomId?: string,
 ): Promise<void> {
-  const raw = await AsyncStorage.getItem(KEYS.FAMILY_ANNOUNCEMENTS);
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
+  const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
   const ann = all.find(a => a.id === announcementId);
   if (!ann) return;
@@ -763,7 +902,7 @@ export async function toggleAnnouncementReaction(
   } else {
     ann.reactions.push({ emoji, members: [member] });
   }
-  await AsyncStorage.setItem(KEYS.FAMILY_ANNOUNCEMENTS, JSON.stringify(all));
+  await AsyncStorage.setItem(key, JSON.stringify(all));
 }
 
 // ─── Multi-Family Support ─────────────────────────────────────────────────────
@@ -851,34 +990,42 @@ export async function deleteFamilyAndData(familyId: string): Promise<void> {
 
 // ─── Care Briefings ──────────────────────────────────────────────────────────
 
-export async function saveBriefing(briefing: CareBriefing): Promise<void> {
-  const raw = await AsyncStorage.getItem(KEYS.BRIEFINGS);
+export async function saveBriefing(briefing: CareBriefing, roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.BRIEFINGS, rid);
+  const raw = await AsyncStorage.getItem(key);
   const all: CareBriefing[] = raw ? JSON.parse(raw) : [];
   const idx = all.findIndex(b => b.date === briefing.date);
   if (idx >= 0) all[idx] = briefing;
   else all.unshift(briefing);
   const trimmed = all.slice(0, 30);
-  await AsyncStorage.setItem(KEYS.BRIEFINGS, JSON.stringify(trimmed));
+  await AsyncStorage.setItem(key, JSON.stringify(trimmed));
   // Cloud sync: save briefing to server
   cloudSaveBriefing(briefing).catch(() => {});
 }
 
-export async function getTodayBriefing(): Promise<CareBriefing | null> {
-  const raw = await AsyncStorage.getItem(KEYS.BRIEFINGS);
+export async function getTodayBriefing(roomId?: string): Promise<CareBriefing | null> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.BRIEFINGS, rid);
+  const raw = await AsyncStorage.getItem(key);
   if (!raw) return null;
   const all: CareBriefing[] = JSON.parse(raw);
   return all.find(b => b.date === todayStr()) ?? null;
 }
 
-export async function getLatestBriefing(): Promise<CareBriefing | null> {
-  const raw = await AsyncStorage.getItem(KEYS.BRIEFINGS);
+export async function getLatestBriefing(roomId?: string): Promise<CareBriefing | null> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.BRIEFINGS, rid);
+  const raw = await AsyncStorage.getItem(key);
   if (!raw) return null;
   const all: CareBriefing[] = JSON.parse(raw);
   return all.length > 0 ? all[0] : null;
 }
 
-export async function getBriefingByDate(date: string): Promise<CareBriefing | null> {
-  const raw = await AsyncStorage.getItem(KEYS.BRIEFINGS);
+export async function getBriefingByDate(date: string, roomId?: string): Promise<CareBriefing | null> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.BRIEFINGS, rid);
+  const raw = await AsyncStorage.getItem(key);
   if (!raw) return null;
   const all: CareBriefing[] = JSON.parse(raw);
   return all.find(b => b.date === date) ?? null;

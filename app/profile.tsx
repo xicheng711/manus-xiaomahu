@@ -216,7 +216,9 @@ export default function ProfileScreen() {
       await joinFamilyRoom(joinCode.trim().toUpperCase(), {
         name: joinName.trim(),
         role: 'family',
+        roleLabel: '家庭成员',
         emoji: '👨',
+        color: '#A855F7',
       });
       await refresh();
       setJoinCode('');
@@ -239,7 +241,9 @@ export default function ProfileScreen() {
         {
           name: profile.caregiverName || '照顾者',
           role: 'caregiver',
+          roleLabel: '主照顾者',
           emoji: '🧑',
+          color: '#FF6B6B',
         },
         undefined,
         { emoji: undefined, photoUri: profile.photoUri },
@@ -297,7 +301,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScreenContainer scrollable={false}>
+    <ScreenContainer>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -382,22 +386,34 @@ export default function ProfileScreen() {
           </View>
         ) : (
           memberships.map(m => {
-            const isActive = activeMembership?.id === m.id;
+            const isActive = activeMembership?.familyId === m.familyId;
             return (
-              <View key={m.id} style={[styles.familyCard, isActive && styles.familyCardActive]}>
+              <View key={m.familyId} style={[styles.familyCard, isActive && styles.familyCardActive]}>
                 <View style={styles.familyCardHeader}>
                   <View style={styles.familyCardTitleRow}>
-                    <Text style={styles.familyCardName}>{m.roomName}</Text>
+                    <Text style={styles.familyCardName}>{m.room?.elderName ?? '家庭'}</Text>
                     <View style={styles.roleBadge}>
                       <Text style={styles.roleBadgeText}>{ROLE_LABELS[m.role] || m.role}</Text>
                     </View>
                   </View>
-                  <Text style={styles.roomCode}>邀请码: {m.roomCode}</Text>
+                  <Text style={styles.roomCode}>邀请码: {m.room?.roomCode ?? '-'}</Text>
                 </View>
-                
+                {isActive && (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>✅ 当前家庭</Text>
+                  </View>
+                )}
+                {!isActive && (
+                  <TouchableOpacity
+                    style={styles.familyCardAction}
+                    onPress={() => switchFamily(m.familyId)}
+                  >
+                    <Text style={styles.familyCardActionText}>🔄 切换到此家庭</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
-                  style={styles.familyCardAction}
-                  onPress={() => confirmDeleteOrLeave(m.id, m.role === 'creator' ? 'delete' : 'leave')}
+                  style={[styles.familyCardAction, { marginTop: 4 }]}
+                  onPress={() => confirmDeleteOrLeave(m.familyId, m.role === 'creator' ? 'delete' : 'leave')}
                 >
                   <Text style={styles.familyCardActionText}>
                     {m.role === 'creator' ? '🗑️ 解散家庭' : '🚪 退出家庭'}
@@ -673,7 +689,7 @@ export default function ProfileScreen() {
                   {/* 创建家庭表单 */}
                   {familyModalTab === 'create' && (
                     <View style={styles.modalForm}>
-                      {memberships.some(m => m.role === 'caregiver' || m.role === 'creator') ? (
+                      {memberships.some(m => m.role === 'creator') ? (
                         <View style={[styles.createInfoCard, { backgroundColor: '#FFF5F5', borderColor: '#FFE0E0' }]}>
                           <Text style={styles.createInfoEmoji}>⚠️</Text>
                           <Text style={[styles.createInfoText, { color: '#E53E3E' }]}>
@@ -882,6 +898,8 @@ const styles = StyleSheet.create({
   familyCardName: { fontSize: 16, fontWeight: '700', color: AppColors.text.primary },
   roleBadge: { backgroundColor: 'rgba(0,0,0,0.05)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   roleBadgeText: { fontSize: 11, color: AppColors.text.secondary, fontWeight: '600' },
+  activeBadge: { marginTop: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
+  activeBadgeText: { fontSize: 12, color: '#2E7D32', fontWeight: '600' },
   roomCode: { fontSize: 13, color: AppColors.text.tertiary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   familyCardAction: { alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: 8 },
   familyCardActionText: { fontSize: 13, color: AppColors.text.secondary, fontWeight: '500' },

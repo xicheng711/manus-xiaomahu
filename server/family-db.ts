@@ -239,3 +239,62 @@ export async function deleteMedication(id: number) {
   if (!db) throw new Error("Database not available");
   await db.delete(medications).where(eq(medications.id, id));
 }
+
+// ─── Room Management ────────────────────────────────────────────────────────────────────
+
+/** Remove a member from a room (leave or kick) */
+export async function removeFamilyMember(roomId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(familyMembers)
+    .where(and(eq(familyMembers.roomId, roomId), eq(familyMembers.userId, userId)));
+}
+
+/** Delete a family room and all associated data (creator only) */
+export async function deleteFamilyRoom(roomId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Cascade delete all room data
+  await db.delete(familyMembers).where(eq(familyMembers.roomId, roomId));
+  await db.delete(elderProfiles).where(eq(elderProfiles.roomId, roomId));
+  await db.delete(checkIns).where(eq(checkIns.roomId, roomId));
+  await db.delete(diaryEntries).where(eq(diaryEntries.roomId, roomId));
+  await db.delete(announcements).where(eq(announcements.roomId, roomId));
+  await db.delete(briefings).where(eq(briefings.roomId, roomId));
+  await db.delete(medications).where(eq(medications.roomId, roomId));
+  await db.delete(familyRooms).where(eq(familyRooms.id, roomId));
+}
+
+/** Delete a single announcement */
+export async function deleteAnnouncement(announcementId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(announcements).where(eq(announcements.id, announcementId));
+}
+
+/** Toggle reaction on an announcement (add if not present, remove if present) */
+export async function toggleReaction(announcementId: number, memberId: number, memberName: string, memberEmoji: string, emoji: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(announcements).where(eq(announcements.id, announcementId)).limit(1);
+  if (rows.length === 0) throw new Error("公告不存在");
+  const current: any[] = (rows[0].reactions as any[]) ?? [];
+  let group = current.find((r: any) => r.emoji === emoji);
+  if (!group) {
+    group = { emoji, members: [] };
+    current.push(group);
+  }
+  const memberIdStr = String(memberId);
+  const hasMe = group.members.some((m: any) => m.memberId === memberIdStr);
+  if (hasMe) {
+    group.members = group.members.filter((m: any) => m.memberId !== memberIdStr);
+    if (group.members.length === 0) {
+      const idx = current.indexOf(group);
+      current.splice(idx, 1);
+    }
+  } else {
+    group.members.push({ memberId: memberIdStr, memberName, memberEmoji });
+  }
+  await db.update(announcements).set({ reactions: current }).where(eq(announcements.id, announcementId));
+  return current;
+}

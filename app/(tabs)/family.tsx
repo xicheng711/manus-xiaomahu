@@ -14,7 +14,10 @@ import {
   getAllCheckIns, getDiaryEntries,
   getProfile, FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, toggleAnnouncementReaction, todayStr,
+  getActiveRoomIdCache,
 } from '@/lib/storage';
+import { cloudDeleteAnnouncement } from '@/lib/cloud-sync';
+import { useFamilyContext } from '@/lib/family-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -489,8 +492,16 @@ export default function FamilyScreen() {
   }
 
   async function handleDeleteAnnouncement(id: string) {
+    // Delete locally first for instant UI feedback
     await deleteFamilyAnnouncement(id);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    // Also delete on server (non-blocking, best-effort)
+    const roomId = getActiveRoomIdCache();
+    const numericRoomId = roomId ? parseInt(roomId) : null;
+    const numericAnnId = parseInt(id);
+    if (numericRoomId && !isNaN(numericAnnId)) {
+      cloudDeleteAnnouncement(numericAnnId, numericRoomId).catch(() => {});
+    }
     await loadData();
   }
 
@@ -825,13 +836,13 @@ export default function FamilyScreen() {
                     <Text style={styles.emptyEmoji}>🌙</Text>
                     <Text style={styles.emptyText}>
                       {isToday
-                        ? (item.checkIn?.morningDone ? '晚间打卡后生成简报' : '今日尚未打卡')
+                        ? ((item.checkIn as DailyCheckIn | null)?.morningDone ? '晚间打卡后生成简报' : '今日尚未打卡')
                         : '该日无晚间打卡记录'}
                     </Text>
                     {isToday && (
                       <>
                         <Text style={styles.emptySubText}>
-                          {item.checkIn?.morningDone
+                          {(item.checkIn as DailyCheckIn | null)?.morningDone
                             ? `睡眠已记录！完成晚间打卡后，${elderNickname}的今日简报就会自动生成`
                             : '完成晚间打卡，记录心情、用药和饮食，就能看到今日完整简报'}
                         </Text>
