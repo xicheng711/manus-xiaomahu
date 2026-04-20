@@ -16,7 +16,7 @@ import {
   updateFamilyMemberPhoto, getCurrentUserIsCreator, toggleAnnouncementReaction, todayStr,
   getActiveRoomIdCache,
 } from '@/lib/storage';
-import { cloudDeleteAnnouncement } from '@/lib/cloud-sync';
+import { cloudDeleteAnnouncement, cloudToggleReaction } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
@@ -700,11 +700,17 @@ export default function FamilyScreen() {
                   isNew={ann.id === newAnnouncementId}
                   currentMember={currentMember}
                   onReactionToggle={async (emoji) => {
+                    // Local-first for instant feedback
                     await toggleAnnouncementReaction(ann.id, emoji, {
                       memberId: currentMember.id,
                       memberName: currentMember.name,
                       memberEmoji: currentMember.emoji,
                     });
+                    // Sync to server (non-blocking)
+                    const numericAnnId = parseInt(ann.id);
+                    if (!isNaN(numericAnnId)) {
+                      cloudToggleReaction(numericAnnId, emoji).catch(() => {});
+                    }
                     await loadData();
                   }}
                 />
@@ -726,11 +732,17 @@ export default function FamilyScreen() {
                     onDelete={() => handleDeleteAnnouncement(ann.id)}
                     currentMember={currentMember}
                     onReactionToggle={async (emoji) => {
+                      // Local-first for instant feedback
                       await toggleAnnouncementReaction(ann.id, emoji, {
                         memberId: currentMember.id,
                         memberName: currentMember.name,
                         memberEmoji: currentMember.emoji,
                       });
+                      // Sync to server (non-blocking)
+                      const numericAnnId = parseInt(ann.id);
+                      if (!isNaN(numericAnnId)) {
+                        cloudToggleReaction(numericAnnId, emoji).catch(() => {});
+                      }
                       await loadData();
                     }}
                   />

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
   FamilyMembership,
+  FamilyMember,
   getAllMemberships,
   getActiveFamilyId,
   setActiveFamilyId,
@@ -14,7 +15,12 @@ import {
   setActiveRoomIdCache,
   addOrUpdateMembership,
 } from './storage';
-import { setCloudSyncState, cloudGetRoomDetail } from './cloud-sync';
+import {
+  setCloudSyncState,
+  cloudGetRoomDetail,
+  cloudLeaveRoom,
+  cloudDeleteRoom,
+} from './cloud-sync';
 
 export interface FamilyContextValue {
   memberships: FamilyMembership[];
@@ -93,8 +99,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
       if (!isNaN(serverRoomId)) {
         const detail = await cloudGetRoomDetail(serverRoomId);
         if (detail && detail.room) {
-          const { FamilyMember } = await import('./storage') as any;
-          const serverMembers = (detail.members ?? []).map((m: any) => ({
+          const serverMembers: FamilyMember[] = (detail.members ?? []).map((m: any) => ({
             id: String(m.id),
             name: m.name,
             role: m.role ?? 'family',
@@ -126,38 +131,48 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     }
 
     await saveFamilyRoom(updatedRoom);
-    const myMember = updatedRoom.members.find(m => m.id === target.myMemberId)
-      ?? target.room.members.find(m => m.id === target.myMemberId);
-    if (myMember) await setCurrentMember(myMember);
+
+    // Find current member — prefer server-refreshed list, fall back to cached
+    const myMember =
+      updatedRoom.members.find(m => m.id === target.myMemberId) ??
+      target.room.members.find(m => m.id === target.myMemberId);
+
+    if (myMember) {
+      await setCurrentMember(myMember);
+    } else {
+      // Member not found in either list — log warning but don't crash
+      console.warn(
+        `[FamilyContext] switchFamily: myMemberId ${target.myMemberId} not found in room ${familyId}. ` +
+        'Member list may be stale; will resolve on next refresh.',
+      );
+    }
 
     setActiveMembership({ ...target, room: updatedRoom });
   }, []);
 
   const leaveFamily = useCallback(async (familyId: string) => {
-    // Call server leave API if possible (non-blocking)
-    try {
-      const { default: trpcClient } = await import('./trpc') as any;
-      const serverRoomId = parseInt(familyId);
-      if (!isNaN(serverRoomId) && trpcClient) {
-        await trpcClient.family.leaveRoom.mutate({ roomId: serverRoomId });
+    // Call server leave API using cloud-sync layer (no dynamic import needed)
+    const serverRoomId = parseInt(familyId);
+    if (!isNaN(serverRoomId)) {
+      try {
+        await cloudLeaveRoom(serverRoomId);
+      } catch (e) {
+        console.warn('[FamilyContext] leaveFamily server call failed (non-fatal):', e);
       }
-    } catch (e) {
-      console.warn('[FamilyContext] leaveFamily server call failed (non-fatal):', e);
     }
     await removeMembership(familyId);
     await refresh();
   }, [refresh]);
 
   const deleteFamily = useCallback(async (familyId: string) => {
-    // Call server delete API if possible (non-blocking)
-    try {
-      const { default: trpcClient } = await import('./trpc') as any;
-      const serverRoomId = parseInt(familyId);
-      if (!isNaN(serverRoomId) && trpcClient) {
-        await trpcClient.family.deleteRoom.mutate({ roomId: serverRoomId });
+    // Call server delete API using cloud-sync layer (no dynamic import needed)
+    const serverRoomId = parseInt(familyId);
+    if (!isNaN(serverRoomId)) {
+      try {
+        await cloudDeleteRoom(serverRoomId);
+      } catch (e) {
+        console.warn('[FamilyContext] deleteFamily server call failed (non-fatal):', e);
       }
-    } catch (e) {
-      console.warn('[FamilyContext] deleteFamily server call failed (non-fatal):', e);
     }
     await deleteFamilyAndData(familyId);
     await refresh();

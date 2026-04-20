@@ -488,7 +488,33 @@ export async function pullFromServer(roomId?: number) {
   }
 }
 
-// ─── Push Token Registration ───────────────────────────────────────────────────
+// ─── Reaction Toggle ───────────────────────────────────────────────────────────────────
+
+/**
+ * Toggle a reaction emoji on an announcement (server-authoritative).
+ * Uses the `toggleReaction` route which handles add/remove idempotently.
+ */
+export async function cloudToggleReaction(
+  announcementId: number,
+  emoji: string,
+  roomId?: number,
+) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return null;
+  try {
+    const client = getClient();
+    return await client.family.toggleReaction.mutate({
+      announcementId,
+      roomId: rid,
+      emoji,
+    });
+  } catch (e) {
+    console.warn('[CloudSync] toggleReaction failed:', e);
+    return null;
+  }
+}
+
+// ─── Push Token Registration ───────────────────────────────────────────────
 
 /** Register or update the Expo push token on the server */
 export async function cloudUpdatePushToken(pushToken: string) {

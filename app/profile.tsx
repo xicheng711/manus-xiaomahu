@@ -9,7 +9,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { ScreenContainer } from '@/components/screen-container';
 import { AppColors, Gradients } from '@/lib/design-tokens';
-import { getProfile, saveProfile, ElderProfile, generateId, generateRoomCode, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode } from '@/lib/storage';
+import {
+  getProfile, saveProfile, ElderProfile,
+  getFamilyProfile, saveFamilyProfile, FamilyProfile,
+  getUserProfile, saveUserProfile,
+  generateId, generateRoomCode, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode,
+} from '@/lib/storage';
 import { getZodiac } from '@/lib/zodiac';
 import {
   areRemindersScheduled,
@@ -105,16 +110,21 @@ export default function ProfileScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    getProfile().then(p => {
+    getProfile().then(async p => {
       setProfile(p);
       setCaregiverNameDraft(p?.caregiverName || '');
       setElderNicknameDraft(p?.nickname || p?.name || '');
       setLoading(false);
+      // Ensure family-scoped profile is seeded from legacy global profile
+      if (p && activeMembership?.familyId) {
+        await getFamilyProfile(activeMembership.familyId);
+        await getUserProfile();
+      }
     });
     if (Platform.OS !== 'web') {
       areRemindersScheduled().then(setNotifEnabled);
     }
-  }, []));
+  }, [activeMembership?.familyId]));
 
   const saveCaregiverName = async () => {
     if (!profile || !caregiverNameDraft.trim()) return;
@@ -160,6 +170,15 @@ export default function ProfileScreen() {
         caregiverZodiacName: zodiac?.name || profile.caregiverZodiacName,
         city: draftCity.trim() || profile.city,
       });
+      // Also persist to UserProfile (caregiver-scoped)
+      await saveUserProfile({
+        caregiverName: updated.caregiverName,
+        caregiverBirthYear: updated.caregiverBirthYear,
+        caregiverZodiacEmoji: updated.caregiverZodiacEmoji,
+        caregiverZodiacName: updated.caregiverZodiacName,
+        caregiverPhotoUri: updated.caregiverPhotoUri,
+        caregiverAvatarType: updated.caregiverAvatarType,
+      });
     } else {
       const birthYear = draftElderBirthDate ? new Date(draftElderBirthDate + 'T00:00:00').getFullYear() : new Date(profile.birthDate).getFullYear();
       const zodiac = getZodiac(birthYear);
@@ -172,6 +191,24 @@ export default function ProfileScreen() {
         zodiacName: zodiac.name,
         city: draftElderCity.trim() || profile.city,
       });
+      // Also persist to FamilyProfile (family-scoped)
+      if (activeMembership?.familyId) {
+        await saveFamilyProfile({
+          id: updated.id,
+          name: updated.name,
+          nickname: updated.nickname,
+          birthDate: updated.birthDate,
+          zodiacEmoji: updated.zodiacEmoji,
+          zodiacName: updated.zodiacName,
+          elderPhotoUri: updated.elderPhotoUri,
+          elderAvatarType: updated.elderAvatarType,
+          city: updated.city,
+          reminderMorning: updated.reminderMorning,
+          reminderEvening: updated.reminderEvening,
+          setupComplete: updated.setupComplete,
+          careNeeds: updated.careNeeds,
+        }, activeMembership.familyId);
+      }
     }
     setProfile(updated);
     setShowEditModal(false);
@@ -483,6 +520,11 @@ export default function ProfileScreen() {
                   onPress={async () => {
                     const updated = await saveProfile({ ...profile, reminderMorning: t });
                     setProfile(updated);
+                    // Also persist to FamilyProfile (family-scoped)
+                    if (activeMembership?.familyId) {
+                      const fp = await getFamilyProfile(activeMembership.familyId);
+                      if (fp) await saveFamilyProfile({ ...fp, reminderMorning: t }, activeMembership.familyId);
+                    }
                   }}
                 >
                   <Text style={[styles.timeChipSmallText, (profile.reminderMorning || '08:00') === t && styles.timeChipSmallTextActive]}>{t}</Text>
@@ -500,6 +542,11 @@ export default function ProfileScreen() {
                   onPress={async () => {
                     const updated = await saveProfile({ ...profile, reminderEvening: t });
                     setProfile(updated);
+                    // Also persist to FamilyProfile (family-scoped)
+                    if (activeMembership?.familyId) {
+                      const fp = await getFamilyProfile(activeMembership.familyId);
+                      if (fp) await saveFamilyProfile({ ...fp, reminderEvening: t }, activeMembership.familyId);
+                    }
                   }}
                 >
                   <Text style={[styles.timeChipSmallText, (profile.reminderEvening || '21:00') === t && styles.timeChipSmallTextActive]}>{t}</Text>

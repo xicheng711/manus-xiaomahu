@@ -213,9 +213,19 @@ export const familyRouter = router({
       if (!room) return null;
       const members = await getRoomMembers(room.id);
       return {
+        // Top-level fields kept for backward compat with older clients
         elderName: room.elderName,
         elderEmoji: room.elderEmoji,
         memberCount: members.length,
+        // Structured room object for newer clients
+        room: {
+          id: room.id,
+          roomCode: room.roomCode,
+          elderName: room.elderName,
+          elderEmoji: room.elderEmoji,
+          elderPhotoUri: room.elderPhotoUri,
+          createdAt: room.createdAt,
+        },
       };
     }),
 
@@ -481,7 +491,10 @@ export const familyRouter = router({
       return getAnnouncementsByRoom(input.roomId, input.limit);
     }),
 
-  /** React to an announcement */
+  /**
+   * @deprecated Use `toggleReaction` instead.
+   * Kept for backward compatibility with older app versions.
+   */
   reactToAnnouncement: publicProcedure
     .input(z.object({
       announcementId: z.number(),

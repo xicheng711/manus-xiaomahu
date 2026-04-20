@@ -248,10 +248,41 @@ export interface FamilyMembership {
   joinedAt: string;
 }
 
+// ─── UserProfile & FamilyProfile (split from legacy ElderProfile) ────────────
+
+/** Global user (caregiver) profile — NOT family-scoped */
+export interface UserProfile {
+  caregiverName: string;
+  caregiverBirthYear: string;
+  caregiverZodiacEmoji?: string;
+  caregiverZodiacName?: string;
+  caregiverPhotoUri?: string;
+  caregiverAvatarType?: 'photo' | 'zodiac';
+}
+
+/** Per-family (elder) profile — stored per roomId */
+export interface FamilyProfile {
+  id: string;
+  name: string;
+  nickname: string;
+  birthDate: string;        // YYYY-MM-DD
+  zodiacEmoji: string;
+  zodiacName: string;
+  elderPhotoUri?: string;
+  elderAvatarType?: 'photo' | 'zodiac';
+  city: string;
+  reminderMorning: string;  // e.g. '08:00'
+  reminderEvening: string;  // e.g. '21:00'
+  setupComplete: boolean;
+  careNeeds?: CareNeedsProfile;
+}
+
 // ─── Keys ─────────────────────────────────────────────────────────────────────
 
 const KEYS = {
-  PROFILE: 'elder_profile_v3',
+  PROFILE: 'elder_profile_v3',          // legacy global profile (kept for migration)
+  USER_PROFILE: 'user_profile_v1',       // global caregiver-only fields
+  FAMILY_PROFILE: 'elder_profile_v3',    // per-family elder fields (roomId-scoped)
   // Global (non-room-scoped) keys:
   FAMILY_ROOM: 'family_room_v1',
   CURRENT_MEMBER: 'current_family_member_v1',
@@ -292,8 +323,9 @@ export function formatDate(dateStr: string): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
-// ─── Profile ──────────────────────────────────────────────────────────────────
+// ─── Profile ─────────────────────────────────────────────────────────────────────
 
+/** Legacy global profile — kept for backward compat and migration */
 export async function getProfile(): Promise<ElderProfile | null> {
   const raw = await AsyncStorage.getItem(KEYS.PROFILE);
   return raw ? JSON.parse(raw) : null;
@@ -306,6 +338,75 @@ export async function saveProfile(profile: Omit<ElderProfile, 'id'>): Promise<El
   // Cloud sync: update elder profile on server
   cloudUpdateElderProfile(saved).catch(() => {});
   return saved;
+}
+
+// ─── UserProfile (global caregiver fields) ───────────────────────────────────────
+
+export async function getUserProfile(): Promise<UserProfile | null> {
+  const raw = await AsyncStorage.getItem(KEYS.USER_PROFILE);
+  if (raw) return JSON.parse(raw);
+  // Migrate from legacy ElderProfile if available
+  const legacy = await getProfile();
+  if (legacy) {
+    const up: UserProfile = {
+      caregiverName: legacy.caregiverName,
+      caregiverBirthYear: legacy.caregiverBirthYear,
+      caregiverZodiacEmoji: legacy.caregiverZodiacEmoji,
+      caregiverZodiacName: legacy.caregiverZodiacName,
+      caregiverPhotoUri: legacy.caregiverPhotoUri,
+      caregiverAvatarType: legacy.caregiverAvatarType,
+    };
+    await AsyncStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(up));
+    return up;
+  }
+  return null;
+}
+
+export async function saveUserProfile(profile: UserProfile): Promise<UserProfile> {
+  await AsyncStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(profile));
+  return profile;
+}
+
+// ─── FamilyProfile (per-family elder fields, roomId-scoped) ─────────────────────
+
+export async function getFamilyProfile(roomId?: string): Promise<FamilyProfile | null> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.FAMILY_PROFILE, rid);
+  const raw = await AsyncStorage.getItem(key);
+  if (raw) return JSON.parse(raw);
+  // Migrate from legacy global ElderProfile if available
+  if (rid) {
+    const legacy = await getProfile();
+    if (legacy) {
+      const fp: FamilyProfile = {
+        id: legacy.id,
+        name: legacy.name,
+        nickname: legacy.nickname,
+        birthDate: legacy.birthDate,
+        zodiacEmoji: legacy.zodiacEmoji,
+        zodiacName: legacy.zodiacName,
+        elderPhotoUri: legacy.elderPhotoUri,
+        elderAvatarType: legacy.elderAvatarType,
+        city: legacy.city,
+        reminderMorning: legacy.reminderMorning,
+        reminderEvening: legacy.reminderEvening,
+        setupComplete: legacy.setupComplete,
+        careNeeds: legacy.careNeeds,
+      };
+      await AsyncStorage.setItem(key, JSON.stringify(fp));
+      return fp;
+    }
+  }
+  return null;
+}
+
+export async function saveFamilyProfile(profile: FamilyProfile, roomId?: string): Promise<FamilyProfile> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.FAMILY_PROFILE, rid);
+  await AsyncStorage.setItem(key, JSON.stringify(profile));
+  // Cloud sync: update elder profile on server
+  cloudUpdateElderProfile(profile as any).catch(() => {});
+  return profile;
 }
 
 // ─── Daily Check-ins ──────────────────────────────────────────────────────────
@@ -576,17 +677,17 @@ export async function saveFamilyRoom(room: FamilyRoom): Promise<void> {
 export async function lookupFamilyByCode(code: string): Promise<FamilyRoom | null> {
   const upper = code.toUpperCase();
   // Cloud-first: look up room on server by invite code
+  // Server returns { elderName, elderEmoji, memberCount } (no room wrapper)
   try {
     const cloudResult = await cloudLookupRoom(upper);
-    if (cloudResult?.room) {
+    if (cloudResult) {
       return {
-        id: String(cloudResult.room.id),
-        roomCode: cloudResult.room.roomCode ?? upper,
-        elderName: cloudResult.room.elderName ?? '家人',
-        elderEmoji: cloudResult.room.elderEmoji,
-        elderPhotoUri: cloudResult.room.elderPhotoUri,
+        id: '',  // unknown until join; will be filled after joinFamilyRoom
+        roomCode: upper,
+        elderName: cloudResult.elderName ?? '家人',
+        elderEmoji: cloudResult.elderEmoji ?? undefined,
         members: [],
-        createdAt: cloudResult.room.createdAt ?? new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       };
     }
   } catch (e) {
@@ -633,11 +734,14 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
       await setCloudSyncState({ activeRoomId: cloudResult.roomId });
     }
   } catch (e) {
-    console.warn('[Storage] createFamilyRoom cloud create failed, using local id:', e);
+    throw new Error('家庭创建失败，请确认已登录并重试');
   }
-  // Step 2: Build local room — use server roomId if available, else local fallback
+  if (!serverRoomId) {
+    throw new Error('家庭创建失败，请确认已登录并重试');
+  }
+  // Step 2: Build local room using server roomId (guaranteed non-null)
   const room: FamilyRoom = {
-    id: serverRoomId ? String(serverRoomId) : generateId(),
+    id: String(serverRoomId),
     roomCode: serverRoomCode ?? existingCode ?? generateRoomCode(),
     elderName,
     elderEmoji: elderOpts?.emoji,
@@ -712,36 +816,42 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
         console.warn('[Storage] joinFamilyRoom getRoomDetail failed, using minimal room:', detailErr);
       }
 
-      // Step 1b: Fallback to minimal room if detail fetch failed
-      const newMember: FamilyMember = {
-        id: generateId(),
-        ...member,
-        isCreator: false,
-        joinedAt: new Date().toISOString(),
-        isCurrentUser: true,
-      };
+      // Step 1b: Use server memberId as the authoritative myMemberId
+      const myMemberId = String(cloudResult.memberId);
+
+      // Build room from full detail if available, else minimal fallback
       const room: FamilyRoom = fullRoom ?? {
         id: String(cloudResult.roomId),
         roomCode: cloudResult.roomCode ?? code,
         elderName: cloudResult.elderName ?? '家人',
-        members: [newMember],
+        members: [],
         createdAt: new Date().toISOString(),
       };
 
-      // Ensure current user is marked in member list
-      if (fullRoom) {
-        const myEntry = room.members.find(m => m.isCurrentUser);
-        if (!myEntry) room.members.push(newMember);
+      // Find the current user in the server member list
+      let myServerMember = room.members.find(m => m.id === myMemberId);
+      if (!myServerMember) {
+        // Server member list may not include us yet; build a minimal member entry
+        myServerMember = {
+          id: myMemberId,
+          ...member,
+          isCreator: false,
+          joinedAt: new Date().toISOString(),
+          isCurrentUser: true,
+        };
+        room.members.push(myServerMember);
+      } else {
+        myServerMember.isCurrentUser = true;
       }
 
       await saveFamilyRoom(room);
-      await setCurrentMember(newMember);
+      await setCurrentMember(myServerMember);
       const membership: FamilyMembership = {
         familyId: room.id,
-        myMemberId: newMember.id,
+        myMemberId,
         role: 'joiner',
         room,
-        joinedAt: newMember.joinedAt,
+        joinedAt: myServerMember.joinedAt,
       };
       await addOrUpdateMembership(membership);
       await setActiveFamilyId(room.id);
@@ -980,9 +1090,24 @@ export async function removeMembership(familyId: string): Promise<void> {
   }
 }
 
+/** Clear all room-scoped data for a given familyId/roomId */
+export async function clearScopedFamilyData(roomId: string): Promise<void> {
+  const keys = [
+    roomKey(KEYS.FAMILY_PROFILE, roomId),
+    roomKey(KEYS.CHECK_INS, roomId),
+    roomKey(KEYS.MEDICATIONS, roomId),
+    roomKey(KEYS.DIARY, roomId),
+    roomKey(KEYS.FAMILY_ANNOUNCEMENTS, roomId),
+    roomKey(KEYS.BRIEFINGS, roomId),
+  ];
+  await AsyncStorage.multiRemove(keys);
+}
+
 // Delete a family and all associated data (creator only)
 export async function deleteFamilyAndData(familyId: string): Promise<void> {
-  // Remove announcements
+  // Clear all room-scoped data first
+  await clearScopedFamilyData(familyId);
+  // Also remove legacy non-scoped announcement key
   await AsyncStorage.removeItem(KEYS.FAMILY_ANNOUNCEMENTS);
   // Remove membership
   await removeMembership(familyId);
@@ -1060,6 +1185,17 @@ export async function migrateToMultiFamily(): Promise<void> {
  * Called during account deletion to ensure complete data removal.
  */
 export async function clearAllLocalData(): Promise<void> {
+  // First clear all room-scoped data for every membership
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.MEMBERSHIPS);
+    const memberships: FamilyMembership[] = raw ? JSON.parse(raw) : [];
+    for (const m of memberships) {
+      await clearScopedFamilyData(m.familyId);
+    }
+  } catch (e) {
+    console.warn('[Storage] clearAllLocalData: failed to clear scoped data:', e);
+  }
+  // Then clear all global keys
   const allKeys = Object.values(KEYS);
   await AsyncStorage.multiRemove(allKeys);
 }
