@@ -252,8 +252,8 @@ export interface FamilyMembership {
 
 /** Global user (caregiver) profile — NOT family-scoped */
 export interface UserProfile {
-  caregiverName: string;
-  caregiverBirthYear: string;
+  caregiverName?: string;
+  caregiverBirthYear?: string;
   caregiverZodiacEmoji?: string;
   caregiverZodiacName?: string;
   caregiverPhotoUri?: string;
@@ -262,18 +262,18 @@ export interface UserProfile {
 
 /** Per-family (elder) profile — stored per roomId */
 export interface FamilyProfile {
-  id: string;
-  name: string;
-  nickname: string;
-  birthDate: string;        // YYYY-MM-DD
-  zodiacEmoji: string;
-  zodiacName: string;
+  id?: string;
+  name?: string;
+  nickname?: string;
+  birthDate?: string;        // YYYY-MM-DD
+  zodiacEmoji?: string;
+  zodiacName?: string;
   elderPhotoUri?: string;
   elderAvatarType?: 'photo' | 'zodiac';
-  city: string;
-  reminderMorning: string;  // e.g. '08:00'
-  reminderEvening: string;  // e.g. '21:00'
-  setupComplete: boolean;
+  city?: string;
+  reminderMorning?: string;  // e.g. '08:00'
+  reminderEvening?: string;  // e.g. '21:00'
+  setupComplete?: boolean;
   careNeeds?: CareNeedsProfile;
 }
 
@@ -705,15 +705,10 @@ export async function getCurrentUserIsCreator(): Promise<boolean> {
 }
 
 export async function createFamilyRoom(elderName: string, firstMember: Omit<FamilyMember, 'id' | 'joinedAt'>, existingCode?: string, elderOpts?: { emoji?: string; photoUri?: string }): Promise<FamilyRoom> {
-  const member: FamilyMember = {
-    id: generateId(),
-    ...firstMember,
-    isCreator: true,
-    joinedAt: new Date().toISOString(),
-    isCurrentUser: true,
-  };
   // Step 1: Create on server first (cloud-first for shared invite code)
+  // Server returns both roomId AND memberId — use both as authoritative IDs
   let serverRoomId: number | null = null;
+  let serverMemberId: number | null = null;
   let serverRoomCode: string | null = null;
   try {
     const cloudResult = await cloudCreateRoom({
@@ -721,25 +716,34 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
       elderName,
       elderEmoji: elderOpts?.emoji,
       elderPhotoUri: elderOpts?.photoUri,
-      memberName: member.name,
-      memberRole: member.role,
-      memberRoleLabel: member.roleLabel,
-      memberEmoji: member.emoji,
-      memberColor: member.color,
-      memberPhotoUri: member.photoUri,
+      memberName: firstMember.name,
+      memberRole: firstMember.role,
+      memberRoleLabel: firstMember.roleLabel,
+      memberEmoji: firstMember.emoji,
+      memberColor: firstMember.color,
+      memberPhotoUri: firstMember.photoUri,
     });
-    if (cloudResult?.roomId) {
+    if (cloudResult?.roomId && cloudResult?.memberId) {
       serverRoomId = cloudResult.roomId;
+      serverMemberId = cloudResult.memberId;
       serverRoomCode = cloudResult.roomCode ?? null;
       await setCloudSyncState({ activeRoomId: cloudResult.roomId });
     }
   } catch (e) {
     throw new Error('家庭创建失败，请确认已登录并重试');
   }
-  if (!serverRoomId) {
+  if (!serverRoomId || !serverMemberId) {
     throw new Error('家庭创建失败，请确认已登录并重试');
   }
-  // Step 2: Build local room using server roomId (guaranteed non-null)
+  // Step 2: Build local member and room using server IDs (both guaranteed non-null)
+  const myMemberId = String(serverMemberId);
+  const member: FamilyMember = {
+    id: myMemberId,
+    ...firstMember,
+    isCreator: true,
+    joinedAt: new Date().toISOString(),
+    isCurrentUser: true,
+  };
   const room: FamilyRoom = {
     id: String(serverRoomId),
     roomCode: serverRoomCode ?? existingCode ?? generateRoomCode(),
@@ -754,7 +758,7 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
   // Step 3: Save membership and activate room-scoped cache
   const membership: FamilyMembership = {
     familyId: room.id,
-    myMemberId: member.id,
+    myMemberId,
     role: 'creator',
     room,
     joinedAt: member.joinedAt,
@@ -799,7 +803,7 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
             photoUri: m.photoUri,
             joinedAt: m.joinedAt ?? new Date().toISOString(),
             isCreator: m.isCreator ?? false,
-            isCurrentUser: m.userId === cloudResult.myUserId,
+            isCurrentUser: false, // Will be set correctly below via myMemberId lookup
             relationship: m.relationship,
           }));
           fullRoom = {

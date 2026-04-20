@@ -27,6 +27,10 @@ import { trpc } from '@/lib/trpc';
 import { clearAllLocalData } from '@/lib/storage';
 
 export default function ProfileScreen() {
+  // Split into two independent states — caregiver data vs elder/family data
+  const [userProfile, setUserProfile] = useState<import('@/lib/storage').UserProfile | null>(null);
+  const [familyProfile, setFamilyProfile] = useState<FamilyProfile | null>(null);
+  // Keep legacy profile as a thin compatibility shim for handlers that still need it
   const [profile, setProfile] = useState<ElderProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -110,107 +114,130 @@ export default function ProfileScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    getProfile().then(async p => {
-      setProfile(p);
-      setCaregiverNameDraft(p?.caregiverName || '');
-      setElderNicknameDraft(p?.nickname || p?.name || '');
-      setLoading(false);
-      // Ensure family-scoped profile is seeded from legacy global profile
-      if (p && activeMembership?.familyId) {
-        await getFamilyProfile(activeMembership.familyId);
-        await getUserProfile();
+    const loadProfiles = async () => {
+      setLoading(true);
+      try {
+        // Load all three in parallel: legacy (compat shim), user-scoped, family-scoped
+        const [legacyP, up, fp] = await Promise.all([
+          getProfile(),
+          getUserProfile(),
+          activeMembership?.familyId ? getFamilyProfile(activeMembership.familyId) : Promise.resolve(null),
+        ]);
+        setProfile(legacyP);
+        setUserProfile(up);
+        setFamilyProfile(fp);
+        // Seed draft fields from authoritative scoped sources
+        setCaregiverNameDraft(up?.caregiverName || legacyP?.caregiverName || '');
+        setElderNicknameDraft(fp?.nickname || legacyP?.nickname || legacyP?.name || '');
+      } finally {
+        setLoading(false);
       }
-    });
+    };
+    loadProfiles();
     if (Platform.OS !== 'web') {
       areRemindersScheduled().then(setNotifEnabled);
     }
   }, [activeMembership?.familyId]));
 
   const saveCaregiverName = async () => {
-    if (!profile || !caregiverNameDraft.trim()) return;
-    const updated = await saveProfile({ ...profile, caregiverName: caregiverNameDraft.trim() });
-    setProfile(updated);
+    if (!caregiverNameDraft.trim()) return;
+    // Write to UserProfile (authoritative) + legacy shim
+    const updatedUp = await saveUserProfile({ ...(userProfile ?? {}), caregiverName: caregiverNameDraft.trim() });
+    setUserProfile(updatedUp);
+    if (profile) {
+      const updated = await saveProfile({ ...profile, caregiverName: caregiverNameDraft.trim() });
+      setProfile(updated);
+    }
     setEditingCaregiverName(false);
   };
 
   const saveElderNickname = async () => {
-    if (!profile || !elderNicknameDraft.trim()) return;
-    const updated = await saveProfile({ ...profile, nickname: elderNicknameDraft.trim() });
-    setProfile(updated);
+    if (!elderNicknameDraft.trim()) return;
+    // Write to FamilyProfile (authoritative) + legacy shim
+    if (activeMembership?.familyId) {
+      const updatedFp = await saveFamilyProfile({ ...(familyProfile ?? {}), nickname: elderNicknameDraft.trim() }, activeMembership.familyId);
+      setFamilyProfile(updatedFp);
+    }
+    if (profile) {
+      const updated = await saveProfile({ ...profile, nickname: elderNicknameDraft.trim() });
+      setProfile(updated);
+    }
     setEditingElderNickname(false);
   };
 
   const openEditModal = (target: 'caregiver' | 'elder') => {
-    if (!profile) return;
     setEditTarget(target);
     if (target === 'caregiver') {
-      setDraftCaregiverName(profile.caregiverName || '');
-      setDraftCaregiverBirthYear(profile.caregiverBirthYear || '');
-      setDraftCity(profile.city || '');
+      // Source from UserProfile (authoritative), fallback to legacy
+      setDraftCaregiverName(userProfile?.caregiverName || profile?.caregiverName || '');
+      setDraftCaregiverBirthYear(userProfile?.caregiverBirthYear || profile?.caregiverBirthYear || '');
+      setDraftCity(profile?.city || '');
     } else {
-      setDraftElderNickname(profile.nickname || profile.name || '');
-      setDraftElderName(profile.name || '');
-      setDraftElderBirthDate(profile.birthDate || '');
-      setDraftElderCity(profile.city || '');
+      // Source from FamilyProfile (authoritative), fallback to legacy
+      setDraftElderNickname(familyProfile?.nickname || profile?.nickname || profile?.name || '');
+      setDraftElderName(familyProfile?.name || profile?.name || '');
+      setDraftElderBirthDate(familyProfile?.birthDate || profile?.birthDate || '');
+      setDraftElderCity(familyProfile?.city || profile?.city || '');
     }
     setShowEditModal(true);
   };
 
   const saveEditModal = async () => {
-    if (!profile) return;
-    let updated: ElderProfile;
     if (editTarget === 'caregiver') {
       const year = parseInt(draftCaregiverBirthYear);
       const zodiac = !isNaN(year) ? getZodiac(year) : null;
-      updated = await saveProfile({
-        ...profile,
-        caregiverName: draftCaregiverName.trim() || profile.caregiverName,
-        caregiverBirthYear: draftCaregiverBirthYear.trim() || profile.caregiverBirthYear,
-        caregiverZodiacEmoji: zodiac?.emoji || profile.caregiverZodiacEmoji,
-        caregiverZodiacName: zodiac?.name || profile.caregiverZodiacName,
-        city: draftCity.trim() || profile.city,
+      // UserProfile is the authoritative source for caregiver data
+      const updatedUp = await saveUserProfile({
+        ...(userProfile ?? {}),
+        caregiverName: draftCaregiverName.trim() || userProfile?.caregiverName || '',
+        caregiverBirthYear: draftCaregiverBirthYear.trim() || userProfile?.caregiverBirthYear,
+        caregiverZodiacEmoji: zodiac?.emoji || userProfile?.caregiverZodiacEmoji,
+        caregiverZodiacName: zodiac?.name || userProfile?.caregiverZodiacName,
       });
-      // Also persist to UserProfile (caregiver-scoped)
-      await saveUserProfile({
-        caregiverName: updated.caregiverName,
-        caregiverBirthYear: updated.caregiverBirthYear,
-        caregiverZodiacEmoji: updated.caregiverZodiacEmoji,
-        caregiverZodiacName: updated.caregiverZodiacName,
-        caregiverPhotoUri: updated.caregiverPhotoUri,
-        caregiverAvatarType: updated.caregiverAvatarType,
-      });
+      setUserProfile(updatedUp);
+      // Also sync to legacy profile for compat
+      if (profile) {
+        const updated = await saveProfile({
+          ...profile,
+          caregiverName: updatedUp.caregiverName ?? profile.caregiverName,
+          caregiverBirthYear: updatedUp.caregiverBirthYear ?? profile.caregiverBirthYear,
+          caregiverZodiacEmoji: updatedUp.caregiverZodiacEmoji ?? profile.caregiverZodiacEmoji,
+          caregiverZodiacName: updatedUp.caregiverZodiacName ?? profile.caregiverZodiacName,
+          city: draftCity.trim() || profile.city,
+        });
+        setProfile(updated);
+      }
     } else {
-      const birthYear = draftElderBirthDate ? new Date(draftElderBirthDate + 'T00:00:00').getFullYear() : new Date(profile.birthDate).getFullYear();
+      const rawDate = draftElderBirthDate.trim() || familyProfile?.birthDate || profile?.birthDate || '';
+      const birthYear = rawDate ? new Date(rawDate + 'T00:00:00').getFullYear() : new Date().getFullYear();
       const zodiac = getZodiac(birthYear);
-      updated = await saveProfile({
-        ...profile,
-        nickname: draftElderNickname.trim() || profile.nickname,
-        name: draftElderName.trim() || profile.name,
-        birthDate: draftElderBirthDate.trim() || profile.birthDate,
-        zodiacEmoji: zodiac.emoji,
-        zodiacName: zodiac.name,
-        city: draftElderCity.trim() || profile.city,
-      });
-      // Also persist to FamilyProfile (family-scoped)
+      // FamilyProfile is the authoritative source for elder/family data
       if (activeMembership?.familyId) {
-        await saveFamilyProfile({
-          id: updated.id,
-          name: updated.name,
-          nickname: updated.nickname,
-          birthDate: updated.birthDate,
-          zodiacEmoji: updated.zodiacEmoji,
-          zodiacName: updated.zodiacName,
-          elderPhotoUri: updated.elderPhotoUri,
-          elderAvatarType: updated.elderAvatarType,
-          city: updated.city,
-          reminderMorning: updated.reminderMorning,
-          reminderEvening: updated.reminderEvening,
-          setupComplete: updated.setupComplete,
-          careNeeds: updated.careNeeds,
+        const updatedFp = await saveFamilyProfile({
+          ...(familyProfile ?? {}),
+          name: draftElderName.trim() || familyProfile?.name || '',
+          nickname: draftElderNickname.trim() || familyProfile?.nickname || '',
+          birthDate: rawDate,
+          zodiacEmoji: zodiac.emoji,
+          zodiacName: zodiac.name,
+          city: draftElderCity.trim() || familyProfile?.city,
         }, activeMembership.familyId);
+        setFamilyProfile(updatedFp);
+      }
+      // Also sync to legacy profile for compat
+      if (profile) {
+        const updated = await saveProfile({
+          ...profile,
+          nickname: draftElderNickname.trim() || profile.nickname,
+          name: draftElderName.trim() || profile.name,
+          birthDate: rawDate,
+          zodiacEmoji: zodiac.emoji,
+          zodiacName: zodiac.name,
+          city: draftElderCity.trim() || profile.city,
+        });
+        setProfile(updated);
       }
     }
-    setProfile(updated);
     setShowEditModal(false);
   };
 
@@ -269,21 +296,24 @@ export default function ProfileScreen() {
 
   // 创建新家庭
   const handleCreateFamily = async () => {
-    if (!profile) return;
     setJoinLoading(true);
     setJoinError('');
     try {
+      // Use FamilyProfile for elder data, UserProfile for caregiver data
+      const elderName = familyProfile?.name || familyProfile?.nickname || profile?.name || profile?.nickname || '家人';
+      const caregiverName = userProfile?.caregiverName || profile?.caregiverName || '照顾者';
+      const elderPhotoUri = familyProfile?.elderPhotoUri || profile?.photoUri;
       await createFamilyRoom(
-        profile.name || profile.nickname || '家人',
+        elderName,
         {
-          name: profile.caregiverName || '照顾者',
+          name: caregiverName,
           role: 'caregiver',
           roleLabel: '主照顾者',
           emoji: '🧑',
           color: '#FF6B6B',
         },
         undefined,
-        { emoji: undefined, photoUri: profile.photoUri },
+        { emoji: undefined, photoUri: elderPhotoUri },
       );
       await refresh();
       setFamilyModalTab('list');
@@ -326,7 +356,8 @@ export default function ProfileScreen() {
     );
   }
 
-  if (!profile) {
+  // Show setup prompt only if both scoped profiles are empty AND legacy profile is also empty
+  if (!profile && !userProfile && !familyProfile) {
     return (
       <ScreenContainer className="items-center justify-center p-6">
         <Text style={styles.noProfile}>还没有设置个人信息</Text>
@@ -348,12 +379,12 @@ export default function ProfileScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Caregiver Card */}
+        {/* Caregiver Card — sourced from UserProfile (authoritative) */}
         <Text style={styles.sectionLabel}>👤 照顾者</Text>
         <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
           <View style={styles.avatarWrap}>
-            {profile.caregiverPhotoUri ? (
-              <Image source={{ uri: profile.caregiverPhotoUri }} style={styles.avatarPhoto} />
+            {(userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri) ? (
+              <Image source={{ uri: userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri }} style={styles.avatarPhoto} />
             ) : (
               <Text style={styles.cardEmoji}>🧑</Text>
             )}
@@ -363,14 +394,14 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.cardInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.cardName}>{profile.caregiverName || '照顾者'}</Text>
+              <Text style={styles.cardName}>{userProfile?.caregiverName || profile?.caregiverName || '照顾者'}</Text>
               <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('caregiver')}>
                 <Text style={{ fontSize: 14 }}>✏️</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.cardSub}>
-              {profile.caregiverZodiacName ? `属${profile.caregiverZodiacName} · ` : ''}
-              {profile.caregiverBirthYear ? `${profile.caregiverBirthYear}年` : '未设置年份'}
+              {(userProfile?.caregiverZodiacName || profile?.caregiverZodiacName) ? `属${userProfile?.caregiverZodiacName || profile?.caregiverZodiacName} · ` : ''}
+              {(userProfile?.caregiverBirthYear || profile?.caregiverBirthYear) ? `${userProfile?.caregiverBirthYear || profile?.caregiverBirthYear}年` : '未设置年份'}
             </Text>
             <Text style={styles.cardSub2}>照顾者</Text>
             <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('caregiver')}>
@@ -379,12 +410,12 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Elder Card */}
+        {/* Elder Card — sourced from FamilyProfile (authoritative, family-scoped) */}
         <Text style={styles.sectionLabel}>🧡 被照顾者</Text>
         <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
           <View style={styles.avatarWrap}>
-            {profile.photoUri ? (
-              <Image source={{ uri: profile.photoUri }} style={styles.avatarPhoto} />
+            {(familyProfile?.elderPhotoUri || profile?.photoUri) ? (
+              <Image source={{ uri: familyProfile?.elderPhotoUri || profile?.photoUri }} style={styles.avatarPhoto} />
             ) : (
               <Text style={styles.cardEmoji}>👵</Text>
             )}
@@ -394,16 +425,16 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.cardInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.cardName}>{profile.nickname || profile.name || '家人'}</Text>
+              <Text style={styles.cardName}>{familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || '家人'}</Text>
               <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('elder')}>
                 <Text style={{ fontSize: 14 }}>✏️</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.cardSub}>
-              {profile.zodiacName ? `属${profile.zodiacName} · ` : ''}
-              {profile.birthDate ? `${new Date(profile.birthDate).getFullYear()}年` : '未设置年份'}
+              {(familyProfile?.zodiacName || profile?.zodiacName) ? `属${familyProfile?.zodiacName || profile?.zodiacName} · ` : ''}
+              {(familyProfile?.birthDate || profile?.birthDate) ? `${new Date((familyProfile?.birthDate || profile?.birthDate) + 'T00:00:00').getFullYear()}年` : '未设置年份'}
             </Text>
-            <Text style={styles.cardSub2}>{profile.name || '家人'}</Text>
+            <Text style={styles.cardSub2}>{familyProfile?.name || profile?.name || '家人'}</Text>
             <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('elder')}>
               <Text style={styles.editDetailBtnText}>编辑详情</Text>
             </TouchableOpacity>
@@ -502,8 +533,8 @@ export default function ProfileScreen() {
 
         {notifEnabled && Platform.OS !== 'web' && (
           <View style={styles.notifInfo}>
-            <Text style={styles.notifInfoText}>☀️ 早上 {profile.reminderMorning || '08:00'} — 记录昨晚睡眠情况</Text>
-            <Text style={styles.notifInfoText}>🌙 晚上 {profile.reminderEvening || '21:00'} — 记录今日饮食和心情</Text>
+            <Text style={styles.notifInfoText}>☀️ 早上 {familyProfile?.reminderMorning || profile?.reminderMorning || '08:00'} — 记录昨晚睡眠情况</Text>
+            <Text style={styles.notifInfoText}>🌙 晚上 {familyProfile?.reminderEvening || profile?.reminderEvening || '21:00'} — 记录今日饮食和心情</Text>
           </View>
         )}
 
@@ -513,45 +544,57 @@ export default function ProfileScreen() {
           <View style={styles.reminderEditRow}>
             <Text style={styles.reminderEditLabel}>🌅 早上打卡</Text>
             <View style={styles.timeChipRow}>
-              {['06:00', '07:00', '08:00', '09:00', '10:00'].map(t => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.timeChipSmall, (profile.reminderMorning || '08:00') === t && styles.timeChipSmallActive]}
-                  onPress={async () => {
-                    const updated = await saveProfile({ ...profile, reminderMorning: t });
-                    setProfile(updated);
-                    // Also persist to FamilyProfile (family-scoped)
-                    if (activeMembership?.familyId) {
-                      const fp = await getFamilyProfile(activeMembership.familyId);
-                      if (fp) await saveFamilyProfile({ ...fp, reminderMorning: t }, activeMembership.familyId);
-                    }
-                  }}
-                >
-                  <Text style={[styles.timeChipSmallText, (profile.reminderMorning || '08:00') === t && styles.timeChipSmallTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
+              {['06:00', '07:00', '08:00', '09:00', '10:00'].map(t => {
+                const currentMorning = familyProfile?.reminderMorning || profile?.reminderMorning || '08:00';
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.timeChipSmall, currentMorning === t && styles.timeChipSmallActive]}
+                    onPress={async () => {
+                      // FamilyProfile is authoritative for reminder times
+                      if (activeMembership?.familyId) {
+                        const updatedFp = await saveFamilyProfile({ ...(familyProfile ?? {}), reminderMorning: t }, activeMembership.familyId);
+                        setFamilyProfile(updatedFp);
+                      }
+                      // Sync to legacy profile for compat
+                      if (profile) {
+                        const updated = await saveProfile({ ...profile, reminderMorning: t });
+                        setProfile(updated);
+                      }
+                    }}
+                  >
+                    <Text style={[styles.timeChipSmallText, currentMorning === t && styles.timeChipSmallTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
           <View style={[styles.reminderEditRow, { marginTop: 12 }]}>
             <Text style={styles.reminderEditLabel}>🌙 晚上打卡</Text>
             <View style={styles.timeChipRow}>
-              {['19:00', '20:00', '21:00', '22:00', '23:00'].map(t => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.timeChipSmall, (profile.reminderEvening || '21:00') === t && styles.timeChipSmallActive]}
-                  onPress={async () => {
-                    const updated = await saveProfile({ ...profile, reminderEvening: t });
-                    setProfile(updated);
-                    // Also persist to FamilyProfile (family-scoped)
-                    if (activeMembership?.familyId) {
-                      const fp = await getFamilyProfile(activeMembership.familyId);
-                      if (fp) await saveFamilyProfile({ ...fp, reminderEvening: t }, activeMembership.familyId);
-                    }
-                  }}
-                >
-                  <Text style={[styles.timeChipSmallText, (profile.reminderEvening || '21:00') === t && styles.timeChipSmallTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
+              {['19:00', '20:00', '21:00', '22:00', '23:00'].map(t => {
+                const currentEvening = familyProfile?.reminderEvening || profile?.reminderEvening || '21:00';
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.timeChipSmall, currentEvening === t && styles.timeChipSmallActive]}
+                    onPress={async () => {
+                      // FamilyProfile is authoritative for reminder times
+                      if (activeMembership?.familyId) {
+                        const updatedFp = await saveFamilyProfile({ ...(familyProfile ?? {}), reminderEvening: t }, activeMembership.familyId);
+                        setFamilyProfile(updatedFp);
+                      }
+                      // Sync to legacy profile for compat
+                      if (profile) {
+                        const updated = await saveProfile({ ...profile, reminderEvening: t });
+                        setProfile(updated);
+                      }
+                    }}
+                  >
+                    <Text style={[styles.timeChipSmallText, currentEvening === t && styles.timeChipSmallTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         </View>
@@ -751,8 +794,8 @@ export default function ProfileScreen() {
                           <View style={styles.createInfoCard}>
                             <Text style={styles.createInfoEmoji}>🏠</Text>
                             <Text style={styles.createInfoText}>
-                              将以 <Text style={{ fontWeight: '700' }}>{profile?.caregiverName || '您'}</Text> 的身份，
-                              为 <Text style={{ fontWeight: '700' }}>{profile?.nickname || profile?.name || '家人'}</Text> 创建一个新的护理家庭。
+                              将以 <Text style={{ fontWeight: '700' }}>{userProfile?.caregiverName || profile?.caregiverName || '您'}</Text> 的身份，
+                              为 <Text style={{ fontWeight: '700' }}>{familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || '家人'}</Text> 创建一个新的护理家庭。
                             </Text>
                             <Text style={styles.createInfoSub}>系统会自动生成邀请码，您可以邀请其他家人加入。</Text>
                           </View>

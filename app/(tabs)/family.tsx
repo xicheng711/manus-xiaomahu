@@ -12,7 +12,8 @@ import {
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
   joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
   getAllCheckIns, getDiaryEntries,
-  getProfile, FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
+  getProfile, getFamilyProfile, getUserProfile,
+  FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, toggleAnnouncementReaction, todayStr,
   getActiveRoomIdCache,
 } from '@/lib/storage';
@@ -82,9 +83,17 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
   }
 
   useEffect(() => {
-    getProfile().then(p => {
-      if (p) setPatientNickname(p.nickname || p.name || '家人');
-    });
+    // Prefer FamilyProfile (family-scoped) for elder nickname, fallback to legacy getProfile
+    const loadNickname = async () => {
+      const roomId = getActiveRoomIdCache();
+      const [fp, legacyP] = await Promise.all([
+        roomId ? getFamilyProfile(roomId) : Promise.resolve(null),
+        getProfile(),
+      ]);
+      const nickname = fp?.nickname || fp?.name || legacyP?.nickname || legacyP?.name || '家人';
+      setPatientNickname(nickname);
+    };
+    loadNickname();
   }, []);
 
   async function handleCreate() {
@@ -104,8 +113,14 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
     }
     setLoading(true);
     try {
-      const profile = await getProfile();
-      await createFamilyRoom(profile?.name || '家人', {
+      // Prefer FamilyProfile for elder name, fallback to legacy getProfile
+      const roomId = getActiveRoomIdCache();
+      const [fp, legacyP] = await Promise.all([
+        roomId ? getFamilyProfile(roomId) : Promise.resolve(null),
+        getProfile(),
+      ]);
+      const elderName = fp?.name || fp?.nickname || legacyP?.name || legacyP?.nickname || '家人';
+      await createFamilyRoom(elderName, {
         name: memberName.trim(),
         role: memberRole,
         roleLabel: memberRoleLabel,
@@ -410,16 +425,19 @@ export default function FamilyScreen() {
       profile = cloudProfile ?? await getProfile();
     } else {
       // Creator: read local
-      const [localToday, localAll, localDiaries, localProfile] = await Promise.all([
+      const activeRoomId = getActiveRoomIdCache();
+      const [localToday, localAll, localDiaries, localFp, localProfile] = await Promise.all([
         getTodayCheckIn(),
         getAllCheckIns(),
         getDiaryEntries(),
+        activeRoomId ? getFamilyProfile(activeRoomId) : Promise.resolve(null),
         getProfile(),
       ]);
       todayCheckIn = localToday;
       allCheckIns = localAll;
       diaryEntries = localDiaries;
-      profile = localProfile;
+      // Prefer FamilyProfile (family-scoped) for elder data
+      profile = localFp ? { ...localProfile, ...localFp, name: localFp.name || localProfile?.name, nickname: localFp.nickname || localProfile?.nickname } as any : localProfile;
     }
     const today = todayStr();
     setBriefingData({ checkIn: todayCheckIn, profile, todayAnnouncements: a.filter(ann => ann.date === today) });
@@ -492,16 +510,21 @@ export default function FamilyScreen() {
   }
 
   async function handleDeleteAnnouncement(id: string) {
-    // Delete locally first for instant UI feedback
-    await deleteFamilyAnnouncement(id);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    // Also delete on server (non-blocking, best-effort)
+    // Server-first: delete on server before removing locally
     const roomId = getActiveRoomIdCache();
     const numericRoomId = roomId ? parseInt(roomId) : null;
     const numericAnnId = parseInt(id);
     if (numericRoomId && !isNaN(numericAnnId)) {
-      cloudDeleteAnnouncement(numericAnnId, numericRoomId).catch(() => {});
+      try {
+        await cloudDeleteAnnouncement(numericAnnId, numericRoomId);
+      } catch (e: any) {
+        Alert.alert('删除失败', e?.message || '无法删除公告，请稍后重试');
+        return; // Abort — do NOT delete locally if server rejected
+      }
     }
+    // Server succeeded (or no roomId to sync) — now delete locally
+    await deleteFamilyAnnouncement(id);
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await loadData();
   }
 
@@ -700,17 +723,22 @@ export default function FamilyScreen() {
                   isNew={ann.id === newAnnouncementId}
                   currentMember={currentMember}
                   onReactionToggle={async (emoji) => {
-                    // Local-first for instant feedback
+                    // Server-first: sync reaction to server before updating locally
+                    const numericAnnId = parseInt(ann.id);
+                    if (!isNaN(numericAnnId)) {
+                      try {
+                        await cloudToggleReaction(numericAnnId, emoji);
+                      } catch (e: any) {
+                        Alert.alert('操作失败', e?.message || '无法同步表情，请稍后重试');
+                        return;
+                      }
+                    }
+                    // Server succeeded — now update locally
                     await toggleAnnouncementReaction(ann.id, emoji, {
                       memberId: currentMember.id,
                       memberName: currentMember.name,
                       memberEmoji: currentMember.emoji,
                     });
-                    // Sync to server (non-blocking)
-                    const numericAnnId = parseInt(ann.id);
-                    if (!isNaN(numericAnnId)) {
-                      cloudToggleReaction(numericAnnId, emoji).catch(() => {});
-                    }
                     await loadData();
                   }}
                 />
@@ -732,17 +760,22 @@ export default function FamilyScreen() {
                     onDelete={() => handleDeleteAnnouncement(ann.id)}
                     currentMember={currentMember}
                     onReactionToggle={async (emoji) => {
-                      // Local-first for instant feedback
+                      // Server-first: sync reaction to server before updating locally
+                      const numericAnnId = parseInt(ann.id);
+                      if (!isNaN(numericAnnId)) {
+                        try {
+                          await cloudToggleReaction(numericAnnId, emoji);
+                        } catch (e: any) {
+                          Alert.alert('操作失败', e?.message || '无法同步表情，请稍后重试');
+                          return;
+                        }
+                      }
+                      // Server succeeded — now update locally
                       await toggleAnnouncementReaction(ann.id, emoji, {
                         memberId: currentMember.id,
                         memberName: currentMember.name,
                         memberEmoji: currentMember.emoji,
                       });
-                      // Sync to server (non-blocking)
-                      const numericAnnId = parseInt(ann.id);
-                      if (!isNaN(numericAnnId)) {
-                        cloudToggleReaction(numericAnnId, emoji).catch(() => {});
-                      }
                       await loadData();
                     }}
                   />
