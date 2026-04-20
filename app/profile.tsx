@@ -103,15 +103,41 @@ export default function ProfileScreen() {
     });
     if (result.canceled || !result.assets?.[0]?.uri) return;
     const uri = result.assets[0].uri;
-    setProfile(prev => {
-      if (!prev) return prev;
-      const updated = target === 'caregiver'
-        ? { ...prev, caregiverPhotoUri: uri, caregiverAvatarType: 'photo' as const }
-        : { ...prev, photoUri: uri, elderAvatarType: 'photo' as const };
-      saveProfile(updated);
-      return updated;
-    });
-  }, []);
+
+    if (target === 'caregiver') {
+      // Write to authoritative UserProfile first
+      const updatedUp = await saveUserProfile({
+        ...(userProfile ?? {}),
+        caregiverPhotoUri: uri,
+        caregiverAvatarType: 'photo',
+      });
+      setUserProfile(updatedUp);
+      // Also sync to legacy profile for backward compat
+      setProfile(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev, caregiverPhotoUri: uri, caregiverAvatarType: 'photo' as const };
+        saveProfile(updated);
+        return updated;
+      });
+    } else {
+      // Write to authoritative FamilyProfile first (family-scoped)
+      if (activeMembership?.familyId) {
+        const updatedFp = await saveFamilyProfile({
+          ...(familyProfile ?? {}),
+          elderPhotoUri: uri,
+          elderAvatarType: 'photo',
+        }, activeMembership.familyId);
+        setFamilyProfile(updatedFp);
+      }
+      // Also sync to legacy profile for backward compat
+      setProfile(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev, photoUri: uri, elderAvatarType: 'photo' as const };
+        saveProfile(updated);
+        return updated;
+      });
+    }
+  }, [userProfile, familyProfile, activeMembership]);
 
   useFocusEffect(useCallback(() => {
     const loadProfiles = async () => {

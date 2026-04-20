@@ -30,7 +30,7 @@ import { sendFamilyAnnouncementNotification } from '@/lib/notifications';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { FamilySkeleton } from '@/components/skeleton-loader';
-import { cloudGetAnnouncements, cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudPostAnnouncement } from '@/lib/cloud-sync';
+import { cloudGetAnnouncements, cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -494,13 +494,8 @@ export default function FamilyScreen() {
     setShowCompose(false);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setNewAnnouncementId(newAnn.id);
-    // Sync announcement to cloud (triggers cross-device push notification on server)
-    cloudPostAnnouncement({
-      content: postedText,
-      emoji: composeEmoji || undefined,
-      type: (composeType as any) || 'daily',
-      date: newAnn.date,
-    }).catch(() => {});
+    // NOTE: cloudPostAnnouncement is already called inside saveFamilyAnnouncement().
+    // Do NOT call it again here — that would cause duplicate announcements and double push notifications.
     await loadData();
     // Scroll to top to show new announcement
     setTimeout(() => {

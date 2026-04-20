@@ -648,19 +648,22 @@ export const familyRouter = router({
       const { userId } = requireUser(ctx);
       const member = await requireRoomMember(userId, input.roomId);
       if (!member.isCreator) throw new Error("只有创建者可以修改老人档案");
+      // Read-then-merge: fetch existing profile first so partial updates
+      // (e.g. only changing reminderMorning) never overwrite other fields with empty strings.
+      const existing = await getElderProfile(input.roomId);
       const profile = await upsertElderProfile({
         roomId: input.roomId,
-        name: input.name ?? "",
-        nickname: input.nickname ?? "",
-        birthDate: input.birthDate ?? null,
-        zodiacEmoji: input.zodiacEmoji ?? null,
-        zodiacName: input.zodiacName ?? null,
-        elderPhotoUri: input.elderPhotoUri ?? null,
-        elderAvatarType: input.elderAvatarType ?? null,
-        city: input.city ?? null,
-        reminderMorning: input.reminderMorning ?? null,
-        reminderEvening: input.reminderEvening ?? null,
-        careNeeds: input.careNeeds ?? null,
+        name: input.name ?? existing?.name ?? "",
+        nickname: input.nickname ?? existing?.nickname ?? "",
+        birthDate: input.birthDate ?? existing?.birthDate ?? null,
+        zodiacEmoji: input.zodiacEmoji ?? existing?.zodiacEmoji ?? null,
+        zodiacName: input.zodiacName ?? existing?.zodiacName ?? null,
+        elderPhotoUri: input.elderPhotoUri ?? existing?.elderPhotoUri ?? null,
+        elderAvatarType: input.elderAvatarType ?? existing?.elderAvatarType ?? null,
+        city: input.city ?? existing?.city ?? null,
+        reminderMorning: input.reminderMorning ?? existing?.reminderMorning ?? null,
+        reminderEvening: input.reminderEvening ?? existing?.reminderEvening ?? null,
+        careNeeds: input.careNeeds ?? existing?.careNeeds ?? null,
       });
       return { success: true, profile };
     }),
