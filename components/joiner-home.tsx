@@ -78,7 +78,14 @@ function buildFeed(
     }
   }
 
-  diaries.slice(0, 3).forEach(d => {
+  // 对日记按 id 去重：同一篇日记（无论经历多少次 AI 回复更新）只显示一条记录
+  const seenDiaryIds = new Set<string>();
+  const uniqueDiaries = diaries.filter(d => {
+    if (!d.id || seenDiaryIds.has(d.id)) return false;
+    seenDiaryIds.add(d.id);
+    return true;
+  });
+  uniqueDiaries.slice(0, 3).forEach(d => {
     items.push({
       id: `diary-${d.id}`, type: 'diary',
       time: d.createdAt ? timeStr(d.createdAt) : d.date,
@@ -469,21 +476,32 @@ export function JoinerHomeScreen() {
   const statusSummary = (() => {
     if (!latestCheckIn) return '今天还没有打卡，等照顾者完成后这里会显示详情';
     const parts: string[] = [];
-    if (latestCheckIn.sleepHours != null) {
+    // 睡眠数据来自早间打卡，始终显示
+    if (latestCheckIn.morningDone && latestCheckIn.sleepHours != null) {
       const h = latestCheckIn.sleepHours;
       parts.push(`昨晚睡了 ${h} 小时`);
     }
-    if (latestCheckIn.medicationTaken === false) {
-      parts.push('今日药还没吃');
-    } else if (latestCheckIn.medicationTaken) {
-      parts.push('今日药已吃');
-    }
-    if (latestCheckIn.moodScore != null) {
-      parts.push(`心情 ${latestCheckIn.moodScore}/10`);
-    }
-    if (latestCheckIn.eveningNotes || latestCheckIn.morningNotes) {
-      const note = (latestCheckIn.eveningNotes || latestCheckIn.morningNotes || '').slice(0, 20);
-      parts.push(`备注：${note}`);
+    // 心情和用药只有晚间打卡完成后才显示真实数据
+    if (latestCheckIn.eveningDone) {
+      if (latestCheckIn.medicationTaken === false) {
+        parts.push('今日药还没吃');
+      } else if (latestCheckIn.medicationTaken) {
+        parts.push('今日药已吃');
+      }
+      if (latestCheckIn.moodScore != null) {
+        parts.push(`心情 ${latestCheckIn.moodScore}/10`);
+      }
+      if (latestCheckIn.eveningNotes) {
+        const note = latestCheckIn.eveningNotes.slice(0, 20);
+        parts.push(`备注：${note}`);
+      }
+    } else if (latestCheckIn.morningDone) {
+      // 仅早间打卡完成，提示晚间待记录
+      parts.push('晚间打卡待记录');
+      if (latestCheckIn.morningNotes) {
+        const note = latestCheckIn.morningNotes.slice(0, 20);
+        parts.push(`备注：${note}`);
+      }
     }
     return parts.length > 0 ? parts.join('，') : '打卡已记录';
   })();
@@ -585,9 +603,28 @@ export function JoinerHomeScreen() {
             </View>
             <View style={styles.metricsRowNew}>
               {[
-                { emoji: latestCheckIn?.moodEmoji || '😊', label: '心情', val: latestCheckIn?.moodScore != null ? `${latestCheckIn.moodScore}/10` : '—', color: AppColors.peach.primary, bg: AppColors.peach.soft },
-                { emoji: '💤', label: '睡眠', val: latestCheckIn?.sleepHours != null ? `${latestCheckIn.sleepHours}h` : '—', color: AppColors.purple.strong, bg: AppColors.purple.soft },
-                { emoji: latestCheckIn?.medicationTaken ? '✅' : (latestCheckIn ? '⚠️' : '💊'), label: '用药', val: latestCheckIn ? (latestCheckIn.medicationTaken ? '已服' : '未服') : '—', color: latestCheckIn?.medicationTaken ? AppColors.green.strong : AppColors.status.error, bg: latestCheckIn?.medicationTaken ? AppColors.green.soft : AppColors.coral.soft },
+                // 心情：只有晚间打卡完成后才显示真实数据
+                {
+                  emoji: latestCheckIn?.eveningDone ? (latestCheckIn.moodEmoji || '😊') : '😊',
+                  label: '心情',
+                  val: latestCheckIn?.eveningDone && latestCheckIn.moodScore != null ? `${latestCheckIn.moodScore}/10` : '—',
+                  color: AppColors.peach.primary, bg: AppColors.peach.soft
+                },
+                // 睡眠：来自早间打卡，始终显示
+                {
+                  emoji: '💤',
+                  label: '睡眠',
+                  val: latestCheckIn?.morningDone && latestCheckIn.sleepHours != null ? `${latestCheckIn.sleepHours}h` : '—',
+                  color: AppColors.purple.strong, bg: AppColors.purple.soft
+                },
+                // 用药：只有晚间打卡完成后才显示真实状态
+                {
+                  emoji: latestCheckIn?.eveningDone ? (latestCheckIn.medicationTaken ? '✅' : '⚠️') : '💊',
+                  label: '用药',
+                  val: latestCheckIn?.eveningDone ? (latestCheckIn.medicationTaken ? '已服' : '未服') : '—',
+                  color: latestCheckIn?.eveningDone ? (latestCheckIn?.medicationTaken ? AppColors.green.strong : AppColors.status.error) : AppColors.text.tertiary,
+                  bg: latestCheckIn?.eveningDone ? (latestCheckIn?.medicationTaken ? AppColors.green.soft : AppColors.coral.soft) : AppColors.bg.secondary
+                },
               ].map((m) => (
                 <View key={m.label} style={[styles.metricItemNew, { backgroundColor: m.bg }]}>
                   <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
