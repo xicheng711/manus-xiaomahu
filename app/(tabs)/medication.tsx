@@ -244,7 +244,8 @@ function MedicationScreenContent() {
 
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistT        {/* Header */}
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* Header */}
         <Animated.View style={{ opacity: headerFade, transform: [{ translateY: headerSlide }] }}>
           <PageHeader
             theme={PAGE_THEMES.medication}
@@ -274,7 +275,8 @@ function MedicationScreenContent() {
               </Text>
             </View>
           </View>
-        )}orm */}
+        )}
+
         {adding && (
           <Animated.View style={[styles.addForm, { opacity: formFade, transform: [{ translateY: formSlide }] }]}>
             <View style={styles.formTitleRow}>

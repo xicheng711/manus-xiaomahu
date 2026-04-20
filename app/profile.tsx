@@ -290,214 +290,117 @@ export default function ProfileScreen() {
       <ScreenContainer className="items-center justify-center p-6">
         <Text style={styles.noProfile}>还没有设置个人信息</Text>
         <TouchableOpacity style={styles.btn} onPress={() => router.replace('/onboarding' as any)}>
-          <Text style={styles.btnText}>前往设置</Text>
+          <Text style={styles.btnText}>去设置</Text>
         </TouchableOpacity>
       </ScreenContainer>
     );
   }
 
-  const elderZodiac = getZodiac(new Date(profile.birthDate).getFullYear());
-  const caregiverZodiac = getZodiac(parseInt(profile.caregiverBirthYear));
-
   return (
-    <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
-        {/* Header */}
+    <ScreenContainer scrollable={false}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
             <Text style={styles.backBtnText}>‹ 返回</Text>
           </TouchableOpacity>
           <Text style={styles.title}>个人信息</Text>
-          <View style={{ width: 60 }} />
+          <View style={{ width: 40 }} />
         </View>
 
-        {/* ── 照顾者信息 ── */}
+        {/* Caregiver Card */}
         <Text style={styles.sectionLabel}>👤 照顾者</Text>
-        <View style={[styles.card, { backgroundColor: caregiverZodiac.bgColor }]}>
-          <TouchableOpacity style={styles.avatarWrap} onPress={() => pickPhoto('caregiver')} activeOpacity={0.8}>
-            {profile.caregiverAvatarType === 'photo' && profile.caregiverPhotoUri ? (
+        <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
+          <View style={styles.avatarWrap}>
+            {profile.caregiverPhotoUri ? (
               <Image source={{ uri: profile.caregiverPhotoUri }} style={styles.avatarPhoto} />
             ) : (
-              <Text style={styles.cardEmoji}>{caregiverZodiac.emoji}</Text>
+              <Text style={styles.cardEmoji}>🧑</Text>
             )}
-            <View style={styles.cameraChip}>
+            <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('caregiver')}>
               <Text style={styles.cameraChipText}>📷</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.cardInfo}>
-            {editingCaregiverName ? (
-              <View style={styles.inlineEditRow}>
-                <TextInput
-                  style={styles.inlineInput}
-                  value={caregiverNameDraft}
-                  onChangeText={setCaregiverNameDraft}
-                  autoFocus
-                  placeholder="输入您的名字"
-                  placeholderTextColor={AppColors.text.tertiary}
-                  returnKeyType="done"
-                  onSubmitEditing={saveCaregiverName}
-                />
-                <TouchableOpacity style={styles.saveBtn} onPress={saveCaregiverName}>
-                  <Text style={styles.saveBtnText}>保存</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => {
-                  setCaregiverNameDraft(profile.caregiverName);
-                  setEditingCaregiverName(false);
-                }}>
-                  <Text style={{ fontSize: 16, color: AppColors.text.tertiary }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.nameRow}>
-                <Text style={styles.cardName}>{profile.caregiverName}</Text>
-                <TouchableOpacity
-                  style={styles.editIconBtn}
-                  onPress={() => {
-                    setCaregiverNameDraft(profile.caregiverName);
-                    setEditingCaregiverName(true);
-                  }}
-                >
-                  <Text style={{ fontSize: 13, color: AppColors.text.tertiary }}>✏️</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <Text style={styles.cardSub}>属{caregiverZodiac.name} · {profile.caregiverBirthYear}年</Text>
-            <Text style={styles.cardSub2}>照顾者</Text>
-            <TouchableOpacity
-              style={styles.editDetailBtn}
-              onPress={() => openEditModal('caregiver')}
-            >
-              <Text style={styles.editDetailBtnText}>编辑详情</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* ── 老人信息 ── */}
-        <Text style={styles.sectionLabel}>🧡 被照顾者</Text>
-        <View style={[styles.card, { backgroundColor: elderZodiac.bgColor }]}>
-          <TouchableOpacity style={styles.avatarWrap} onPress={() => pickPhoto('elder')} activeOpacity={0.8}>
-            {profile.elderAvatarType === 'photo' && profile.photoUri ? (
-              <Image source={{ uri: profile.photoUri }} style={styles.avatarPhoto} />
-            ) : (
-              <Text style={styles.cardEmoji}>{elderZodiac.emoji}</Text>
-            )}
-            <View style={styles.cameraChip}>
-              <Text style={styles.cameraChipText}>📷</Text>
-            </View>
-          </TouchableOpacity>
-
           <View style={styles.cardInfo}>
-            {editingElderNickname ? (
-              <View style={styles.inlineEditRow}>
-                <TextInput
-                  style={styles.inlineInput}
-                  value={elderNicknameDraft}
-                  onChangeText={setElderNicknameDraft}
-                  autoFocus
-                  placeholder="输入昵称（如：姥姥）"
-                  placeholderTextColor={AppColors.text.tertiary}
-                  returnKeyType="done"
-                  onSubmitEditing={saveElderNickname}
-                />
-                <TouchableOpacity style={styles.saveBtn} onPress={saveElderNickname}>
-                  <Text style={styles.saveBtnText}>保存</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => {
-                  setElderNicknameDraft(profile.nickname || profile.name);
-                  setEditingElderNickname(false);
-                }}>
-                  <Text style={{ fontSize: 16, color: AppColors.text.tertiary }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.nameRow}>
-                <Text style={styles.cardName}>{profile.nickname || profile.name}</Text>
-                <TouchableOpacity
-                  style={styles.editIconBtn}
-                  onPress={() => {
-                    setElderNicknameDraft(profile.nickname || profile.name);
-                    setEditingElderNickname(true);
-                  }}
-                >
-                  <Text style={{ fontSize: 13, color: AppColors.text.tertiary }}>✏️</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <Text style={styles.cardSub}>属{elderZodiac.name} · {new Date(profile.birthDate).getFullYear()}年</Text>
-            <Text style={styles.cardSub2}>{profile.name}</Text>
-            <TouchableOpacity
-              style={styles.editDetailBtn}
-              onPress={() => openEditModal('elder')}
-            >
-              <Text style={styles.editDetailBtnText}>编辑详情</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 权限被拒绝提示 Modal */}
-        <Modal visible={permDenied} transparent animationType="fade" onRequestClose={() => setPermDenied(false)}>
-          <View style={styles.permOverlay}>
-            <View style={styles.permBox}>
-              <Text style={{ fontSize: 32, marginBottom: 10 }}>📷</Text>
-              <Text style={styles.permTitle}>需要相册权限</Text>
-              <Text style={styles.permMsg}>请前往手机「设置」→「隐私」→「照片」，允许此 App 访问相册。</Text>
-              <TouchableOpacity style={styles.permBtn} onPress={() => setPermDenied(false)}>
-                <Text style={styles.permBtnText}>知道了</Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.cardName}>{profile.caregiverName || '照顾者'}</Text>
+              <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('caregiver')}>
+                <Text style={{ fontSize: 14 }}>✏️</Text>
               </TouchableOpacity>
             </View>
+            <Text style={styles.cardSub}>
+              {profile.caregiverZodiacName ? `属${profile.caregiverZodiacName} · ` : ''}
+              {profile.caregiverBirthYear ? `${profile.caregiverBirthYear}年` : '未设置年份'}
+            </Text>
+            <Text style={styles.cardSub2}>照顾者</Text>
+            <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('caregiver')}>
+              <Text style={styles.editDetailBtnText}>编辑详情</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-
-        {/* City */}
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>📍 所在城市</Text>
-          <Text style={styles.infoValue}>{profile.city}</Text>
         </View>
 
-        {/* ── 家庭管理 ── */}
+        {/* Elder Card */}
+        <Text style={styles.sectionLabel}>🧡 被照顾者</Text>
+        <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
+          <View style={styles.avatarWrap}>
+            {profile.photoUri ? (
+              <Image source={{ uri: profile.photoUri }} style={styles.avatarPhoto} />
+            ) : (
+              <Text style={styles.cardEmoji}>👵</Text>
+            )}
+            <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('elder')}>
+              <Text style={styles.cameraChipText}>📷</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.cardInfo}>
+            <View style={styles.nameRow}>
+              <Text style={styles.cardName}>{profile.nickname || profile.name || '家人'}</Text>
+              <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('elder')}>
+                <Text style={{ fontSize: 14 }}>✏️</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.cardSub}>
+              {profile.zodiacName ? `属${profile.zodiacName} · ` : ''}
+              {profile.birthDate ? `${new Date(profile.birthDate).getFullYear()}年` : '未设置年份'}
+            </Text>
+            <Text style={styles.cardSub2}>{profile.name || '家人'}</Text>
+            <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('elder')}>
+              <Text style={styles.editDetailBtnText}>编辑详情</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Family Management Section */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>👨‍👩‍👧 家庭管理</Text>
+          <Text style={styles.sectionTitle}>👨‍👩‍👧‍👦 家庭管理</Text>
         </View>
 
-        {/* 当前家庭列表 */}
         {memberships.length === 0 ? (
           <View style={styles.emptyFamilyCard}>
             <Text style={styles.emptyFamilyEmoji}>🏠</Text>
-            <Text style={styles.emptyFamilyText}>还没有加入任何家庭</Text>
+            <Text style={styles.emptyFamilyText}>尚未加入任何家庭</Text>
+            <Text style={styles.emptyFamilySub}>您可以创建新家庭或通过邀请码加入</Text>
           </View>
         ) : (
           memberships.map(m => {
-            const isActive = activeMembership?.familyId === m.familyId;
-            const isCreatorRole = m.role === 'creator';
+            const isActive = activeMembership?.id === m.id;
             return (
-              <View key={m.familyId} style={[styles.familyCard, isActive && styles.familyCardActive]}>
-                <TouchableOpacity
-                  style={styles.familyCardMain}
-                  onPress={() => switchFamily(m.familyId)}
-                  activeOpacity={0.75}
-                >
-                  <View style={styles.familyCardLeft}>
-                    <Text style={styles.familyCardEmoji}>{m.room.elderEmoji || '🧓'}</Text>
-                    <View>
-                      <Text style={styles.familyCardName}>{m.room.elderName} 的家庭</Text>
-                      <Text style={styles.familyCardRole}>
-                        {isCreatorRole ? '👑 主照顾者' : '👥 家庭成员'} · 邀请码 {m.room.roomCode}
-                      </Text>
+              <View key={m.id} style={[styles.familyCard, isActive && styles.familyCardActive]}>
+                <View style={styles.familyCardHeader}>
+                  <View style={styles.familyCardTitleRow}>
+                    <Text style={styles.familyCardName}>{m.roomName}</Text>
+                    <View style={styles.roleBadge}>
+                      <Text style={styles.roleBadgeText}>{ROLE_LABELS[m.role] || m.role}</Text>
                     </View>
                   </View>
-                  {isActive && (
-                    <View style={styles.activeBadge}>
-                      <Text style={styles.activeBadgeText}>当前</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                  <Text style={styles.roomCode}>邀请码: {m.roomCode}</Text>
+                </View>
+                
                 <TouchableOpacity
-                  style={[styles.familyDeleteBtn, isCreatorRole && styles.familyDeleteBtnRed]}
-                  onPress={() => confirmDeleteOrLeave(m.familyId, isCreatorRole ? 'delete' : 'leave')}
+                  style={styles.familyCardAction}
+                  onPress={() => confirmDeleteOrLeave(m.id, m.role === 'creator' ? 'delete' : 'leave')}
                 >
-                  <Text style={[styles.familyDeleteBtnText, isCreatorRole && styles.familyDeleteBtnTextRed]}>
-                    {isCreatorRole ? '解散' : '退出'}
+                  <Text style={styles.familyCardActionText}>
+                    {m.role === 'creator' ? '🗑️ 解散家庭' : '🚪 退出家庭'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -614,80 +517,80 @@ export default function ProfileScreen() {
             >
               <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
                 <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editTarget === 'caregiver' ? '📝 编辑照顾者信息' : '📝 编辑被照顾者信息'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)} style={styles.modalCloseBtn}>
-                <Text style={styles.modalCloseBtnText}>✕</Text>
-              </TouchableOpacity>
-            </View>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>
+                      {editTarget === 'caregiver' ? '📝 编辑照顾者信息' : '📝 编辑被照顾者信息'}
+                    </Text>
+                    <TouchableOpacity onPress={() => setShowEditModal(false)} style={styles.modalCloseBtn}>
+                      <Text style={styles.modalCloseBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
 
-            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {editTarget === 'caregiver' ? (
-                <>
-                  <Text style={styles.modalLabel}>您的姓名</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={draftCaregiverName}
-                    onChangeText={setDraftCaregiverName}
-                    placeholder="输入您的姓名"
-                  />
-                  <Text style={styles.modalLabel}>出生年份</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={draftCaregiverBirthYear}
-                    onChangeText={setDraftCaregiverBirthYear}
-                    placeholder="例如：1985"
-                    keyboardType="number-pad"
-                  />
-                  <Text style={styles.modalLabel}>所在城市</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={draftCity}
-                    onChangeText={setDraftCity}
-                    placeholder="例如：北京"
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.modalLabel}>昵称（如：姥姥）</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={draftElderNickname}
-                    onChangeText={setDraftElderNickname}
-                    placeholder="输入昵称"
-                  />
-                  <Text style={styles.modalLabel}>真实姓名</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={draftElderName}
-                    onChangeText={setDraftElderName}
-                    placeholder="输入真实姓名"
-                  />
-                  <Text style={styles.modalLabel}>出生日期</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={draftElderBirthDate}
-                    onChangeText={setDraftElderBirthDate}
-                    placeholder="格式：YYYY-MM-DD"
-                  />
-                  <Text style={styles.modalLabel}>所在城市</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={draftElderCity}
-                    onChangeText={setDraftElderCity}
-                    placeholder="例如：北京"
-                  />
-                </>
-              )}
-              
-              <TouchableOpacity style={styles.modalSubmitBtn} onPress={saveEditModal}>
-                <Text style={styles.modalSubmitBtnText}>保存修改</Text>
-              </TouchableOpacity>
-              <View style={{ height: 20 }} />
-            </ScrollView>
-          </View>
+                  <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    {editTarget === 'caregiver' ? (
+                      <>
+                        <Text style={styles.modalLabel}>您的姓名</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={draftCaregiverName}
+                          onChangeText={setDraftCaregiverName}
+                          placeholder="输入您的姓名"
+                        />
+                        <Text style={styles.modalLabel}>出生年份</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={draftCaregiverBirthYear}
+                          onChangeText={setDraftCaregiverBirthYear}
+                          placeholder="例如：1985"
+                          keyboardType="number-pad"
+                        />
+                        <Text style={styles.modalLabel}>所在城市</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={draftCity}
+                          onChangeText={setDraftCity}
+                          placeholder="例如：北京"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.modalLabel}>昵称（如：姥姥）</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={draftElderNickname}
+                          onChangeText={setDraftElderNickname}
+                          placeholder="输入昵称"
+                        />
+                        <Text style={styles.modalLabel}>真实姓名</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={draftElderName}
+                          onChangeText={setDraftElderName}
+                          placeholder="输入真实姓名"
+                        />
+                        <Text style={styles.modalLabel}>出生日期</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={draftElderBirthDate}
+                          onChangeText={setDraftElderBirthDate}
+                          placeholder="格式：YYYY-MM-DD"
+                        />
+                        <Text style={styles.modalLabel}>所在城市</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={draftElderCity}
+                          onChangeText={setDraftElderCity}
+                          placeholder="例如：北京"
+                        />
+                      </>
+                    )}
+                    
+                    <TouchableOpacity style={styles.modalSubmitBtn} onPress={saveEditModal}>
+                      <Text style={styles.modalSubmitBtnText}>保存修改</Text>
+                    </TouchableOpacity>
+                    <View style={{ height: 20 }} />
+                  </ScrollView>
+                </View>
               </TouchableWithoutFeedback>
             </KeyboardAvoidingView>
           </View>
@@ -704,108 +607,108 @@ export default function ProfileScreen() {
             >
               <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
                 <View style={styles.modalBox}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {familyModalTab === 'join' ? '🔗 加入家庭' : '🏠 创建新家庭'}
-              </Text>
-              <TouchableOpacity onPress={() => { Keyboard.dismiss(); setShowFamilyModal(false); }} style={styles.modalCloseBtn}>
-                <Text style={styles.modalCloseBtnText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Tab 切换 */}
-            <View style={styles.modalTabRow}>
-              <TouchableOpacity
-                style={[styles.modalTab, familyModalTab === 'join' && styles.modalTabActive]}
-                onPress={() => { setFamilyModalTab('join'); setJoinError(''); }}
-              >
-                <Text style={[styles.modalTabText, familyModalTab === 'join' && styles.modalTabTextActive]}>加入已有家庭</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalTab, familyModalTab === 'create' && styles.modalTabActive]}
-                onPress={() => { setFamilyModalTab('create'); setJoinError(''); }}
-              >
-                <Text style={[styles.modalTabText, familyModalTab === 'create' && styles.modalTabTextActive]}>创建新家庭</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* 加入家庭表单 */}
-            {familyModalTab === 'join' && (
-              <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <Text style={styles.modalLabel}>邀请码（6位）</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={joinCode}
-                  onChangeText={v => setJoinCode(v.toUpperCase())}
-                  placeholder="请输入邀请码，如 ABC123"
-                  placeholderTextColor={AppColors.text.tertiary}
-                  autoCapitalize="characters"
-                  maxLength={6}
-                />
-                <Text style={styles.modalLabel}>您的名字</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={joinName}
-                  onChangeText={setJoinName}
-                  placeholder="请输入您的名字"
-                  placeholderTextColor={AppColors.text.tertiary}
-                />
-                {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
-                <TouchableOpacity
-                  style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
-                  onPress={handleJoinFamily}
-                  disabled={joinLoading}
-                >
-                  {joinLoading ? (
-                    <ActivityIndicator color={AppColors.surface.whiteStrong} />
-                  ) : (
-                    <Text style={styles.modalSubmitBtnText}>加入家庭</Text>
-                  )}
-                </TouchableOpacity>
-                <View style={{ height: 16 }} />
-              </ScrollView>
-            )}
-
-            {/* 创建家庭表单 */}
-            {familyModalTab === 'create' && (
-              <View style={styles.modalForm}>
-                {memberships.some(m => m.role === 'caregiver' || m.role === 'creator') ? (
-                  <View style={[styles.createInfoCard, { backgroundColor: '#FFF5F5', borderColor: '#FFE0E0' }]}>
-                    <Text style={styles.createInfoEmoji}>⚠️</Text>
-                    <Text style={[styles.createInfoText, { color: '#E53E3E' }]}>
-                      您当前已经是一个家庭的主照顾者。
+                  {/* Modal Header */}
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>
+                      {familyModalTab === 'join' ? '🔗 加入家庭' : '🏠 创建新家庭'}
                     </Text>
-                    <Text style={styles.createInfoSub}>
-                      为了避免数据混乱，每个账号只能创建一个家庭。如需创建新家庭，请先解散当前家庭。
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <View style={styles.createInfoCard}>
-                      <Text style={styles.createInfoEmoji}>🏠</Text>
-                      <Text style={styles.createInfoText}>
-                        将以 <Text style={{ fontWeight: '700' }}>{profile?.caregiverName || '您'}</Text> 的身份，
-                        为 <Text style={{ fontWeight: '700' }}>{profile?.nickname || profile?.name || '家人'}</Text> 创建一个新的护理家庭。
-                      </Text>
-                      <Text style={styles.createInfoSub}>系统会自动生成邀请码，您可以邀请其他家人加入。</Text>
-                    </View>
-                    {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
-                    <TouchableOpacity
-                      style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
-                      onPress={handleCreateFamily}
-                      disabled={joinLoading}
-                    >
-                      {joinLoading ? (
-                        <ActivityIndicator color={AppColors.surface.whiteStrong} />
-                      ) : (
-                        <Text style={styles.modalSubmitBtnText}>创建家庭</Text>
-                      )}
+                    <TouchableOpacity onPress={() => { Keyboard.dismiss(); setShowFamilyModal(false); }} style={styles.modalCloseBtn}>
+                      <Text style={styles.modalCloseBtnText}>✕</Text>
                     </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            )}
+                  </View>
+
+                  {/* Tab 切换 */}
+                  <View style={styles.modalTabs}>
+                    <TouchableOpacity
+                      style={[styles.modalTab, familyModalTab === 'join' && styles.modalTabActive]}
+                      onPress={() => { setFamilyModalTab('join'); setJoinError(''); }}
+                    >
+                      <Text style={[styles.modalTabText, familyModalTab === 'join' && styles.modalTabTextActive]}>加入已有家庭</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalTab, familyModalTab === 'create' && styles.modalTabActive]}
+                      onPress={() => { setFamilyModalTab('create'); setJoinError(''); }}
+                    >
+                      <Text style={[styles.modalTabText, familyModalTab === 'create' && styles.modalTabTextActive]}>创建新家庭</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* 加入家庭表单 */}
+                  {familyModalTab === 'join' && (
+                    <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                      <Text style={styles.modalLabel}>邀请码（6位）</Text>
+                      <TextInput
+                        style={styles.modalInput}
+                        value={joinCode}
+                        onChangeText={v => setJoinCode(v.toUpperCase())}
+                        placeholder="请输入邀请码，如 ABC123"
+                        placeholderTextColor={AppColors.text.tertiary}
+                        autoCapitalize="characters"
+                        maxLength={6}
+                      />
+                      <Text style={styles.modalLabel}>您的名字</Text>
+                      <TextInput
+                        style={styles.modalInput}
+                        value={joinName}
+                        onChangeText={setJoinName}
+                        placeholder="请输入您的名字"
+                        placeholderTextColor={AppColors.text.tertiary}
+                      />
+                      {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
+                      <TouchableOpacity
+                        style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
+                        onPress={handleJoinFamily}
+                        disabled={joinLoading}
+                      >
+                        {joinLoading ? (
+                          <ActivityIndicator color={AppColors.surface.whiteStrong} />
+                        ) : (
+                          <Text style={styles.modalSubmitBtnText}>加入家庭</Text>
+                        )}
+                      </TouchableOpacity>
+                      <View style={{ height: 16 }} />
+                    </ScrollView>
+                  )}
+
+                  {/* 创建家庭表单 */}
+                  {familyModalTab === 'create' && (
+                    <View style={styles.modalForm}>
+                      {memberships.some(m => m.role === 'caregiver' || m.role === 'creator') ? (
+                        <View style={[styles.createInfoCard, { backgroundColor: '#FFF5F5', borderColor: '#FFE0E0' }]}>
+                          <Text style={styles.createInfoEmoji}>⚠️</Text>
+                          <Text style={[styles.createInfoText, { color: '#E53E3E' }]}>
+                            您当前已经是一个家庭的主照顾者。
+                          </Text>
+                          <Text style={styles.createInfoSub}>
+                            为了避免数据混乱，每个账号只能创建一个家庭。如需创建新家庭，请先解散当前家庭。
+                          </Text>
+                        </View>
+                      ) : (
+                        <>
+                          <View style={styles.createInfoCard}>
+                            <Text style={styles.createInfoEmoji}>🏠</Text>
+                            <Text style={styles.createInfoText}>
+                              将以 <Text style={{ fontWeight: '700' }}>{profile?.caregiverName || '您'}</Text> 的身份，
+                              为 <Text style={{ fontWeight: '700' }}>{profile?.nickname || profile?.name || '家人'}</Text> 创建一个新的护理家庭。
+                            </Text>
+                            <Text style={styles.createInfoSub}>系统会自动生成邀请码，您可以邀请其他家人加入。</Text>
+                          </View>
+                          {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
+                          <TouchableOpacity
+                            style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
+                            onPress={handleCreateFamily}
+                            disabled={joinLoading}
+                          >
+                            {joinLoading ? (
+                              <ActivityIndicator color={AppColors.surface.whiteStrong} />
+                            ) : (
+                              <Text style={styles.modalSubmitBtnText}>创建家庭</Text>
+                            )}
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  )}
                 </View>
               </TouchableWithoutFeedback>
             </KeyboardAvoidingView>
@@ -965,189 +868,158 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 24,
     alignItems: 'center', marginBottom: 12, gap: 8,
   },
-  emptyFamilyEmoji: { fontSize: 32 },
-  emptyFamilyText: { fontSize: 14, color: AppColors.text.tertiary },
+  emptyFamilyEmoji: { fontSize: 32, marginBottom: 4 },
+  emptyFamilyText: { fontSize: 16, fontWeight: '700', color: AppColors.text.primary },
+  emptyFamilySub: { fontSize: 13, color: AppColors.text.tertiary, textAlign: 'center' },
 
   familyCard: {
-    backgroundColor: AppColors.bg.secondary, borderRadius: 16,
-    marginBottom: 10, overflow: 'hidden',
-    borderWidth: 1.5, borderColor: 'transparent',
+    backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 16,
+    marginBottom: 12, borderWidth: 1, borderColor: AppColors.border.soft,
   },
-  familyCardActive: {
-    borderColor: AppColors.coral.primary,
-    backgroundColor: AppColors.coral.soft,
-  },
-  familyCardMain: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 14, paddingRight: 12,
-  },
-  familyCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  familyCardEmoji: { fontSize: 28 },
-  familyCardName: { fontSize: 15, fontWeight: '700', color: AppColors.text.primary },
-  familyCardRole: { fontSize: 12, color: AppColors.text.tertiary, marginTop: 2 },
-  activeBadge: {
-    backgroundColor: AppColors.coral.primary, borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
-  activeBadgeText: { fontSize: 11, fontWeight: '700', color: AppColors.surface.whiteStrong },
-  familyDeleteBtn: {
-    borderTopWidth: 1, borderTopColor: AppColors.border.soft,
-    paddingVertical: 10, alignItems: 'center',
-  },
-  familyDeleteBtnRed: { borderTopColor: '#FEE2E2' },
-  familyDeleteBtnText: { fontSize: 13, fontWeight: '600', color: AppColors.text.tertiary },
-  familyDeleteBtnTextRed: { color: '#EF4444' },
+  familyCardActive: { borderColor: AppColors.coral.primary, backgroundColor: '#FFF9F9' },
+  familyCardHeader: { marginBottom: 12 },
+  familyCardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  familyCardName: { fontSize: 16, fontWeight: '700', color: AppColors.text.primary },
+  roleBadge: { backgroundColor: 'rgba(0,0,0,0.05)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  roleBadgeText: { fontSize: 11, color: AppColors.text.secondary, fontWeight: '600' },
+  roomCode: { fontSize: 13, color: AppColors.text.tertiary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  familyCardAction: { alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: 8 },
+  familyCardActionText: { fontSize: 13, color: AppColors.text.secondary, fontWeight: '500' },
 
-  familyActionRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  familyActionRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
   familyActionBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 14,
-    borderWidth: 1.5, borderColor: AppColors.border.soft,
+    flex: 1, height: 48, borderRadius: 14,
+    backgroundColor: AppColors.bg.secondary,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1, borderColor: AppColors.border.soft,
   },
-  familyActionBtnPrimary: {
-    backgroundColor: AppColors.coral.primary, borderColor: AppColors.coral.primary,
-  },
+  familyActionBtnPrimary: { backgroundColor: AppColors.coral.primary, borderColor: AppColors.coral.primary },
   familyActionIcon: { fontSize: 18 },
-  familyActionText: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary },
+  familyActionText: { fontSize: 15, fontWeight: '600', color: AppColors.text.primary },
 
   settingRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 16, marginBottom: 8,
+    backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 16,
   },
-  settingInfo: { flex: 1, marginRight: 12 },
-  settingLabel: { fontSize: 15, fontWeight: '600', color: AppColors.text.primary, marginBottom: 2 },
+  settingInfo: { flex: 1 },
+  settingLabel: { fontSize: 16, fontWeight: '600', color: AppColors.text.primary, marginBottom: 2 },
   settingDesc: { fontSize: 13, color: AppColors.text.tertiary },
-  notifInfo: {
-    backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 14, marginBottom: 16, gap: 6,
-  },
-  notifInfoText: { fontSize: 14, color: AppColors.text.secondary, lineHeight: 20 },
 
-  editBtn: {
-    backgroundColor: AppColors.coral.primary, borderRadius: 20, padding: 16,
-    alignItems: 'center', marginTop: 8,
-  },
-  editBtnText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
-  btn: { backgroundColor: AppColors.coral.primary, borderRadius: 20, paddingHorizontal: 32, paddingVertical: 14 },
-  btnText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
-
-  permOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  permBox: { backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, padding: 28, width: 300, alignItems: 'center' },
-  permTitle: { fontSize: 17, fontWeight: '800', color: AppColors.text.primary, marginBottom: 8 },
-  permMsg: { fontSize: 14, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
-  permBtn: { backgroundColor: AppColors.coral.primary, borderRadius: 14, paddingHorizontal: 28, paddingVertical: 12 },
-  permBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
+  notifInfo: { marginTop: 12, paddingHorizontal: 16, gap: 4 },
+  notifInfoText: { fontSize: 13, color: AppColors.text.secondary },
 
   reminderEditCard: {
-    backgroundColor: AppColors.purple.soft,
-    borderRadius: 20, padding: 18, marginBottom: 16,
-    borderWidth: 1, borderColor: AppColors.purple.primary,
+    marginTop: 16, backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 16,
   },
-  reminderEditTitle: { fontSize: 15, fontWeight: '800', color: AppColors.purple.strong, marginBottom: 14 },
+  reminderEditTitle: { fontSize: 15, fontWeight: '700', color: AppColors.text.primary, marginBottom: 12 },
   reminderEditRow: { gap: 8 },
-  reminderEditLabel: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary, marginBottom: 6 },
+  reminderEditLabel: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary },
   timeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   timeChipSmall: {
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16,
-    backgroundColor: AppColors.purple.soft, borderWidth: 1.5, borderColor: 'transparent',
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: AppColors.surface.whiteStrong, borderWidth: 1, borderColor: AppColors.border.soft,
   },
-  timeChipSmallActive: { backgroundColor: AppColors.purple.strong, borderColor: AppColors.purple.strong },
-  timeChipSmallText: { fontSize: 13, fontWeight: '600', color: AppColors.purple.strong },
+  timeChipSmallActive: { backgroundColor: AppColors.coral.primary, borderColor: AppColors.coral.primary },
+  timeChipSmallText: { fontSize: 13, color: AppColors.text.secondary, fontWeight: '600' },
   timeChipSmallTextActive: { color: AppColors.surface.whiteStrong },
 
-  // 家庭管理 Modal
+  editBtn: {
+    marginTop: 32, height: 56, borderRadius: 16,
+    backgroundColor: AppColors.bg.secondary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: AppColors.border.soft,
+  },
+  editBtnText: { fontSize: 16, fontWeight: '600', color: AppColors.text.secondary },
+
+  deleteAccountBtn: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
+  deleteAccountBtnText: { fontSize: 14, color: AppColors.text.tertiary, textDecorationLine: 'underline' },
+
+  btn: {
+    backgroundColor: AppColors.coral.primary,
+    paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12,
+  },
+  btnText: { color: AppColors.surface.whiteStrong, fontSize: 16, fontWeight: '600' },
+
+  // Modal Styles
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   modalBox: {
     backgroundColor: AppColors.surface.whiteStrong,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24, paddingBottom: 40,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '90%',
   },
   modalHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 24, marginBottom: 20,
   },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: AppColors.text.primary },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: AppColors.text.primary },
   modalCloseBtn: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: AppColors.bg.secondary, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: AppColors.bg.secondary,
+    alignItems: 'center', justifyContent: 'center',
   },
-  modalCloseBtnText: { fontSize: 16, color: AppColors.text.tertiary },
-  modalTabRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-  modalTab: {
-    flex: 1, paddingVertical: 10, borderRadius: 14,
-    backgroundColor: AppColors.bg.secondary, alignItems: 'center',
-    borderWidth: 1.5, borderColor: 'transparent',
-  },
-  modalTabActive: {
-    backgroundColor: AppColors.coral.soft, borderColor: AppColors.coral.primary,
-  },
-  modalTabText: { fontSize: 14, fontWeight: '600', color: AppColors.text.tertiary },
-  modalTabTextActive: { color: AppColors.coral.primary },
-  modalForm: { gap: 4 },
-  modalLabel: { fontSize: 13, fontWeight: '700', color: AppColors.text.secondary, marginBottom: 6, marginTop: 8 },
+  modalCloseBtnText: { fontSize: 16, color: AppColors.text.secondary },
+  modalForm: { paddingHorizontal: 24 },
+  modalLabel: { fontSize: 14, fontWeight: '600', color: AppColors.text.secondary, marginBottom: 8, marginTop: 16 },
   modalInput: {
-    backgroundColor: AppColors.bg.secondary, borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 12,
-    fontSize: 15, color: AppColors.text.primary,
-    borderWidth: 1.5, borderColor: AppColors.border.soft,
-    marginBottom: 4,
+    height: 52, backgroundColor: AppColors.bg.secondary,
+    borderRadius: 12, paddingHorizontal: 16, fontSize: 16, color: AppColors.text.primary,
   },
-  roleRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
-  roleChip: {
-    flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 14,
-    backgroundColor: AppColors.bg.secondary, borderWidth: 1.5, borderColor: 'transparent', gap: 4,
-  },
-  roleChipActive: { backgroundColor: AppColors.coral.soft, borderColor: AppColors.coral.primary },
-  roleChipEmoji: { fontSize: 20 },
-  roleChipText: { fontSize: 12, fontWeight: '600', color: AppColors.text.tertiary },
-  roleChipTextActive: { color: AppColors.coral.primary },
-  joinError: { fontSize: 13, color: '#EF4444', marginTop: 4, marginBottom: 4 },
   modalSubmitBtn: {
-    backgroundColor: AppColors.coral.primary, borderRadius: 16,
-    paddingVertical: 14, alignItems: 'center', marginTop: 16,
+    marginTop: 32, height: 56, borderRadius: 16,
+    backgroundColor: AppColors.coral.primary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: AppColors.coral.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
   },
-  modalSubmitBtnText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
+  modalSubmitBtnText: { fontSize: 17, fontWeight: '700', color: AppColors.surface.whiteStrong },
+
+  modalTabs: { flexDirection: 'row', paddingHorizontal: 24, gap: 12, marginBottom: 20 },
+  modalTab: {
+    flex: 1, height: 44, borderRadius: 12,
+    backgroundColor: AppColors.bg.secondary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: AppColors.border.soft,
+  },
+  modalTabActive: { backgroundColor: '#FFF5F5', borderColor: AppColors.coral.primary },
+  modalTabText: { fontSize: 14, fontWeight: '600', color: AppColors.text.secondary },
+  modalTabTextActive: { color: AppColors.coral.primary },
+
+  joinError: { color: AppColors.coral.primary, fontSize: 13, marginTop: 12, textAlign: 'center' },
 
   createInfoCard: {
-    backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 18,
-    alignItems: 'center', gap: 8, marginBottom: 4,
+    backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 20,
+    alignItems: 'center', gap: 8, borderWidth: 1, borderColor: AppColors.border.soft,
   },
-  createInfoEmoji: { fontSize: 36 },
-  createInfoText: { fontSize: 14, color: AppColors.text.primary, textAlign: 'center', lineHeight: 22 },
-  createInfoSub: { fontSize: 12, color: AppColors.text.tertiary, textAlign: 'center', lineHeight: 18 },
+  createInfoEmoji: { fontSize: 32, marginBottom: 4 },
+  createInfoText: { fontSize: 15, color: AppColors.text.primary, textAlign: 'center', lineHeight: 22 },
+  createInfoSub: { fontSize: 13, color: AppColors.text.tertiary, textAlign: 'center' },
 
-  // 删除确认 Modal
-  confirmBox: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24, padding: 28,
-    width: 320, alignItems: 'center',
+  permOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center', justifyContent: 'center', padding: 32,
   },
-  confirmEmoji: { fontSize: 40, marginBottom: 12 },
-  confirmTitle: { fontSize: 18, fontWeight: '800', color: AppColors.text.primary, marginBottom: 10 },
-  confirmMsg: { fontSize: 14, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBox: {
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 24,
+    padding: 24, width: '100%', alignItems: 'center',
+  },
+  confirmEmoji: { fontSize: 40, marginBottom: 16 },
+  confirmTitle: { fontSize: 20, fontWeight: '700', color: AppColors.text.primary, marginBottom: 12 },
+  confirmMsg: { fontSize: 15, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   confirmBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
   confirmCancelBtn: {
-    flex: 1, backgroundColor: AppColors.bg.secondary, borderRadius: 16,
-    paddingVertical: 14, alignItems: 'center',
+    flex: 1, height: 52, borderRadius: 14,
+    backgroundColor: AppColors.bg.secondary,
+    alignItems: 'center', justifyContent: 'center',
   },
-  confirmCancelBtnText: { fontSize: 15, fontWeight: '600', color: AppColors.text.secondary },
+  confirmCancelBtnText: { fontSize: 16, fontWeight: '600', color: AppColors.text.secondary },
   confirmDeleteBtn: {
-    flex: 1, backgroundColor: '#EF4444', borderRadius: 16,
-    paddingVertical: 14, alignItems: 'center',
+    flex: 1, height: 52, borderRadius: 14,
+    backgroundColor: AppColors.coral.primary,
+    alignItems: 'center', justifyContent: 'center',
   },
-  confirmLeaveBtn: { backgroundColor: AppColors.coral.primary },
-  confirmDeleteBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
-
-  deleteAccountBtn: {
-    marginTop: 8,
-    marginBottom: 32,
-    alignSelf: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  deleteAccountBtnText: {
-    fontSize: 14,
-    color: AppColors.text.tertiary,
-    textDecorationLine: 'underline',
-  },
+  confirmLeaveBtn: { backgroundColor: AppColors.text.primary },
+  confirmDeleteBtnText: { fontSize: 16, fontWeight: '600', color: AppColors.surface.whiteStrong },
 });
