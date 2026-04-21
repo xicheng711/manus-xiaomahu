@@ -421,8 +421,23 @@ export async function cloudGetMedications(roomId?: number) {
   }
 }
 
-// ─── Elder Profile Sync ──────────────────────────────────────────────────────
+/** Delete a medication from the server by matching name (local id is string, server id is number) */
+export async function cloudDeleteMedication(medName: string, roomId?: number) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return;
+  try {
+    const client = getClient();
+    // Find the server-side medication by name
+    const serverMeds = await client.family.getMedications.query({ roomId: rid });
+    const match = serverMeds.find((m: any) => m.name === medName);
+    if (!match) return; // not yet synced to server, nothing to delete
+    await client.family.deleteMedication.mutate({ roomId: rid, medicationId: match.id });
+  } catch (e) {
+    console.warn('[CloudSync] deleteMedication failed:', e);
+  }
+}
 
+// ─── Elder Profile Sync ──────────────────────────────────────────────────────
 /** Get elder profile from server */
 export async function cloudGetElderProfile(roomId?: number) {
   const rid = roomId ?? await getActiveRoomId();

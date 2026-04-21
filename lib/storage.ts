@@ -3,6 +3,7 @@ import {
   cloudSyncCheckIn,
   cloudSyncDiary,
   cloudSyncMedication,
+  cloudDeleteMedication,
   cloudPostAnnouncement,
   cloudSaveBriefing,
   cloudCreateRoom,
@@ -504,7 +505,7 @@ export async function getRecentCheckIns(days = 7, roomId?: string): Promise<Dail
   return all.slice(0, days);
 }
 
-export async function getWeeklySleepData(days = 7): Promise<Array<{
+export async function getWeeklySleepData(days = 7, roomId?: string): Promise<Array<{
   date: string;
   sleepHours: number;
   awakeHours: number;
@@ -515,7 +516,7 @@ export async function getWeeklySleepData(days = 7): Promise<Array<{
   napMinutes: number;
   hasMorningData: boolean;
 }>> {
-  const all = await getAllCheckIns();
+  const all = await getAllCheckIns(roomId);
   const result: Array<{
     date: string;
     sleepHours: number;
@@ -601,8 +602,15 @@ export async function updateMedication(id: string, data: Partial<Medication>, ro
 export async function deleteMedication(id: string, roomId?: string): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
-  const filtered = (await getMedications(rid ?? undefined)).filter(m => m.id !== id);
+  // Find the medication name before deleting locally (needed for cloud sync)
+  const all = await getMedications(rid ?? undefined);
+  const target = all.find(m => m.id === id);
+  const filtered = all.filter(m => m.id !== id);
   await AsyncStorage.setItem(key, JSON.stringify(filtered));
+  // Cloud sync: delete from server by name (best-effort, fire-and-forget)
+  if (target?.name) {
+    cloudDeleteMedication(target.name, rid ? Number(rid) : undefined).catch(() => {});
+  }
 }
 
 // ─── Diary Entries ────────────────────────────────────────────────────────────

@@ -729,7 +729,7 @@ export default function ShareScreen() {
       setViewMode('today'); // 展示模式不影响历史记录
 
       // 加载周数据
-      const weekly = await getWeeklySleepData(7);
+      const weekly = await getWeeklySleepData(7, familyId);
       setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
 
       // 使用本地构建简报（历史模式不调用 AI）
@@ -860,7 +860,7 @@ export default function ShareScreen() {
         getUserProfile(),
         getFamilyProfile(familyId),
         getProfile(),
-        getWeeklySleepData(7),
+        getWeeklySleepData(7, familyId),
         getTodayCheckIn(),
         getYesterdayCheckIn(),
       ]);

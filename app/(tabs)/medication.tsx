@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getMedications, saveMedications, Medication, getProfile, getUserProfile, getFamilyProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
+import { getMedications, saveMedication, updateMedication, deleteMedication, Medication, getProfile, getUserProfile, getFamilyProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -170,13 +170,18 @@ function MedicationScreenContent() {
     const nickname = fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人';
 
     if (editingMed) {
-      // ── Edit existing ──
-      const updated = meds.map(m => m.id === editingMed.id ? {
-        ...m, name: name.trim(), dosage: dosage.trim() || '按医嘱',
-        frequency: FREQUENCIES[freqIdx], times: selectedTimes,
-        notes: notes.trim(), icon, reminderEnabled,
-      } : m);
-      await saveMedications(updated);
+      // ── Edit existing ── (updateMedication 自带云端同步)
+      const patch = {
+        name: name.trim(),
+        dosage: dosage.trim() || '按医嘱',
+        frequency: FREQUENCIES[freqIdx],
+        times: selectedTimes,
+        notes: notes.trim(),
+        icon,
+        reminderEnabled,
+      };
+      await updateMedication(editingMed.id, patch);
+      const updated = meds.map(m => m.id === editingMed.id ? { ...m, ...patch } : m);
       setMeds(updated);
       // handle reminders—差集算法：取消已删除的时间点，新增新时间点
       const oldTimes = editingMed.times || [];
@@ -201,9 +206,8 @@ function MedicationScreenContent() {
         cancelMedicationReminder(editingMed.id + '_evening').catch(() => {});
       }
     } else {
-      // ── Add new ──
-      const newMed: Medication = {
-        id: Date.now().toString(),
+      // ── Add new ── (saveMedication 自带云端同步)
+      const newMed = await saveMedication({
         name: name.trim(),
         dosage: dosage.trim() || '按医嘱',
         frequency: FREQUENCIES[freqIdx],
@@ -212,10 +216,8 @@ function MedicationScreenContent() {
         icon,
         active: true,
         reminderEnabled,
-      };
-      const updated = [...meds, newMed];
-      await saveMedications(updated);
-      setMeds(updated);
+      });
+      setMeds(prev => [...prev, newMed]);
       if (reminderEnabled) {
         for (const t of selectedTimes) {
           const [h, min] = t.split(':').map(Number);
@@ -230,9 +232,11 @@ function MedicationScreenContent() {
 
   async function handleToggle(id: string) {
     if (!isCreator) return; // joiner 无权限操作
-    const updated = meds.map(m => m.id === id ? { ...m, active: !m.active } : m);
-    await saveMedications(updated);
-    setMeds(updated);
+    const target = meds.find(m => m.id === id);
+    if (!target) return;
+    // updateMedication 自带云端同步
+    await updateMedication(id, { active: !target.active });
+    setMeds(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }
 
@@ -242,9 +246,9 @@ function MedicationScreenContent() {
       { text: '取消', style: 'cancel' },
       {
         text: '删除', style: 'destructive', onPress: async () => {
-          const updated = meds.filter(m => m.id !== id);
-          await saveMedications(updated);
-          setMeds(updated);
+          // deleteMedication 自带云端同步
+          await deleteMedication(id);
+          setMeds(prev => prev.filter(m => m.id !== id));
         }
       }
     ]);

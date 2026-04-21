@@ -12,6 +12,7 @@ import {
   saveBriefing, getTodayBriefing, getLatestBriefing, CareBriefing,
 } from '@/lib/storage';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
+import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
 import { BackButton } from '@/components/back-button';
 import { COLORS, RADIUS, SHADOWS } from '@/lib/animations';
@@ -97,6 +98,8 @@ function formatDateShort(dateStr: string) {
 
 
 export default function AssistantScreen() {
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [advice, setAdvice] = useState<{
     careScore?: number; summary?: string; encouragement?: string; suggestion?: string;
   } | null>(null);
@@ -131,7 +134,7 @@ export default function AssistantScreen() {
       setTodayCheckIn(today);
       setYesterdayCheckIn(yesterday);
 
-      const weekly = await getWeeklySleepData(7);
+      const weekly = await getWeeklySleepData(7, familyId);
       setWeeklyData(weekly);
 
       const savedBriefing = await getTodayBriefing();
