@@ -974,7 +974,7 @@ export default function ShareScreen() {
       return;
     }
     if (!cardRef.current) return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSharingImage(true);
     try {
       const ViewShot = require('react-native-view-shot');

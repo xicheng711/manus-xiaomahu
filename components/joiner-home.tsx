@@ -355,7 +355,8 @@ export function JoinerHomeScreen() {
   const loadData = useCallback(async () => {
     if (activeMembership) {
       setElderNickname(activeMembership.room.elderName || '家人');
-      const elderMember = activeMembership.room.members.find(m => m.role === 'elder');
+      // FamilyMember.role 只有 caregiver/family/nurse，没有 elder；用 isCreator 找主照顾者
+      const elderMember = activeMembership.room.members.find(m => m.isCreator);
       if (elderMember?.emoji) setElderEmoji(elderMember.emoji);
     }
     const profile = await getProfile();

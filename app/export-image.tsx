@@ -317,7 +317,6 @@ export default function ExportImageScreen() {
             medicationTaken: ci.medicationTaken ?? true,
             notes: ci.eveningNotes || ci.morningNotes || undefined,
           },
-          careScore: 0,
         });
         if (result.success && result.briefing) {
           setBriefing(result.briefing);

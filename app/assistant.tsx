@@ -98,7 +98,7 @@ function formatDateShort(dateStr: string) {
 
 export default function AssistantScreen() {
   const [advice, setAdvice] = useState<{
-    careScore?: number; summary?: string; encouragement?: string;
+    careScore?: number; summary?: string; encouragement?: string; suggestion?: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

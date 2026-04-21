@@ -185,7 +185,7 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
   const entriesByDate = useMemo(() => {
     const m: Record<string, DiaryEntry[]> = {};
     entries.forEach(e => {
-      const d = new Date(e.createdAt);
+       const d = new Date(e.createdAt ?? '');
       if (!isNaN(d.getTime())) {
         const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         if (!m[key]) m[key] = [];
@@ -194,7 +194,6 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
     });
     return m;
   }, [entries]);
-
   const entryDatesSet = useMemo(() => new Set(Object.keys(entriesByDate)), [entriesByDate]);
 
   const dateMoodEmoji = useMemo(() => {
@@ -451,7 +450,7 @@ function DiaryScreenContent() {
               {!editMode && showAll && (() => {
                 const grouped: Record<string, DiaryEntry[]> = {};
                 entries.slice(3).forEach(e => {
-                  const d = new Date(e.createdAt);
+                  const d = new Date(e.createdAt ?? '');
                   const key = `${d.getFullYear()}年${d.getMonth() + 1}月`;
                   if (!grouped[key]) grouped[key] = [];
                   grouped[key].push(e);

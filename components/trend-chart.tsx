@@ -733,7 +733,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
           </View>
         </View>
         {avgCaregiverMood > 0 ? (
-          <MoodGauge avgMood={avgCaregiverMood} prevAvg={prevAvgCaregiverMood} flat />
+          <MoodGauge avgMood={avgCaregiverMood} prevAvg={prevAvgCaregiverMood} />
         ) : (
           <View style={styles.emptyHint}>
             <Text style={styles.emptyHintText}>每日打卡时记录您的心情，这里会显示趋势图 😊</Text>
