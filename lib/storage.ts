@@ -400,13 +400,18 @@ export async function getFamilyProfile(roomId?: string): Promise<FamilyProfile |
   return null;
 }
 
-export async function saveFamilyProfile(profile: FamilyProfile, roomId?: string): Promise<FamilyProfile> {
+export async function saveFamilyProfile(profile: Partial<FamilyProfile>, roomId?: string): Promise<FamilyProfile> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.FAMILY_PROFILE, rid);
-  await AsyncStorage.setItem(key, JSON.stringify(profile));
+  // Read-then-merge: always merge with existing local data so partial updates
+  // (e.g. only changing reminderMorning) never wipe out other fields.
+  const raw = await AsyncStorage.getItem(key);
+  const existing: FamilyProfile | null = raw ? JSON.parse(raw) : null;
+  const merged: FamilyProfile = { ...(existing ?? {}), ...profile };
+  await AsyncStorage.setItem(key, JSON.stringify(merged));
   // Cloud sync: update elder profile on server
-  cloudUpdateElderProfile(profile as any).catch(() => {});
-  return profile;
+  cloudUpdateElderProfile(merged as any).catch(() => {});
+  return merged;
 }
 
 // ─── Daily Check-ins ──────────────────────────────────────────────────────────
@@ -710,6 +715,9 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
   let serverRoomId: number | null = null;
   let serverMemberId: number | null = null;
   let serverRoomCode: string | null = null;
+  // Load the full FamilyProfile so the cloud room is complete from the very first moment.
+  // Without this, a joiner who enters right after creation would see an incomplete elder profile.
+  const existingFamilyProfile = await getFamilyProfile();
   try {
     const cloudResult = await cloudCreateRoom({
       roomCode: existingCode ?? generateRoomCode(),
@@ -722,6 +730,19 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
       memberEmoji: firstMember.emoji,
       memberColor: firstMember.color,
       memberPhotoUri: firstMember.photoUri,
+      // Pass full elder profile so cloud room is complete from creation instant
+      elderProfile: existingFamilyProfile ? {
+        nickname: existingFamilyProfile.nickname,
+        birthDate: existingFamilyProfile.birthDate,
+        zodiacEmoji: existingFamilyProfile.zodiacEmoji,
+        zodiacName: existingFamilyProfile.zodiacName,
+        elderPhotoUri: existingFamilyProfile.elderPhotoUri ?? elderOpts?.photoUri,
+        elderAvatarType: existingFamilyProfile.elderAvatarType,
+        city: existingFamilyProfile.city,
+        reminderMorning: existingFamilyProfile.reminderMorning,
+        reminderEvening: existingFamilyProfile.reminderEvening,
+        careNeeds: existingFamilyProfile.careNeeds,
+      } : undefined,
     });
     if (cloudResult?.roomId && cloudResult?.memberId) {
       serverRoomId = cloudResult.roomId;
