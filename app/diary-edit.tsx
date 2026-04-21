@@ -14,9 +14,10 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
-  deleteDiaryEntry, todayStr, getProfile, generateId, DiaryEntry, ConversationMessage,
+  deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn, getCurrentUserIsCreator,
 } from '@/lib/storage';
+import { useFamilyContext } from '@/lib/family-context';
 import { cloudSyncDiary } from '@/lib/cloud-sync';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
@@ -207,6 +208,8 @@ export default function DiaryEditScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; readOnly?: string }>();
   const existingId = params.id;
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [roleReadOnly, setRoleReadOnly] = useState(params.readOnly === '1');
   const isReadOnly = roleReadOnly;
   const scrollRef = useRef<ScrollView>(null);
@@ -250,8 +253,8 @@ export default function DiaryEditScreen() {
   }, []);
 
   async function loadProfile() {
-    const [profile, entries, checkIn, creatorFlag] = await Promise.all([
-      getProfile(), getDiaryEntries(), getTodayCheckIn(), getCurrentUserIsCreator(),
+    const [userProfile, familyProfile, legacyProfile, entries, checkIn, creatorFlag] = await Promise.all([
+      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(), getTodayCheckIn(), getCurrentUserIsCreator(),
     ]);
     if (!creatorFlag) {
       setRoleReadOnly(true);
@@ -260,12 +263,11 @@ export default function DiaryEditScreen() {
         return;
       }
     }
-    if (profile) {
-      setElderNickname(profile.nickname || profile.name || '家人');
-      setCaregiverName(profile.caregiverName || '照顾者');
-      setCaregiverPhotoUri(profile.caregiverPhotoUri || null);
-      setCaregiverZodiacEmoji(profile.caregiverZodiacEmoji || '😊');
-    }
+    // family-scoped 优先，fallback 到 legacy
+    setElderNickname(familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人');
+    setCaregiverName(userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者');
+    setCaregiverPhotoUri(userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri || null);
+    setCaregiverZodiacEmoji(userProfile?.caregiverZodiacEmoji || legacyProfile?.caregiverZodiacEmoji || '😊');
     setDiaryCount(entries.length);
     if (checkIn) setTodayCheckIn(checkIn);
   }

@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getCurrentUserIsCreator } from "./storage";
+import { getCurrentUserIsCreator, getFamilyProfile } from "./storage";
 
 const NOTIFICATION_PERM_KEY = "@xiaomahuNotifPerm";
 const MORNING_NOTIF_ID_KEY = "@xiaomahuMorningNotifId";
@@ -84,7 +84,7 @@ export async function hasNotificationPermission(): Promise<boolean> {
 /**
  * Schedule the morning check-in reminder (8:00 AM daily)
  */
-export async function scheduleMorningReminder(elderNickname?: string): Promise<string | null> {
+export async function scheduleMorningReminder(elderNickname?: string, familyId?: string): Promise<string | null> {
   if (Platform.OS === "web") return null;
   
   // Only caregivers (creators) should have local reminders scheduled
@@ -92,6 +92,13 @@ export async function scheduleMorningReminder(elderNickname?: string): Promise<s
   if (!isCreator) return null;
 
   const name = elderNickname || '家人';
+
+  // 读取自定义提醒时间（优先 FamilyProfile，默认 08:00）
+  const fp = await getFamilyProfile(familyId).catch(() => null);
+  const timeStr = fp?.reminderMorning || '08:00';
+  const [hourStr, minStr] = timeStr.split(':');
+  const hour = parseInt(hourStr, 10) || 8;
+  const minute = parseInt(minStr, 10) || 0;
 
   // Cancel existing morning notification first
   const existingId = await AsyncStorage.getItem(MORNING_NOTIF_ID_KEY);
@@ -118,8 +125,8 @@ export async function scheduleMorningReminder(elderNickname?: string): Promise<s
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: 8,
-      minute: 0,
+      hour,
+      minute,
       channelId: "daily-checkin",
     },
   });
@@ -131,7 +138,7 @@ export async function scheduleMorningReminder(elderNickname?: string): Promise<s
 /**
  * Schedule the evening check-in reminder (21:00 PM daily)
  */
-export async function scheduleEveningReminder(elderNickname?: string): Promise<string | null> {
+export async function scheduleEveningReminder(elderNickname?: string, familyId?: string): Promise<string | null> {
   if (Platform.OS === "web") return null;
 
   // Only caregivers (creators) should have local reminders scheduled
@@ -139,6 +146,13 @@ export async function scheduleEveningReminder(elderNickname?: string): Promise<s
   if (!isCreator) return null;
 
   const name = elderNickname || '家人';
+
+  // 读取自定义提醒时间（优先 FamilyProfile，默认 21:00）
+  const fp = await getFamilyProfile(familyId).catch(() => null);
+  const timeStr = fp?.reminderEvening || '21:00';
+  const [hourStr, minStr] = timeStr.split(':');
+  const hour = parseInt(hourStr, 10) || 21;
+  const minute = parseInt(minStr, 10) || 0;
 
   // Cancel existing evening notification first
   const existingId = await AsyncStorage.getItem(EVENING_NOTIF_ID_KEY);
@@ -148,7 +162,7 @@ export async function scheduleEveningReminder(elderNickname?: string): Promise<s
 
   const eveningMessages = [
     { title: "晚间打卡提醒", body: `请记录${name}今日的饮食、心情和用药情况` },
-    { title: "今日小结", body: "花一分钟记录今日情况，生成照护分析" },
+    { title: "今日小结", body: "花1分钟记录今日情况，生成照护分析" },
     { title: "晚间记录", body: `记录${name}今天的状态，便于追踪趋势` },
     { title: "小马虎提醒", body: "请完成今日晚间打卡" },
     { title: "晚间打卡", body: "记录今日饮食和心情，查看照护分析" },
@@ -165,8 +179,8 @@ export async function scheduleEveningReminder(elderNickname?: string): Promise<s
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: 21,
-      minute: 0,
+      hour,
+      minute,
       channelId: "daily-checkin",
     },
   });
@@ -178,12 +192,12 @@ export async function scheduleEveningReminder(elderNickname?: string): Promise<s
 /**
  * Schedule both morning and evening reminders
  */
-export async function scheduleAllReminders(elderNickname?: string): Promise<void> {
+export async function scheduleAllReminders(elderNickname?: string, familyId?: string): Promise<void> {
   const hasPermission = await requestNotificationPermissions();
   if (!hasPermission) return;
 
-  await scheduleMorningReminder(elderNickname);
-  await scheduleEveningReminder(elderNickname);
+  await scheduleMorningReminder(elderNickname, familyId);
+  await scheduleEveningReminder(elderNickname, familyId);
 }
 
 /**

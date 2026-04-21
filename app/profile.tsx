@@ -275,7 +275,7 @@ export default function ProfileScreen() {
       if (value) {
         const granted = await requestNotificationPermissions();
         if (granted) {
-          await scheduleAllReminders(profile?.nickname || profile?.name || undefined);
+          await scheduleAllReminders(profile?.nickname || profile?.name || undefined, activeMembership?.familyId);
           setNotifEnabled(true);
         } else {
           setNotifEnabled(false);
@@ -600,6 +600,10 @@ export default function ProfileScreen() {
                         const updated = await saveProfile({ ...profile, reminderMorning: t });
                         setProfile(updated);
                       }
+                      // 重新 schedule 让新时间立即生效
+                      if (notifEnabled) {
+                        await scheduleAllReminders(profile?.nickname || profile?.name || undefined, activeMembership?.familyId);
+                      }
                     }}
                   >
                     <Text style={[styles.timeChipSmallText, currentMorning === t && styles.timeChipSmallTextActive]}>{t}</Text>
@@ -627,6 +631,10 @@ export default function ProfileScreen() {
                       if (profile) {
                         const updated = await saveProfile({ ...profile, reminderEvening: t });
                         setProfile(updated);
+                      }
+                      // 重新 schedule 让新时间立即生效
+                      if (notifEnabled) {
+                        await scheduleAllReminders(profile?.nickname || profile?.name || undefined, activeMembership?.familyId);
                       }
                     }}
                   >

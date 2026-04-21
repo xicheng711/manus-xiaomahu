@@ -820,11 +820,11 @@ export default function ShareScreen() {
       }
 
       // 简报数据：心情/用药/饮食来自当天晚间，睡眠来自当天早间（如有）
-      const ci: DailyCheckIn = {
+      const ci = {
         ...today!,
         // 睡眠字段：如果当天早间打卡有数据则使用，否则保持 today 原有字段（可能为 null/undefined）
-        sleepHours: hasTodayMorning ? today!.sleepHours : undefined,
-        sleepQuality: hasTodayMorning ? today!.sleepQuality : undefined,
+        sleepHours: (hasTodayMorning ? today!.sleepHours : undefined) as number,
+        sleepQuality: (hasTodayMorning ? today!.sleepQuality : undefined) as 'poor' | 'fair' | 'good',
         sleepInput: hasTodayMorning ? today!.sleepInput : undefined,
         sleepScore: hasTodayMorning ? today!.sleepScore : undefined,
         sleepProblems: hasTodayMorning ? today!.sleepProblems : undefined,
@@ -833,14 +833,14 @@ export default function ShareScreen() {
         awakeHours: hasTodayMorning ? today!.awakeHours : undefined,
         nightWakings: hasTodayMorning ? today!.nightWakings : undefined,
         napMinutes: today!.napMinutes, // 午休数据来自晚间打卡
-        daytimeNap: today!.daytimeNap,
-        sleepRange: hasTodayMorning ? today!.sleepRange : undefined,
+        daytimeNap: today!.daytimeNap as boolean,
+        sleepRange: (hasTodayMorning ? today!.sleepRange : undefined) as string,
         nightAwakenings: hasTodayMorning ? today!.nightAwakenings : undefined,
         nightAwakeTime: hasTodayMorning ? today!.nightAwakeTime : undefined,
         napDuration: hasTodayMorning ? today!.napDuration : undefined,
-        morningNotes: hasTodayMorning ? today!.morningNotes : undefined,
+        morningNotes: (hasTodayMorning ? today!.morningNotes : undefined) as string,
         morningDone: hasTodayMorning,
-      };
+      } as DailyCheckIn;
       setViewMode('today');
       setMergedTodayCi(ci);
 
@@ -955,6 +955,8 @@ export default function ShareScreen() {
       summary,
       highlights: [],
       attention: '',
+      careScore: 80,
+      encouragement,
       shareText: `【${nickname}今日护理简报】\n${dateStr}\n\n睡眠：${ci.morningDone && ci.sleepHours ? `${ci.sleepHours}小时（${sleepLabel}）` : '未记录'}${napStr ? `\n午休：${napStr}` : ''}\n心情：${moodText}\n用药：${medText}${ci.mealOption ? `\n饮食：${ci.mealOption}` : ''}\n\n记录人：${caregiver}`,
     };
   }

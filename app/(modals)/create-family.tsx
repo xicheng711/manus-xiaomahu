@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Animated, Easing, Platform, Image,
+  StyleSheet, Animated, Easing, Platform, Image, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  createFamilyRoom, getProfile, saveProfile, generateId,
+  createFamilyRoom, getProfile, getUserProfile, generateId,
   addOrUpdateMembership, setActiveFamilyId, FamilyMembership,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
@@ -21,7 +21,6 @@ const MY_EMOJIS = ['👩', '👨', '👧', '👦', '🧑', '👩‍⚕️', '�
 const ROLES = [
   { role: 'caregiver' as const, label: '主要照顾者', desc: '负责日常护理记录' },
   { role: 'family' as const, label: '家庭成员', desc: '关注家人动态' },
-  { role: 'nurse' as const, label: '护理人员', desc: '专业护理支持' },
 ];
 const MEMBER_COLORS = ['#6C9E6C', '#E07B4A', '#7B7EC8', '#E07B9A', '#4A9EC8', '#C89A4A'];
 
@@ -47,8 +46,10 @@ export default function CreateFamilyModal() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    getProfile().then(p => {
-      if (p?.caregiverName) setMyName(p.caregiverName);
+    // 优先读取 UserProfile，fallback 到 legacy getProfile
+    getUserProfile().then(up => {
+      if (up?.caregiverName) { setMyName(up.caregiverName); return; }
+      getProfile().then(p => { if (p?.caregiverName) setMyName(p.caregiverName); });
     });
   }, []);
 
@@ -98,12 +99,16 @@ export default function CreateFamilyModal() {
         color: myColor,
         isCreator: true,
         isCurrentUser: true,
-      }, undefined, { emoji: elderEmoji, photoUri: elderPhotoUri || undefined });
+      }, undefined, { emoji: elderEmoji, photoUri: elderPhotoUri || undefined }, {
+        name: elderName.trim(),
+        nickname: elderName.trim(),
+      });
       await refresh();
       if (router.canDismiss()) router.dismiss();
       else router.replace('/(tabs)/' as any);
     } catch (e) {
-      console.error(e);
+      console.error('[CreateFamily]', e);
+      Alert.alert('创建失败', '创建家庭时出错，请检查网络后重试。');
     } finally {
       setSaving(false);
     }

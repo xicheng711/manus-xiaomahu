@@ -7,7 +7,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getMedications, saveMedications, Medication, getProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
+import { getMedications, saveMedications, Medication, getProfile, getUserProfile, getFamilyProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
+import { useFamilyContext } from '@/lib/family-context';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -90,6 +91,8 @@ function MedCard({ med, onToggle, onDelete, onEdit, index, isCreator }: { med: M
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function MedicationScreenContent() {
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [meds, setMeds] = useState<Medication[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
   const [careNeeds, setCareNeeds] = useState<CareNeedType[]>([]);
@@ -127,13 +130,11 @@ function MedicationScreenContent() {
 
   useFocusEffect(useCallback(() => {
     getMedications().then(setMeds);
-    getProfile().then(p => {
-      if (p) {
-        setElderNickname(p.nickname || p.name || '家人');
-        setCareNeeds(p.careNeeds?.selectedNeeds || []);
-      }
+    Promise.all([getFamilyProfile(familyId), getProfile()]).then(([fp, lp]) => {
+      setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
+      setCareNeeds(fp?.careNeeds?.selectedNeeds || lp?.careNeeds?.selectedNeeds || []);
     });
-  }, []));
+  }, [familyId]));
 
   function resetForm() {
     setAdding(false);
@@ -142,6 +143,7 @@ function MedicationScreenContent() {
   }
 
   function openEdit(med: Medication) {
+    if (!isCreator) return; // joiner 无权限编辑
     setEditingMed(med);
     setName(med.name);
     setDosage(med.dosage);
@@ -156,12 +158,16 @@ function MedicationScreenContent() {
   }
 
   async function handleSave() {
+    if (!isCreator) {
+      Alert.alert('无权限', '只有主照顾者可以新增或修改用药计划');
+      return;
+    }
     if (!name.trim()) {
       Alert.alert('请输入药物名称');
       return;
     }
-    const profile = await getProfile();
-    const nickname = profile?.nickname || profile?.name || '家人';
+    const [fp, lp] = await Promise.all([getFamilyProfile(familyId), getProfile()]);
+    const nickname = fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人';
 
     if (editingMed) {
       // ── Edit existing ──
@@ -172,14 +178,23 @@ function MedicationScreenContent() {
       } : m);
       await saveMedications(updated);
       setMeds(updated);
-      // handle reminders
+      // handle reminders—差集算法：取消已删除的时间点，新增新时间点
+      const oldTimes = editingMed.times || [];
       if (reminderEnabled) {
+        // 取消被删除的时间（oldTimes - selectedTimes）
+        for (const t of oldTimes) {
+          if (!selectedTimes.includes(t)) {
+            cancelMedicationReminder(editingMed.id + '_' + t.replace(':', '')).catch(() => {});
+          }
+        }
+        // 新增或保留的时间（selectedTimes）
         for (const t of selectedTimes) {
           const [h, min] = t.split(':').map(Number);
-          scheduleMedicationReminder(editingMed.id + '_' + t.replace(':', ''), editingMed.name, icon, nickname, h, min).catch(() => {});
+          scheduleMedicationReminder(editingMed.id + '_' + t.replace(':', ''), name.trim(), icon, nickname, h, min).catch(() => {});
         }
       } else {
-        for (const t of (editingMed.times || [])) {
+        // 关闭提醒：取消所有旧时间
+        for (const t of oldTimes) {
           cancelMedicationReminder(editingMed.id + '_' + t.replace(':', '')).catch(() => {});
         }
         cancelMedicationReminder(editingMed.id + '_morning').catch(() => {});
@@ -214,6 +229,7 @@ function MedicationScreenContent() {
   }
 
   async function handleToggle(id: string) {
+    if (!isCreator) return; // joiner 无权限操作
     const updated = meds.map(m => m.id === id ? { ...m, active: !m.active } : m);
     await saveMedications(updated);
     setMeds(updated);
@@ -221,6 +237,7 @@ function MedicationScreenContent() {
   }
 
   async function handleDelete(id: string) {
+    if (!isCreator) return; // joiner 无权限操作
     Alert.alert('删除药物', '确定要删除这个药物吗？', [
       { text: '取消', style: 'cancel' },
       {
@@ -378,7 +395,17 @@ function MedicationScreenContent() {
 
         {/* Medication List */}
         {meds.length === 0 && !adding ? (
-          <EmptyMedState onAdd={() => setAdding(true)} elderNickname={elderNickname} />
+          isCreator ? (
+            <EmptyMedState onAdd={() => setAdding(true)} elderNickname={elderNickname} />
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyEmojiCircle}>
+                <Text style={styles.emptyEmoji}>💊</Text>
+              </View>
+              <Text style={styles.emptyTitle}>还没有用药记录</Text>
+              <Text style={styles.emptyText}>当前您是家庭成员身份，只能查看，不能新增或修改用药计划。</Text>
+            </View>
+          )
         ) : meds.length > 0 ? (
           <View style={styles.medList}>
             <View style={styles.listTitleRow}>
