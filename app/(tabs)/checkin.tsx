@@ -2438,16 +2438,78 @@ const calStyles = StyleSheet.create({
   },
 });
 
+// ─── Joiner Read-Only View ───────────────────────────────────────────────────
+function JoinerCheckinView() {
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
+  const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
+  const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
+  const [elderNickname, setElderNickname] = useState('家人');
+
+  useFocusEffect(useCallback(() => {
+    getTodayCheckIn(familyId).then(setCheckIn);
+    getAllCheckIns(familyId).then(setAllCheckIns);
+    Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]).then(([up, fp, lp]) => {
+      setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
+    });
+  }, [familyId]));
+
+  const morningDone = checkIn?.morningDone ?? false;
+  const eveningDone = checkIn?.eveningDone ?? false;
+
+  return (
+    <ScreenContainer containerClassName="bg-[#F7F1F3]">
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: '#2D1B4E', marginBottom: 4 }}>每日打卡</Text>
+          <Text style={{ fontSize: 14, color: '#888' }}>{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</Text>
+        </View>
+
+        {/* Read-only notice */}
+        <View style={{ backgroundColor: '#F0ECF8', borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text style={{ fontSize: 18 }}>👁️</Text>
+          <Text style={{ fontSize: 13, color: '#6C5BAE', flex: 1, lineHeight: 20 }}>您是家庭成员，可以查看{elderNickname}的打卡记录，但不能新增或修改。</Text>
+        </View>
+
+        {/* Today status */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: '#2D1B4E', marginBottom: 12 }}>今日状态</Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1, backgroundColor: morningDone ? '#FFF3E0' : '#F5F5F5', borderRadius: 12, padding: 12, alignItems: 'center' }}>
+              <Text style={{ fontSize: 24, marginBottom: 6 }}>🌅</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: morningDone ? '#FF9500' : '#aaa' }}>早间打卡</Text>
+              <Text style={{ fontSize: 12, color: morningDone ? '#059669' : '#bbb', marginTop: 4 }}>{morningDone ? '✅ 已完成' : '未完成'}</Text>
+              {morningDone && checkIn?.sleepHours ? (
+                <Text style={{ fontSize: 11, color: '#888', marginTop: 4 }}>💤 睡了 {checkIn.sleepHours}h</Text>
+              ) : null}
+            </View>
+            <View style={{ flex: 1, backgroundColor: eveningDone ? '#F0ECF8' : '#F5F5F5', borderRadius: 12, padding: 12, alignItems: 'center' }}>
+              <Text style={{ fontSize: 24, marginBottom: 6 }}>🌙</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: eveningDone ? '#6C5BAE' : '#aaa' }}>晚间记录</Text>
+              <Text style={{ fontSize: 12, color: eveningDone ? '#059669' : '#bbb', marginTop: 4 }}>{eveningDone ? '✅ 已完成' : '未完成'}</Text>
+              {eveningDone && checkIn?.moodScore != null ? (
+                <Text style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{checkIn.moodEmoji} 心情 {checkIn.moodScore}/10</Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {/* History calendar */}
+        <View style={calStyles.sectionHeader}>
+          <Text style={calStyles.sectionTitle}>📅 打卡历史</Text>
+          <Text style={calStyles.sectionSub}>点击有记录的日期查看详情</Text>
+        </View>
+        <MonthCalendar checkIns={allCheckIns} caregiverName="" />
+      </ScrollView>
+    </ScreenContainer>
+  );
+}
+
 export default function CheckinScreen() {
   const [isCreator, setIsCreator] = useState<boolean | null>(null);
   useFocusEffect(useCallback(() => { getCurrentUserIsCreator().then(v => setIsCreator(v)); }, []));
   if (isCreator === null) return null;
-  if (!isCreator) return (
-    <JoinerLockedScreen
-      icon="✨"
-      title="每日打卡"
-      description="记录家人每天的状态是主要照顾者的专属功能。"
-    />
-  );
+  if (!isCreator) return <JoinerCheckinView />;
   return <CheckinScreenContent />;
 }

@@ -532,10 +532,13 @@ function CreatorHomeScreen() {
     setAllCheckIns(all);
     const diaries = await getDiaryEntries();
     setAllDiaryEntries(diaries);
-    // 读取今日简报缓存的 AI 总结
+    // 读取今日简报缓存的 AI 总结（family-scoped key，和 share.tsx 保持一致）
     try {
       const todayKey = new Date().toISOString().slice(0, 10);
-      const raw = await AsyncStorage.getItem('share_briefing_cache_v1');
+      const cacheKey = activeMembership?.familyId
+        ? `share_briefing_cache_v1:${activeMembership.familyId}`
+        : 'share_briefing_cache_v1';
+      const raw = await AsyncStorage.getItem(cacheKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.date === todayKey && parsed.briefing?.summary) {
@@ -878,11 +881,25 @@ function CreatorHomeScreen() {
                   return;
                 }
                 setJoinLoading(true);
+                setJoinError('');
                 try {
                   const result = await joinFamilyRoom(joinCode, { name: joinName.trim(), role: 'family', roleLabel: '家庭成员', emoji: '👤', color: AppColors.purple.primary });
-                  if (!result) { setJoinError('邀请码不正确，请检查后重试'); return; }
+                  if (!result) { setJoinError('邀请码不正确或已失效，请检查后重试'); return; }
                   await refreshFamily();
                   setShowJoinSheet(false);
+                  setJoinCode('');
+                  setJoinName('');
+                } catch (err: any) {
+                  const msg = err?.message || '';
+                  if (msg.includes('already') || msg.includes('已加入') || msg.includes('已在')) {
+                    setJoinError('您已经在这个家庭中了');
+                  } else if (msg.includes('not found') || msg.includes('不存在') || msg.includes('invalid')) {
+                    setJoinError('邀请码不正确或已失效，请重新确认');
+                  } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout') || msg.includes('Network')) {
+                    setJoinError('网络连接失败，请检查网络后重试');
+                  } else {
+                    setJoinError('加入失败，请稍后重试');
+                  }
                 } finally {
                   setJoinLoading(false);
                 }

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet,
   Platform, TextInput, Image, Modal, Alert, ActivityIndicator,
-  Keyboard, KeyboardAvoidingView, TouchableWithoutFeedback,
+  Keyboard, KeyboardAvoidingView, TouchableWithoutFeedback, Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -279,6 +279,24 @@ export default function ProfileScreen() {
           setNotifEnabled(true);
         } else {
           setNotifEnabled(false);
+          // 明确提示用户权限被拒绝，引导去系统设置
+          Alert.alert(
+            '需要通知权限',
+            '请在系统设置中允许小马虎发送通知，才能开启每日打卡提醒。',
+            [
+              { text: '取消', style: 'cancel' },
+              {
+                text: '去设置',
+                onPress: () => {
+                  if (Platform.OS === 'ios') {
+                    Linking.openURL('app-settings:');
+                  } else {
+                    Linking.openSettings();
+                  }
+                },
+              },
+            ]
+          );
         }
       } else {
         await cancelAllReminders();
