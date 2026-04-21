@@ -407,6 +407,9 @@ export default function ProfileScreen() {
     );
   }
 
+  const currentMorning = familyProfile?.reminderMorning || profile?.reminderMorning || '08:00';
+  const currentEvening = familyProfile?.reminderEvening || profile?.reminderEvening || '21:00';
+
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -558,7 +561,11 @@ export default function ProfileScreen() {
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>每日打卡提醒</Text>
             <Text style={styles.settingDesc}>
-              {Platform.OS === 'web' ? '仅在手机端可用' : '早上 8:00 · 晚上 21:00'}
+              {Platform.OS === 'web'
+                ? '仅在手机端可用'
+                : notifEnabled
+                  ? `早上 ${currentMorning} · 晚上 ${currentEvening}`
+                  : '关闭后将不发送每日打卡提醒'}
             </Text>
           </View>
           <Switch
@@ -572,35 +579,32 @@ export default function ProfileScreen() {
 
         {notifEnabled && Platform.OS !== 'web' && (
           <View style={styles.notifInfo}>
-            <Text style={styles.notifInfoText}>☀️ 早上 {familyProfile?.reminderMorning || profile?.reminderMorning || '08:00'} — 记录昨晚睡眠情况</Text>
-            <Text style={styles.notifInfoText}>🌙 晚上 {familyProfile?.reminderEvening || profile?.reminderEvening || '21:00'} — 记录今日饮食和心情</Text>
+            <Text style={styles.notifInfoText}>☀️ 早上 {currentMorning} — 记录昨晚睡眠情况</Text>
+            <Text style={styles.notifInfoText}>🌙 晚上 {currentEvening} — 记录今日饮食和心情</Text>
           </View>
         )}
 
-        {/* Reminder time customization */}
-        <View style={styles.reminderEditCard}>
-          <Text style={styles.reminderEditTitle}>⏰ 自定义提醒时间</Text>
-          <View style={styles.reminderEditRow}>
-            <Text style={styles.reminderEditLabel}>🌅 早上打卡</Text>
-            <View style={styles.timeChipRow}>
-              {['06:00', '07:00', '08:00', '09:00', '10:00'].map(t => {
-                const currentMorning = familyProfile?.reminderMorning || profile?.reminderMorning || '08:00';
-                return (
+        {/* Reminder time customization — only shown when notifications are enabled */}
+        {notifEnabled && Platform.OS !== 'web' && (
+          <View style={styles.reminderEditCard}>
+            <Text style={styles.reminderEditTitle}>⏰ 自定义提醒时间</Text>
+            <View style={styles.reminderEditRow}>
+              <Text style={styles.reminderEditLabel}>🌅 早上打卡</Text>
+              <View style={styles.timeChipRow}>
+                {['06:00', '07:00', '08:00', '09:00', '10:00'].map(t => (
                   <TouchableOpacity
                     key={t}
                     style={[styles.timeChipSmall, currentMorning === t && styles.timeChipSmallActive]}
+                    disabled={notifLoading}
                     onPress={async () => {
-                      // FamilyProfile is authoritative for reminder times
                       if (activeMembership?.familyId) {
                         const updatedFp = await saveFamilyProfile({ ...(familyProfile ?? {}), reminderMorning: t }, activeMembership.familyId);
                         setFamilyProfile(updatedFp);
                       }
-                      // Sync to legacy profile for compat
                       if (profile) {
                         const updated = await saveProfile({ ...profile, reminderMorning: t });
                         setProfile(updated);
                       }
-                      // 重新 schedule 让新时间立即生效
                       if (notifEnabled) {
                         await scheduleAllReminders(familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || undefined, activeMembership?.familyId);
                       }
@@ -608,31 +612,26 @@ export default function ProfileScreen() {
                   >
                     <Text style={[styles.timeChipSmallText, currentMorning === t && styles.timeChipSmallTextActive]}>{t}</Text>
                   </TouchableOpacity>
-                );
-              })}
+                ))}
+              </View>
             </View>
-          </View>
-          <View style={[styles.reminderEditRow, { marginTop: 12 }]}>
-            <Text style={styles.reminderEditLabel}>🌙 晚上打卡</Text>
-            <View style={styles.timeChipRow}>
-              {['19:00', '20:00', '21:00', '22:00', '23:00'].map(t => {
-                const currentEvening = familyProfile?.reminderEvening || profile?.reminderEvening || '21:00';
-                return (
+            <View style={[styles.reminderEditRow, { marginTop: 12 }]}>
+              <Text style={styles.reminderEditLabel}>🌙 晚上打卡</Text>
+              <View style={styles.timeChipRow}>
+                {['19:00', '20:00', '21:00', '22:00', '23:00'].map(t => (
                   <TouchableOpacity
                     key={t}
                     style={[styles.timeChipSmall, currentEvening === t && styles.timeChipSmallActive]}
+                    disabled={notifLoading}
                     onPress={async () => {
-                      // FamilyProfile is authoritative for reminder times
                       if (activeMembership?.familyId) {
                         const updatedFp = await saveFamilyProfile({ ...(familyProfile ?? {}), reminderEvening: t }, activeMembership.familyId);
                         setFamilyProfile(updatedFp);
                       }
-                      // Sync to legacy profile for compat
                       if (profile) {
                         const updated = await saveProfile({ ...profile, reminderEvening: t });
                         setProfile(updated);
                       }
-                      // 重新 schedule 让新时间立即生效
                       if (notifEnabled) {
                         await scheduleAllReminders(familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || undefined, activeMembership?.familyId);
                       }
@@ -640,11 +639,11 @@ export default function ProfileScreen() {
                   >
                     <Text style={[styles.timeChipSmallText, currentEvening === t && styles.timeChipSmallTextActive]}>{t}</Text>
                   </TouchableOpacity>
-                );
-              })}
+                ))}
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* Edit button */}
         <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/onboarding' as any)}>
