@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg';
 import { ScreenContainer } from '@/components/screen-container';
 import { AppColors, Gradients } from '@/lib/design-tokens';
-import { saveProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
+import { saveProfile, saveUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
 import { scheduleAllReminders } from '@/lib/notifications';
 import { getZodiac } from '@/lib/zodiac';
 import * as Haptics from 'expo-haptics';
@@ -306,6 +306,32 @@ export default function OnboardingScreen() {
   async function handleFinish() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const birthDate = `${elderBirthYear}-${String(birthMonthIdx + 1).padStart(2, '0')}-${String(birthDayIdx + 1).padStart(2, '0')}`;
+    // Write to new split models (UserProfile + FamilyProfile) as primary truth
+    await saveUserProfile({
+      caregiverName: caregiverName || '家人',
+      caregiverBirthYear: String(caregiverBirthYear),
+      caregiverZodiacEmoji: caregiverZodiac.emoji,
+      caregiverZodiacName: caregiverZodiac.name,
+      caregiverPhotoUri,
+      caregiverAvatarType,
+    });
+    await saveFamilyProfile({
+      name: elderName || '宝贝',
+      nickname: elderNickname || elderName || '宝贝',
+      birthDate,
+      zodiacEmoji: elderZodiac.emoji,
+      zodiacName: elderZodiac.name,
+      elderPhotoUri,
+      elderAvatarType,
+      city: city || '北京',
+      reminderMorning,
+      reminderEvening,
+      setupComplete: true,
+      careNeeds: selectedCareNeeds.length > 0
+        ? { selectedNeeds: selectedCareNeeds as any[] }
+        : undefined,
+    });
+    // Legacy shim: keep saveProfile in sync so old code reading getProfile() still works
     await saveProfile({
       name: elderName || '宝贝',
       nickname: elderNickname || elderName || '宝贝',

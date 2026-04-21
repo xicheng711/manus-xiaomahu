@@ -12,7 +12,7 @@ import {
   upsertElderProfile, getElderProfile,
   upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
   createDiaryEntry, updateDiaryEntry, getDiaryEntriesByRoom,
-  createAnnouncement, getAnnouncementsByRoom, addReaction,
+  createAnnouncement, getAnnouncementsByRoom,
   deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
   upsertMedication, getMedicationsByRoom, deleteMedication,
@@ -49,17 +49,49 @@ async function sendExpoPushNotifications(
   }
 }
 
-// Helper: get current user ID from context, throw if not logged in
-function requireUser(ctx: any): { userId: number; openId: string } {
-  if (!ctx.user?.id) throw new Error("请先登录");
-  return { userId: ctx.user.id, openId: ctx.user.openId };
-}
-
 // Helper: verify user is member of room
 async function requireRoomMember(userId: number, roomId: number) {
   const member = await getMemberByUserId(roomId, userId);
   if (!member) throw new Error("您不是该家庭的成员");
   return member;
+}
+
+/**
+ * Unified push notification helper.
+ * Fetches all room members, excludes the actor, looks up their push tokens,
+ * and sends a push notification. All errors are swallowed (non-fatal).
+ *
+ * @param roomId     - The family room to notify
+ * @param actorUserId - The user who triggered the event (excluded from recipients)
+ * @param title      - Push notification title
+ * @param body       - Push notification body
+ * @param data       - Optional payload forwarded to the app
+ * @param tag        - Short tag for log messages (e.g. 'syncCheckIn')
+ */
+async function notifyRoomMembers(
+  roomId: number,
+  actorUserId: number,
+  title: string,
+  body: string,
+  data?: Record<string, unknown>,
+  tag = 'notifyRoomMembers',
+): Promise<void> {
+  try {
+    const allMembers = await getRoomMembers(roomId);
+    const otherUserIds = allMembers
+      .filter(m => m.userId !== actorUserId)
+      .map(m => m.userId);
+    if (otherUserIds.length === 0) return;
+    const otherUsers = await getUsersByIds(otherUserIds);
+    const pushTokens = otherUsers
+      .map(u => u.pushToken)
+      .filter((t): t is string => !!t);
+    if (pushTokens.length > 0) {
+      await sendExpoPushNotifications(pushTokens, title, body, data);
+    }
+  } catch (e) {
+    console.warn(`[${tag}] Push notification failed (non-fatal):`, e);
+  }
 }
 
 export const familyRouter = router({
@@ -96,7 +128,7 @@ export const familyRouter = router({
       }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
 
       // Create the room
       const room = await createFamilyRoom({
@@ -154,7 +186,7 @@ export const familyRouter = router({
       relationship: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
 
       const room = await getFamilyRoomByCode(input.roomCode);
       if (!room) throw new Error("未找到该家庭房间，请检查邀请码");
@@ -172,29 +204,15 @@ export const familyRouter = router({
         isCreator: false,
       });
 
-      // Send push notification to all other members in this room
-      try {
-        const allMembers = await getRoomMembers(room.id);
-        const otherUserIds = allMembers
-          .filter(m => m.userId !== userId)
-          .map(m => m.userId);
-        if (otherUserIds.length > 0) {
-          const otherUsers = await getUsersByIds(otherUserIds);
-          const pushTokens = otherUsers
-            .map(u => u.pushToken)
-            .filter((t): t is string => !!t);
-          if (pushTokens.length > 0) {
-            await sendExpoPushNotifications(
-              pushTokens,
-              `🎉 新成员加入了！`,
-              `${input.memberEmoji} ${input.memberName} 加入了你们的家庭空间`,
-              { type: 'new_member', screen: 'family', memberName: input.memberName },
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('[joinRoom] Push notification failed (non-fatal):', e);
-      }
+      // Notify all existing members that someone new joined
+      await notifyRoomMembers(
+        room.id,
+        userId,
+        `🎉 新成员加入了！`,
+        `${input.memberEmoji} ${input.memberName} 加入了你们的家庭空间`,
+        { type: 'new_member', screen: 'family', memberName: input.memberName },
+        'joinRoom',
+      );
 
       return {
         success: true,
@@ -230,8 +248,8 @@ export const familyRouter = router({
     }),
 
   /** Get all family rooms the current user belongs to */
-  myRooms: publicProcedure.query(async ({ ctx }) => {
-    const { userId } = requireUser(ctx);
+  myRooms: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.id;
     const rooms = await getUserFamilyRooms(userId);
     return rooms.map(({ room, membership }) => ({
       roomId: room.id,
@@ -245,10 +263,10 @@ export const familyRouter = router({
   }),
 
   /** Get full room details including members and elder profile */
-  getRoomDetail: publicProcedure
+  getRoomDetail: protectedProcedure
     .input(z.object({ roomId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
 
       const room = await getFamilyRoomById(input.roomId);
@@ -261,7 +279,7 @@ export const familyRouter = router({
   // ─── Check-ins ───────────────────────────────────────────────────────────
 
   /** Sync a check-in to the cloud (upsert by roomId + date) */
-  syncCheckIn: publicProcedure
+  syncCheckIn: protectedProcedure
     .input(z.object({
       roomId: z.number(),
       date: z.string(),
@@ -291,49 +309,39 @@ export const familyRouter = router({
       completedAt: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       const result = await upsertCheckIn({ ...input, authorUserId: userId });
 
-      // 推送通知给其他家庭成员
-      try {
-        const allMembers = await getRoomMembers(input.roomId);
-        const otherUserIds = allMembers.filter(m => m.userId !== userId).map(m => m.userId);
-        if (otherUserIds.length > 0) {
-          const member = allMembers.find(m => m.userId === userId);
-          const otherUsers = await getUsersByIds(otherUserIds);
-          const pushTokens = otherUsers.map(u => u.pushToken).filter((t): t is string => !!t);
-          if (pushTokens.length > 0) {
-            const period = input.morningDone ? '早间' : '晚间';
-            await sendExpoPushNotifications(
-              pushTokens,
-              `✅ ${member?.name || '照顾者'}完成了${period}打卡`,
-              input.morningNotes || input.eveningNotes || '点击查看今日照护记录',
-              { type: 'checkin', screen: 'home' },
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('[syncCheckIn] Push notification failed (non-fatal):', e);
-      }
+      // Notify family members about the check-in
+      const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
+      const period = input.morningDone ? '早间' : '晚间';
+      await notifyRoomMembers(
+        input.roomId,
+        userId,
+        `✅ ${actorMember?.name || '照顾者'}完成了${period}打卡`,
+        input.morningNotes || input.eveningNotes || '点击查看今日照护记录',
+        { type: 'checkin', screen: 'home' },
+        'syncCheckIn',
+      );
 
       return { success: true, checkIn: result };
     }),
 
   /** Get check-ins for a room (family members can see shared data) */
-  getCheckIns: publicProcedure
+  getCheckIns: protectedProcedure
     .input(z.object({ roomId: z.number(), limit: z.number().default(30) }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       return getCheckInsByRoom(input.roomId, input.limit);
     }),
 
   /** Get a single check-in by date */
-  getCheckInByDate: publicProcedure
+  getCheckInByDate: protectedProcedure
     .input(z.object({ roomId: z.number(), date: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       return getCheckInByDate(input.roomId, input.date);
     }),
@@ -341,7 +349,7 @@ export const familyRouter = router({
   // ─── Diary ───────────────────────────────────────────────────────────────
 
   /** Sync a diary entry to the cloud */
-  syncDiary: publicProcedure
+  syncDiary: protectedProcedure
     .input(z.object({
       roomId: z.number(),
       serverDiaryId: z.number().optional(),  // if updating existing
@@ -361,7 +369,7 @@ export const familyRouter = router({
       conversationFinished: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
 
       if (input.serverDiaryId) {
@@ -397,36 +405,26 @@ export const familyRouter = router({
         conversationFinished: input.conversationFinished ?? false,
       });
 
-      // 推送通知给其他家庭成员
-      try {
-        const allMembers = await getRoomMembers(input.roomId);
-        const otherUserIds = allMembers.filter(m => m.userId !== userId).map(m => m.userId);
-        if (otherUserIds.length > 0) {
-          const member = allMembers.find(m => m.userId === userId);
-          const otherUsers = await getUsersByIds(otherUserIds);
-          const pushTokens = otherUsers.map(u => u.pushToken).filter((t): t is string => !!t);
-          if (pushTokens.length > 0) {
-            const preview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
-            await sendExpoPushNotifications(
-              pushTokens,
-              `📖 ${member?.name || '照顾者'}写了一篇日记`,
-              preview,
-              { type: 'diary', screen: 'diary' },
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('[syncDiary] Push notification failed (non-fatal):', e);
-      }
+      // Notify family members about the new diary entry
+      const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
+      const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
+      await notifyRoomMembers(
+        input.roomId,
+        userId,
+        `📖 ${diaryActorMember?.name || '照顾者'}写了一篇日记`,
+        diaryPreview,
+        { type: 'diary', screen: 'diary' },
+        'syncDiary',
+      );
 
       return { success: true, diaryId: entry.id };
     }),
 
   /** Get diary entries for a room */
-  getDiaries: publicProcedure
+  getDiaries: protectedProcedure
     .input(z.object({ roomId: z.number(), limit: z.number().default(30) }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       return getDiaryEntriesByRoom(input.roomId, input.limit);
     }),
@@ -434,7 +432,7 @@ export const familyRouter = router({
   // ─── Announcements ─────────────────────────────────────────────────────
 
   /** Post a family announcement / broadcast */
-  postAnnouncement: publicProcedure
+  postAnnouncement: protectedProcedure
     .input(z.object({
       roomId: z.number(),
       content: z.string(),
@@ -443,7 +441,7 @@ export const familyRouter = router({
       date: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
 
       const announcement = await createAnnouncement({
@@ -458,80 +456,33 @@ export const familyRouter = router({
         date: input.date,
       });
 
-      // 推送通知给其他家庭成员
-      try {
-        const allMembers = await getRoomMembers(input.roomId);
-        const otherUserIds = allMembers.filter(m => m.userId !== userId).map(m => m.userId);
-        if (otherUserIds.length > 0) {
-          const otherUsers = await getUsersByIds(otherUserIds);
-          const pushTokens = otherUsers.map(u => u.pushToken).filter((t): t is string => !!t);
-          if (pushTokens.length > 0) {
-            const preview = input.content.length > 50 ? input.content.slice(0, 50) + '...' : input.content;
-            await sendExpoPushNotifications(
-              pushTokens,
-              `${member.emoji} ${member.name} 发布了家庭公告`,
-              preview,
-              { type: 'announcement', screen: 'family' },
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('[postAnnouncement] Push notification failed (non-fatal):', e);
-      }
+      // Notify all other family members about the new announcement
+      const announcementPreview = input.content.length > 50 ? input.content.slice(0, 50) + '...' : input.content;
+      await notifyRoomMembers(
+        input.roomId,
+        userId,
+        `${member.emoji} ${member.name} 发布了家庭公告`,
+        announcementPreview,
+        { type: 'announcement', screen: 'family' },
+        'postAnnouncement',
+      );
 
       return { success: true, announcement };
     }),
 
   /** Get announcements for a room */
-  getAnnouncements: publicProcedure
+  getAnnouncements: protectedProcedure
     .input(z.object({ roomId: z.number(), limit: z.number().default(50) }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       return getAnnouncementsByRoom(input.roomId, input.limit);
-    }),
-
-  /**
-   * @deprecated Use `toggleReaction` instead.
-   * Kept for backward compatibility with older app versions.
-   */
-  reactToAnnouncement: publicProcedure
-    .input(z.object({
-      announcementId: z.number(),
-      roomId: z.number(),
-      emoji: z.string(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
-      const member = await requireRoomMember(userId, input.roomId);
-      // Fetch current reactions, add new one
-      const announceList = await getAnnouncementsByRoom(input.roomId, 100);
-      const target = announceList.find(a => a.id === input.announcementId);
-      if (!target) throw new Error("公告不存在");
-
-      const currentReactions: any[] = (target.reactions as any[]) ?? [];
-      // Find or create reaction group for this emoji
-      let group = currentReactions.find((r: any) => r.emoji === input.emoji);
-      if (!group) {
-        group = { emoji: input.emoji, members: [] };
-        currentReactions.push(group);
-      }
-      // Add member if not already reacted
-      if (!group.members.find((m: any) => m.memberId === String(member.id))) {
-        group.members.push({
-          memberId: String(member.id),
-          memberName: member.name,
-          memberEmoji: member.emoji,
-        });
-      }
-      await addReaction(input.announcementId, currentReactions);
-      return { success: true };
     }),
 
   // ─── Briefings ─────────────────────────────────────────────────────────
 
   /** Save a generated briefing to the cloud */
-  saveBriefing: publicProcedure
+  saveBriefing: protectedProcedure
     .input(z.object({
       roomId: z.number(),
       date: z.string(),
@@ -545,7 +496,7 @@ export const familyRouter = router({
       checkInDate: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       const briefing = await createBriefing({
         roomId: input.roomId,
@@ -563,10 +514,10 @@ export const familyRouter = router({
     }),
 
   /** Get briefings for a room (family members can view) */
-  getBriefings: publicProcedure
+  getBriefings: protectedProcedure
     .input(z.object({ roomId: z.number(), limit: z.number().default(14) }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       return getBriefingsByRoom(input.roomId, input.limit);
     }),
@@ -574,7 +525,7 @@ export const familyRouter = router({
   // ─── Medications ───────────────────────────────────────────────────────
 
   /** Sync medications to the cloud */
-  syncMedication: publicProcedure
+  syncMedication: protectedProcedure
     .input(z.object({
       roomId: z.number(),
       serverMedId: z.number().optional(),
@@ -589,7 +540,7 @@ export const familyRouter = router({
       color: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       const med = await upsertMedication({
         id: input.serverMedId,
@@ -608,19 +559,19 @@ export const familyRouter = router({
     }),
 
   /** Get medications for a room */
-  getMedications: publicProcedure
+  getMedications: protectedProcedure
     .input(z.object({ roomId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       return getMedicationsByRoom(input.roomId);
     }),
 
   /** Delete a medication */
-  deleteMedication: publicProcedure
+  deleteMedication: protectedProcedure
     .input(z.object({ roomId: z.number(), medicationId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       await deleteMedication(input.medicationId);
       return { success: true };
@@ -629,7 +580,7 @@ export const familyRouter = router({
   // ─── Elder Profile ─────────────────────────────────────────────────────
 
   /** Update elder profile (creator only) */
-  updateElderProfile: publicProcedure
+  updateElderProfile: protectedProcedure
     .input(z.object({
       roomId: z.number(),
       name: z.string().optional(),
@@ -645,7 +596,7 @@ export const familyRouter = router({
       careNeeds: z.any().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
       if (!member.isCreator) throw new Error("只有创建者可以修改老人档案");
       // Read-then-merge: fetch existing profile first so partial updates
@@ -669,10 +620,10 @@ export const familyRouter = router({
     }),
 
   /** Get elder profile (any family member) */
-  getElderProfile: publicProcedure
+  getElderProfile: protectedProcedure
     .input(z.object({ roomId: z.number() }))
     .query(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       return getElderProfile(input.roomId);
     }),
@@ -681,7 +632,7 @@ export const familyRouter = router({
   leaveRoom: protectedProcedure
     .input(z.object({ roomId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       await removeFamilyMember(input.roomId, userId);
       return { success: true };
@@ -691,7 +642,7 @@ export const familyRouter = router({
   deleteRoom: protectedProcedure
     .input(z.object({ roomId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
       if (!member.isCreator) throw new Error("只有创建者可以解散家庭");
       await deleteFamilyRoom(input.roomId);
@@ -702,7 +653,7 @@ export const familyRouter = router({
   deleteAnnouncement: protectedProcedure
     .input(z.object({ announcementId: z.number(), roomId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
       // Allow creator or the announcement author to delete
       const announceList = await getAnnouncementsByRoom(input.roomId, 200);
@@ -723,7 +674,7 @@ export const familyRouter = router({
       emoji: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
       const reactions = await toggleReaction(
         input.announcementId,
@@ -736,10 +687,10 @@ export const familyRouter = router({
     }),
 
   /** Register or update the Expo push token for the current user */
-  updatePushToken: publicProcedure
+  updatePushToken: protectedProcedure
     .input(z.object({ pushToken: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { userId } = requireUser(ctx);
+      const userId = ctx.user.id;
       await updatePushToken(userId, input.pushToken);
       return { success: true };
     }),
