@@ -243,14 +243,19 @@ export default function DiaryEditScreen() {
   const replyMutation = trpc.smart.replyToDiary.useMutation();
   const followUpMutation = trpc.smart.followUpDiary.useMutation();
 
+  // 初始加载动画和日记条目（只运行一次）
   useEffect(() => {
     fadeInUp(formFade, formSlide, { duration: 400 });
-    loadProfile();
     if (existingId) loadExistingEntry(existingId);
     Animated.loop(
       Animated.timing(shimmerAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
     ).start();
   }, []);
+
+  // 当 familyId 变化时重新加载称谓和头像（包括初始进入页面）
+  useEffect(() => {
+    loadProfile();
+  }, [familyId]);
 
   async function loadProfile() {
     const [userProfile, familyProfile, legacyProfile, entries, checkIn, creatorFlag] = await Promise.all([
