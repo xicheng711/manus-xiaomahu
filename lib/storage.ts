@@ -709,15 +709,22 @@ export async function getCurrentUserIsCreator(): Promise<boolean> {
   return member?.isCreator === true;
 }
 
-export async function createFamilyRoom(elderName: string, firstMember: Omit<FamilyMember, 'id' | 'joinedAt'>, existingCode?: string, elderOpts?: { emoji?: string; photoUri?: string }): Promise<FamilyRoom> {
+export async function createFamilyRoom(
+  elderName: string,
+  firstMember: Omit<FamilyMember, 'id' | 'joinedAt'>,
+  existingCode?: string,
+  elderOpts?: { emoji?: string; photoUri?: string },
+  familyProfileDraft?: Partial<FamilyProfile>,
+): Promise<FamilyRoom> {
   // Step 1: Create on server first (cloud-first for shared invite code)
   // Server returns both roomId AND memberId — use both as authoritative IDs
   let serverRoomId: number | null = null;
   let serverMemberId: number | null = null;
   let serverRoomCode: string | null = null;
-  // Load the full FamilyProfile so the cloud room is complete from the very first moment.
-  // Without this, a joiner who enters right after creation would see an incomplete elder profile.
-  const existingFamilyProfile = await getFamilyProfile();
+  // Prefer the caller-supplied draft (e.g. onboarding page state) so that the
+  // cloud room is complete from the very first moment even before saveFamilyProfile
+  // has been called.  Fall back to whatever is already persisted locally.
+  const existingFamilyProfile = familyProfileDraft ?? await getFamilyProfile();
   try {
     const cloudResult = await cloudCreateRoom({
       roomCode: existingCode ?? generateRoomCode(),

@@ -312,14 +312,37 @@ export default function OnboardingScreen() {
     // If this fails we abort immediately — no local data is written, so the
     // device stays in a clean state and the user can safely retry.
     try {
-      await createFamilyRoom(elderNickname || elderName || '家人', {
-        name: caregiverName || '家人',
-        role: 'caregiver',
-        roleLabel: '主要照顾者',
-        emoji: '👩',
-        photoUri: caregiverPhotoUri,
-        color: AppColors.coral.primary,
-      }, previewRoomCode, { emoji: elderZodiac.emoji, photoUri: elderPhotoUri });
+      await createFamilyRoom(
+        elderNickname || elderName || '家人',
+        {
+          name: caregiverName || '家人',
+          role: 'caregiver',
+          roleLabel: '主要照顾者',
+          emoji: '👩',
+          photoUri: caregiverPhotoUri,
+          color: AppColors.coral.primary,
+        },
+        previewRoomCode,
+        { emoji: elderZodiac.emoji, photoUri: elderPhotoUri },
+        // Pass the full onboarding draft so the cloud room is complete from the
+        // very first moment — even before saveFamilyProfile() is called below.
+        {
+          name: elderName || '宝贝',
+          nickname: elderNickname || elderName || '宝贝',
+          birthDate,
+          zodiacEmoji: elderZodiac.emoji,
+          zodiacName: elderZodiac.name,
+          elderPhotoUri,
+          elderAvatarType,
+          city: city || '北京',
+          reminderMorning,
+          reminderEvening,
+          setupComplete: true,
+          careNeeds: selectedCareNeeds.length > 0
+            ? { selectedNeeds: selectedCareNeeds as any[] }
+            : undefined,
+        },
+      );
     } catch (e: any) {
       Alert.alert('创建家庭失败', e?.message || '请确认已登录并重试');
       return; // abort — nothing written locally yet
