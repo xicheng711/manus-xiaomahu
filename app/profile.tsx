@@ -61,6 +61,9 @@ export default function ProfileScreen() {
   const [joinName, setJoinName] = useState('');
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState('');
+  // New-family creation draft (independent from current active family)
+  const [newElderName, setNewElderName] = useState('');
+  const [newElderCity, setNewElderCity] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteConfirmType, setDeleteConfirmType] = useState<'leave' | 'delete'>('leave');
 
@@ -195,9 +198,9 @@ export default function ProfileScreen() {
     setEditTarget(target);
     if (target === 'caregiver') {
       // Source from UserProfile (authoritative), fallback to legacy
+      // Note: city is family-scoped and belongs to the elder/family edit modal, not here.
       setDraftCaregiverName(userProfile?.caregiverName || profile?.caregiverName || '');
       setDraftCaregiverBirthYear(userProfile?.caregiverBirthYear || profile?.caregiverBirthYear || '');
-      setDraftCity(profile?.city || '');
     } else {
       // Source from FamilyProfile (authoritative), fallback to legacy
       setDraftElderNickname(familyProfile?.nickname || profile?.nickname || profile?.name || '');
@@ -221,7 +224,7 @@ export default function ProfileScreen() {
         caregiverZodiacName: zodiac?.name || userProfile?.caregiverZodiacName,
       });
       setUserProfile(updatedUp);
-      // Also sync to legacy profile for compat
+      // Also sync to legacy profile for compat (city is NOT written here — it is family-scoped)
       if (profile) {
         const updated = await saveProfile({
           ...profile,
@@ -229,7 +232,6 @@ export default function ProfileScreen() {
           caregiverBirthYear: updatedUp.caregiverBirthYear ?? profile.caregiverBirthYear,
           caregiverZodiacEmoji: updatedUp.caregiverZodiacEmoji ?? profile.caregiverZodiacEmoji,
           caregiverZodiacName: updatedUp.caregiverZodiacName ?? profile.caregiverZodiacName,
-          city: draftCity.trim() || profile.city,
         });
         setProfile(updated);
       }
@@ -322,15 +324,18 @@ export default function ProfileScreen() {
 
   // 创建新家庭
   const handleCreateFamily = async () => {
+    const trimmedName = newElderName.trim();
+    if (!trimmedName) {
+      setJoinError('请输入被照顾者的名字');
+      return;
+    }
     setJoinLoading(true);
     setJoinError('');
     try {
-      // Use FamilyProfile for elder data, UserProfile for caregiver data
-      const elderName = familyProfile?.name || familyProfile?.nickname || profile?.name || profile?.nickname || '家人';
       const caregiverName = userProfile?.caregiverName || profile?.caregiverName || '照顾者';
-      const elderPhotoUri = familyProfile?.elderPhotoUri || profile?.photoUri;
+      // Pass new-family draft as familyProfileDraft so cloud gets complete elder info from the start
       await createFamilyRoom(
-        elderName,
+        trimmedName,
         {
           name: caregiverName,
           role: 'caregiver',
@@ -339,8 +344,16 @@ export default function ProfileScreen() {
           color: '#FF6B6B',
         },
         undefined,
-        { emoji: undefined, photoUri: elderPhotoUri },
+        { emoji: undefined, photoUri: undefined },
+        {
+          name: trimmedName,
+          nickname: trimmedName,
+          city: newElderCity.trim() || undefined,
+        },
       );
+      // Clear draft and return to list
+      setNewElderName('');
+      setNewElderCity('');
       await refresh();
       setFamilyModalTab('list');
     } catch (e: any) {
@@ -676,13 +689,6 @@ export default function ProfileScreen() {
                           placeholder="例如：1985"
                           keyboardType="number-pad"
                         />
-                        <Text style={styles.modalLabel}>所在城市</Text>
-                        <TextInput
-                          style={styles.modalInput}
-                          value={draftCity}
-                          onChangeText={setDraftCity}
-                          placeholder="例如：北京"
-                        />
                       </>
                     ) : (
                       <>
@@ -817,14 +823,21 @@ export default function ProfileScreen() {
                         </View>
                       ) : (
                         <>
-                          <View style={styles.createInfoCard}>
-                            <Text style={styles.createInfoEmoji}>🏠</Text>
-                            <Text style={styles.createInfoText}>
-                              将以 <Text style={{ fontWeight: '700' }}>{userProfile?.caregiverName || profile?.caregiverName || '您'}</Text> 的身份，
-                              为 <Text style={{ fontWeight: '700' }}>{familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || '家人'}</Text> 创建一个新的护理家庭。
-                            </Text>
-                            <Text style={styles.createInfoSub}>系统会自动生成邀请码，您可以邀请其他家人加入。</Text>
-                          </View>
+                          <Text style={styles.modalLabel}>👤 被照顾者的名字</Text>
+                          <TextInput
+                            style={styles.modalInput}
+                            value={newElderName}
+                            onChangeText={setNewElderName}
+                            placeholder="例如：姥姥、妈妈、小明"
+                          />
+                          <Text style={styles.modalLabel}>🏙️ 所在城市（可选）</Text>
+                          <TextInput
+                            style={styles.modalInput}
+                            value={newElderCity}
+                            onChangeText={setNewElderCity}
+                            placeholder="例如：北京"
+                          />
+                          <Text style={[styles.createInfoSub, { marginBottom: 12 }]}>系统会自动生成邀请码，您可以邀请其他家人加入。</Text>
                           {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
                           <TouchableOpacity
                             style={[styles.modalSubmitBtn, joinLoading && { opacity: 0.6 }]}
