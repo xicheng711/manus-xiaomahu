@@ -10,8 +10,9 @@ import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
 import { cloudSyncCheckIn } from '@/lib/cloud-sync';
+import { useFamilyContext } from '@/lib/family-context';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -682,6 +683,8 @@ function CheckinScreenContent() {
   const router = useRouter();
   const params = useLocalSearchParams<{ backfillDate?: string }>();
   const backfillDate = params.backfillDate || null;
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [mode, setMode] = useState<'landing' | 'morning' | 'evening'>('landing');
   const [step, setStep] = useState(0);
@@ -763,12 +766,12 @@ function CheckinScreenContent() {
   }
 
   useFocusEffect(useCallback(() => {
-    // 加载姓名
-    getProfile().then(profile => {
-      if (profile) {
-        setElderNickname(profile.nickname || profile.name || '家人');
-        setCaregiverName(profile.caregiverName || '您');
-      }
+    // 加载姓名（family-scoped 优先，fallback 到 legacy）
+    Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]).then(([userProfile, familyProfile, legacyProfile]) => {
+      const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '您';
+      setElderNickname(nickname);
+      setCaregiverName(caregiver);
     });
 
     (async () => {

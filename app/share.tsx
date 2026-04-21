@@ -9,7 +9,7 @@ import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
@@ -27,30 +27,37 @@ function fixMoodScore(ci: any): any {
   return { ...ci, moodScore: MOOD_FIX[ci.moodEmoji] };
 }
 
-// ─── 当日简报缓存（内存 + AsyncStorage 双层）────────────────────────────────
-let _briefingCache: { date: string; briefing: any; shareText: string; checkIn: any } | null = null;
+// ─── 当日简报缓存（内存 + AsyncStorage 双层，按 familyId 隔离）────────────────
+const CACHE_KEY_PREFIX = 'share_briefing_cache_v1';
+type BriefingCacheEntry = { date: string; briefing: any; shareText: string; checkIn: any };
+const _briefingCacheMap: Map<string, BriefingCacheEntry> = new Map();
 function getTodayKey() { return new Date().toISOString().slice(0, 10); }
-function getCachedBriefing() {
-  if (_briefingCache && _briefingCache.date === getTodayKey()) {
-    return { ..._briefingCache, checkIn: fixMoodScore(_briefingCache.checkIn) };
+function getCacheKey(familyId?: string) { return familyId ? `${CACHE_KEY_PREFIX}:${familyId}` : CACHE_KEY_PREFIX; }
+function getCachedBriefing(familyId?: string) {
+  const entry = _briefingCacheMap.get(getCacheKey(familyId));
+  if (entry && entry.date === getTodayKey()) {
+    return { ...entry, checkIn: fixMoodScore(entry.checkIn) };
   }
   return null;
 }
-function setCachedBriefing(briefing: any, shareText: string, checkIn?: any) {
-  const entry = { date: getTodayKey(), briefing, shareText, checkIn: checkIn || null };
-  _briefingCache = entry;
-  AsyncStorage.setItem('share_briefing_cache_v1', JSON.stringify(entry)).catch(() => {});
+function setCachedBriefing(briefing: any, shareText: string, checkIn?: any, familyId?: string) {
+  const key = getCacheKey(familyId);
+  const entry: BriefingCacheEntry = { date: getTodayKey(), briefing, shareText, checkIn: checkIn || null };
+  _briefingCacheMap.set(key, entry);
+  AsyncStorage.setItem(key, JSON.stringify(entry)).catch(() => {});
 }
-async function loadPersistedBriefing() {
-  if (_briefingCache && _briefingCache.date === getTodayKey()) {
-    return { ..._briefingCache, checkIn: fixMoodScore(_briefingCache.checkIn) };
+async function loadPersistedBriefing(familyId?: string) {
+  const key = getCacheKey(familyId);
+  const memEntry = _briefingCacheMap.get(key);
+  if (memEntry && memEntry.date === getTodayKey()) {
+    return { ...memEntry, checkIn: fixMoodScore(memEntry.checkIn) };
   }
   try {
-    const raw = await AsyncStorage.getItem('share_briefing_cache_v1');
+    const raw = await AsyncStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.date === getTodayKey()) {
-        _briefingCache = parsed;
+        _briefingCacheMap.set(key, parsed);
         return { ...parsed, checkIn: fixMoodScore(parsed.checkIn) };
       }
     }
@@ -629,7 +636,9 @@ export default function ShareScreen() {
   const [briefing, setBriefing] = useState<any>(null);
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [backfillNotice, setBackfillNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(!getCachedBriefing());
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
+  const [loading, setLoading] = useState(!getCachedBriefing(familyId));
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elderNickname, setElderNickname] = useState('家人');
@@ -646,7 +655,6 @@ export default function ShareScreen() {
   const [yesterdayBriefing, setYesterdayBriefing] = useState<any>(null); // 昨日记录的简报
   const [viewMode, setViewMode] = useState<'today' | 'yesterday'>('today');
   const { weatherData } = useWeather();
-  const { activeMembership } = useFamilyContext();
   const isJoiner = activeMembership?.role === 'joiner';
   const cardRef = useRef<View>(null);
   const sharePulse = useRef(new Animated.Value(1)).current;
@@ -672,8 +680,8 @@ export default function ShareScreen() {
         loadHistoryDate(historyDate);
       } else {
         if (forceRefresh) {
-          _briefingCache = null;
-          AsyncStorage.removeItem('share_briefing_cache_v1').catch(() => {});
+          _briefingCacheMap.delete(getCacheKey(familyId));
+          AsyncStorage.removeItem(getCacheKey(familyId)).catch(() => {});
         }
         loadAndGenerate(forceRefresh);
       }
@@ -685,8 +693,8 @@ export default function ShareScreen() {
       loadAndGenerate(false);
     } else if (error) {
       // 之前是错误状态（晚间打卡未完成），用户可能已经去完成打卡了，强制刷新
-      _briefingCache = null;
-      AsyncStorage.removeItem('share_briefing_cache_v1').catch(() => {});
+      _briefingCacheMap.delete(getCacheKey(familyId));
+      AsyncStorage.removeItem(getCacheKey(familyId)).catch(() => {});
       loadAndGenerate(true);
     } else {
       recheckBackfill();
@@ -697,10 +705,14 @@ export default function ShareScreen() {
     setError(null);
     setLoading(true);
     try {
-      const profile = await getProfile();
-      const nickname = profile?.nickname || profile?.name || '家人';
-      const caregiver = profile?.caregiverName || '照顾者';
-      const emoji = profile?.zodiacEmoji || '🐯';
+      const [userProfile, familyProfile, legacyProfile] = await Promise.all([
+        getUserProfile(),
+        getFamilyProfile(familyId),
+        getProfile(),
+      ]);
+      const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
@@ -744,7 +756,7 @@ export default function ShareScreen() {
     setError(null);
 
     if (!forceRefresh) {
-      const memCached = getCachedBriefing();
+      const memCached = getCachedBriefing(familyId);
       if (memCached) {
         setBriefing(memCached.briefing);
         setMergedBriefing(memCached.briefing); // 保存今日简报
@@ -761,7 +773,7 @@ export default function ShareScreen() {
     }
 
     if (!forceRefresh) {
-      const persisted = await loadPersistedBriefing();
+      const persisted = await loadPersistedBriefing(familyId);
       if (persisted) {
         setBriefing(persisted.briefing);
         setMergedBriefing(persisted.briefing); // 保存今日简报
@@ -779,10 +791,14 @@ export default function ShareScreen() {
 
     setLoading(true);
     try {
-      const profile = await getProfile();
-      const nickname = profile?.nickname || profile?.name || '家人';
-      const caregiver = profile?.caregiverName || '照顾者';
-      const emoji = profile?.zodiacEmoji || '🐯';
+      const [userProfile, familyProfile, legacyProfile] = await Promise.all([
+        getUserProfile(),
+        getFamilyProfile(familyId),
+        getProfile(),
+      ]);
+      const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
@@ -840,17 +856,20 @@ export default function ShareScreen() {
 
   async function loadSupplementaryData() {
     try {
-      const [profile, weekly, today, yesterday] = await Promise.all([
+      const [userProfile, familyProfile, legacyProfile, weekly, today, yesterday] = await Promise.all([
+        getUserProfile(),
+        getFamilyProfile(familyId),
         getProfile(),
         getWeeklySleepData(7),
         getTodayCheckIn(),
         getYesterdayCheckIn(),
       ]);
-      if (profile) {
-        setElderNickname(profile.nickname || profile.name || '家人');
-        setCaregiverName(profile.caregiverName || '照顾者');
-        setElderEmoji(profile.zodiacEmoji || '🐯');
-      }
+      const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
+      setElderNickname(nickname);
+      setCaregiverName(caregiver);
+      setElderEmoji(emoji);
       setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
       setTodayCi(today);
       setYesterdayCi(yesterday);
@@ -885,21 +904,21 @@ export default function ShareScreen() {
         setBriefing(result.briefing);
         setMergedBriefing(result.briefing); // 保存今日简报
         setShareText(result.briefing.shareText ?? '');
-        setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci);
+        setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci, familyId);
         // 持久化简报历史
         saveBriefing({ date: getTodayKey(), careScore: result.briefing.careScore ?? 80, summary: result.briefing.summary ?? '', encouragement: result.briefing.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
       } else {
         const fallback = buildLocalBriefing(nickname, caregiver, ci);
         setBriefing(fallback);
         setMergedBriefing(fallback); // 保存今日简报
-        setCachedBriefing(fallback, fallback.shareText, ci);
+        setCachedBriefing(fallback, fallback.shareText, ci, familyId);
         saveBriefing({ date: getTodayKey(), careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
       }
     } catch (e) {
       const fallback = buildLocalBriefing(nickname, caregiver, ci);
       setBriefing(fallback);
       setMergedBriefing(fallback); // 保存今日简报
-      setCachedBriefing(fallback, fallback.shareText, ci);
+      setCachedBriefing(fallback, fallback.shareText, ci, familyId);
       saveBriefing({ date: getTodayKey(), careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
     } finally {
       setGenerating(false);
