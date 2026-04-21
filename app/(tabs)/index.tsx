@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, joinFamilyRoom, getDiaryEntries, DiaryEntry, upsertCheckIn, getCurrentMember } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, joinFamilyRoom, getDiaryEntries, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
 import { getZodiacFromDate } from '@/lib/zodiac';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -489,12 +489,26 @@ function CreatorHomeScreen() {
   const _unusedShake = useShakeAnim();
 
   const loadData = useCallback(async () => {
-    const profile = await getProfile();
-    if (!profile || !profile.setupComplete) { router.replace('/onboarding' as any); return; }
-    setElderNickname(profile?.nickname || profile?.name || '家人');
-    const cgName = profile?.caregiverName || '';
-    if (profile?.caregiverAvatarType === 'photo' && profile?.caregiverPhotoUri) {
-      setMemberPhotoUri(profile.caregiverPhotoUri);
+    // P1 fix: read from scoped profiles (family-scoped for elder, global for caregiver)
+    // Fall back to legacy getProfile() only for setupComplete guard and missing fields.
+    const [userProfile, familyProfile, legacyProfile] = await Promise.all([
+      getUserProfile(),
+      getFamilyProfile(activeMembership?.familyId),
+      getProfile(),
+    ]);
+    // Guard: if no setup has been done at all, redirect to onboarding
+    if (!legacyProfile?.setupComplete && !familyProfile?.setupComplete) {
+      router.replace('/onboarding' as any);
+      return;
+    }
+    // Elder data: prefer family-scoped, fall back to legacy
+    const elderNick = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+    setElderNickname(elderNick);
+    // Caregiver data: prefer userProfile, fall back to legacy
+    const cgName = userProfile?.caregiverName || legacyProfile?.caregiverName || '';
+    if ((userProfile?.caregiverAvatarType ?? legacyProfile?.caregiverAvatarType) === 'photo') {
+      const photoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
+      if (photoUri) setMemberPhotoUri(photoUri);
     } else {
       const member = await getCurrentMember();
       if (member?.photoUri) setMemberPhotoUri(member.photoUri);
@@ -502,8 +516,10 @@ function CreatorHomeScreen() {
     setCaregiverName(cgName);
     refreshWeather();
     setGreeting(buildGreeting(cgName || undefined));
-    if (profile?.birthDate) {
-      const zodiac = getZodiacFromDate(profile.birthDate);
+    // Elder zodiac: prefer family-scoped birthDate
+    const birthDate = familyProfile?.birthDate || legacyProfile?.birthDate;
+    if (birthDate) {
+      const zodiac = getZodiacFromDate(birthDate);
       setZodiacColor(zodiac.color);
       setZodiacEmoji(zodiac.emoji);
     }

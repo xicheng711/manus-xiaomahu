@@ -346,14 +346,21 @@ export default function OnboardingScreen() {
       });
     }
     // Creator always creates a family room with the pre-generated code
-    await createFamilyRoom(elderNickname || elderName || '家人', {
-      name: caregiverName || '家人',
-      role: 'caregiver',
-      roleLabel: '主要照顾者',
-      emoji: '👩',
-      photoUri: caregiverPhotoUri,
-      color: AppColors.coral.primary,
-    }, previewRoomCode, { emoji: elderZodiac.emoji, photoUri: elderPhotoUri }).catch(() => {});
+    // P0 fix: do NOT swallow errors — if createFamilyRoom fails, the cloud room
+    // does not exist and the invite code is invalid. Show an error and abort.
+    try {
+      await createFamilyRoom(elderNickname || elderName || '家人', {
+        name: caregiverName || '家人',
+        role: 'caregiver',
+        roleLabel: '主要照顾者',
+        emoji: '👩',
+        photoUri: caregiverPhotoUri,
+        color: AppColors.coral.primary,
+      }, previewRoomCode, { emoji: elderZodiac.emoji, photoUri: elderPhotoUri });
+    } catch (e: any) {
+      Alert.alert('创建家庭失败', e?.message || '请确认已登录并重试');
+      return;
+    }
     router.replace('/(tabs)');
   }
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { fetchWeather, getWeatherByGPS, buildGreetingWithWeather, WeatherData, GpsWeatherInfo } from './weather';
-import { getProfile } from './storage';
+import { getProfile, getFamilyProfile } from './storage';
 
 interface WeatherContextValue {
   weatherData: WeatherData | null;
@@ -38,9 +38,10 @@ export function WeatherProvider({ children }: { children: React.ReactNode }) {
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
-      const profile = await getProfile();
+      // P1 fix: prefer family-scoped city so multi-family switch shows correct weather
+      const [familyProfile, legacyProfile] = await Promise.all([getFamilyProfile(), getProfile()]);
       if (requestId !== requestIdRef.current) return;
-      const city = profile?.city || '';
+      const city = familyProfile?.city || legacyProfile?.city || '';
       setCityName(city);
 
       const [cityWeather, gps] = await Promise.all([

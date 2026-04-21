@@ -732,7 +732,8 @@ export async function createFamilyRoom(elderName: string, firstMember: Omit<Fami
       memberPhotoUri: firstMember.photoUri,
       // Pass full elder profile so cloud room is complete from creation instant
       elderProfile: existingFamilyProfile ? {
-        nickname: existingFamilyProfile.nickname,
+        name: existingFamilyProfile.name ?? elderName,
+        nickname: existingFamilyProfile.nickname ?? existingFamilyProfile.name ?? elderName,
         birthDate: existingFamilyProfile.birthDate,
         zodiacEmoji: existingFamilyProfile.zodiacEmoji,
         zodiacName: existingFamilyProfile.zodiacName,
