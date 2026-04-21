@@ -306,6 +306,26 @@ export default function OnboardingScreen() {
   async function handleFinish() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const birthDate = `${elderBirthYear}-${String(birthMonthIdx + 1).padStart(2, '0')}-${String(birthDayIdx + 1).padStart(2, '0')}`;
+
+    // ── Plan A: cloud-first ──────────────────────────────────────────────────
+    // Step 1: Create the cloud family room FIRST.
+    // If this fails we abort immediately — no local data is written, so the
+    // device stays in a clean state and the user can safely retry.
+    try {
+      await createFamilyRoom(elderNickname || elderName || '家人', {
+        name: caregiverName || '家人',
+        role: 'caregiver',
+        roleLabel: '主要照顾者',
+        emoji: '👩',
+        photoUri: caregiverPhotoUri,
+        color: AppColors.coral.primary,
+      }, previewRoomCode, { emoji: elderZodiac.emoji, photoUri: elderPhotoUri });
+    } catch (e: any) {
+      Alert.alert('创建家庭失败', e?.message || '请确认已登录并重试');
+      return; // abort — nothing written locally yet
+    }
+
+    // Step 2: Cloud room created successfully. Now persist all local data.
     // Write to new split models (UserProfile + FamilyProfile) as primary truth
     await saveUserProfile({
       caregiverName: caregiverName || '家人',
@@ -356,7 +376,6 @@ export default function OnboardingScreen() {
     });
     // Schedule daily check-in reminders
     scheduleAllReminders(elderNickname || elderName || undefined).catch(() => {});
-
     // Save medications
     for (const med of medications) {
       await saveMedication({
@@ -370,22 +389,6 @@ export default function OnboardingScreen() {
         reminderEnabled: true,
         color: AppColors.coral.primary,
       });
-    }
-    // Creator always creates a family room with the pre-generated code
-    // P0 fix: do NOT swallow errors — if createFamilyRoom fails, the cloud room
-    // does not exist and the invite code is invalid. Show an error and abort.
-    try {
-      await createFamilyRoom(elderNickname || elderName || '家人', {
-        name: caregiverName || '家人',
-        role: 'caregiver',
-        roleLabel: '主要照顾者',
-        emoji: '👩',
-        photoUri: caregiverPhotoUri,
-        color: AppColors.coral.primary,
-      }, previewRoomCode, { emoji: elderZodiac.emoji, photoUri: elderPhotoUri });
-    } catch (e: any) {
-      Alert.alert('创建家庭失败', e?.message || '请确认已登录并重试');
-      return;
     }
     router.replace('/(tabs)');
   }
