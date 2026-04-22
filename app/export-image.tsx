@@ -8,10 +8,12 @@ import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import {
-  getProfile, getTodayCheckIn, getYesterdayCheckIn,
+  getProfile, getUserProfile, getFamilyProfile,
+  getTodayCheckIn, getYesterdayCheckIn,
   getMedications, getDiaryEntries,
   type DailyCheckIn, type ElderProfile, type Medication, type DiaryEntry,
 } from '@/lib/storage';
+import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
@@ -266,6 +268,8 @@ const imgStyles = StyleSheet.create({
 });
 
 export default function ExportImageScreen() {
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<ElderProfile | null>(null);
@@ -279,16 +283,33 @@ export default function ExportImageScreen() {
 
   const generateBriefingMutation = trpc.ai.generateBriefing.useMutation();
 
-  useFocusEffect(useCallback(() => { loadData(); }, []));
+  useFocusEffect(useCallback(() => { loadData(); }, [familyId]));
 
   async function loadData() {
     setLoading(true);
     setError(null);
     try {
-      const p = await getProfile();
-      setProfile(p);
-      const today = await getTodayCheckIn();
-      const yesterday = await getYesterdayCheckIn();
+      // 称谓：family-scoped 优先，降级到 legacy profile
+      const [userProfile, familyProfile, legacyProfile] = await Promise.all([
+        getUserProfile(),
+        getFamilyProfile(familyId),
+        getProfile(),
+      ]);
+      const nickname = familyProfile?.nickname || familyProfile?.name
+        || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      // 将 family-scoped 称谓合并到 profile 对象，传给 LongImageCard
+      const mergedProfile: ElderProfile = {
+        ...(legacyProfile ?? {} as ElderProfile),
+        nickname,
+        name: familyProfile?.name || legacyProfile?.name || '家人',
+        caregiverName: caregiver,
+        zodiacEmoji: familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯',
+      };
+      setProfile(mergedProfile);
+      // 打卡/用药/日记：显式传 familyId
+      const today = await getTodayCheckIn(familyId);
+      const yesterday = await getYesterdayCheckIn(familyId);
       const ci = today || yesterday;
       if (!ci) {
         setError('请先完成今日打卡，再导出简报');
@@ -296,13 +317,10 @@ export default function ExportImageScreen() {
         return;
       }
       setCheckIn(ci);
-      const meds = await getMedications();
+      const meds = await getMedications(familyId);
       setMedications(meds);
-      const diaries = await getDiaryEntries();
+      const diaries = await getDiaryEntries(familyId);
       setDiaryEntries(diaries);
-
-      const nickname = p?.nickname || p?.name || '家人';
-      const caregiver = p?.caregiverName || '照顾者';
       const dateStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
 
       try {

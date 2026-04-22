@@ -6,7 +6,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
-import { getDiaryEntryById, DiaryEntry, getProfile, formatDate } from '@/lib/storage';
+import { getDiaryEntryById, DiaryEntry, getProfile, getUserProfile, getFamilyProfile, formatDate } from '@/lib/storage';
+import { useFamilyContext } from '@/lib/family-context';
 import * as Haptics from 'expo-haptics';
 import { BackButton } from '@/components/back-button';
 import { trpc } from '@/lib/trpc';
@@ -24,6 +25,8 @@ const MOOD_OPTIONS = [
 export default function DiaryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [elderNickname, setElderNickname] = useState('家人');
@@ -39,15 +42,21 @@ export default function DiaryDetailScreen() {
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, [id, familyId]);
 
   async function loadData() {
     setLoading(true);
-    const profile = await getProfile();
-    if (profile) {
-      setElderNickname(profile.nickname || profile.name || '家人');
-      setCaregiverName(profile.caregiverName || '照顾者');
-    }
+    // 称谓：family-scoped 优先，降级到 legacy profile
+    const [userProfile, familyProfile, legacyProfile] = await Promise.all([
+      getUserProfile(),
+      getFamilyProfile(familyId),
+      getProfile(),
+    ]);
+    const nickname = familyProfile?.nickname || familyProfile?.name
+      || legacyProfile?.nickname || legacyProfile?.name || '家人';
+    const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+    setElderNickname(nickname);
+    setCaregiverName(caregiver);
     if (id) {
       const e = await getDiaryEntryById(id);
       if (e) {
