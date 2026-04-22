@@ -7,7 +7,8 @@ import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import {
-  getProfile, getYesterdayCheckIn, getTodayCheckIn, upsertCheckIn,
+  getProfile, getUserProfile, getFamilyProfile,
+  getYesterdayCheckIn, getTodayCheckIn, upsertCheckIn,
   getWeeklySleepData, DailyCheckIn, todayStr,
   saveBriefing, getTodayBriefing, getLatestBriefing, CareBriefing,
 } from '@/lib/storage';
@@ -117,27 +118,37 @@ export default function AssistantScreen() {
 
   const getDailyAdviceMutation = trpc.ai.getDailyAdvice.useMutation();
 
-  useFocusEffect(useCallback(() => { loadData(); }, []));
+  // Re-run loadData whenever the active family changes
+  useFocusEffect(useCallback(() => { loadData(); }, [familyId]));
 
   async function loadData() {
     setLoading(true);
     setError(null);
     try {
-      const profile = await getProfile();
-      const nickname = profile?.nickname || profile?.name || '家人';
-      const caregiver = profile?.caregiverName || '照顾者';
+      // 称谓：family-scoped 优先，降级到 legacy profile
+      const [userProfile, familyProfile, legacyProfile] = await Promise.all([
+        getUserProfile(),
+        getFamilyProfile(familyId),
+        getProfile(),
+      ]);
+      const nickname = familyProfile?.nickname || familyProfile?.name
+        || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      const city = familyProfile?.city || legacyProfile?.city || undefined;
+      const careNeeds = legacyProfile?.careNeeds?.selectedNeeds ?? undefined;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
-
-      const yesterday = await getYesterdayCheckIn();
-      const today = await getTodayCheckIn();
+      // 打卡数据：显式传 familyId
+      const [yesterday, today, weekly] = await Promise.all([
+        getYesterdayCheckIn(familyId),
+        getTodayCheckIn(familyId),
+        getWeeklySleepData(7, familyId),
+      ]);
       setTodayCheckIn(today);
       setYesterdayCheckIn(yesterday);
-
-      const weekly = await getWeeklySleepData(7, familyId);
       setWeeklyData(weekly);
-
-      const savedBriefing = await getTodayBriefing();
+      // 简报读取：显式传 familyId
+      const savedBriefing = await getTodayBriefing(familyId);
       const latestCheckInTime = today?.completedAt ?? yesterday?.completedAt ?? '';
       const briefingIsFresh = savedBriefing && (!latestCheckInTime || savedBriefing.generatedAt >= latestCheckInTime);
 
@@ -150,7 +161,7 @@ export default function AssistantScreen() {
 
       const hasNewCheckIn = (today?.morningDone || today?.eveningDone || yesterday?.eveningDone);
       if (!hasNewCheckIn) {
-        const fallback = savedBriefing ?? await getLatestBriefing();
+        const fallback = savedBriefing ?? await getLatestBriefing(familyId);
         if (fallback) {
           setAdvice({ careScore: fallback.careScore, summary: fallback.summary, suggestion: fallback.encouragement });
           setLoading(false);
@@ -165,8 +176,8 @@ export default function AssistantScreen() {
       const result = await getDailyAdviceMutation.mutateAsync({
         elderNickname: nickname,
         caregiverName: caregiver,
-        city: profile?.city || undefined,
-        baseline: profile?.careNeeds?.selectedNeeds?.length ? { care_needs: profile.careNeeds.selectedNeeds } : undefined,
+        city,
+        baseline: careNeeds?.length ? { care_needs: careNeeds } : undefined,
         sleep_analysis: sleepAnalysis ? {
           score: sleepAnalysis.score,
           problems: sleepAnalysis.problems,
@@ -179,7 +190,7 @@ export default function AssistantScreen() {
           meal: yesterday?.mealOption ?? undefined,
           notes: yesterday?.eveningNotes || today?.morningNotes || undefined,
         },
-        careNeeds: profile?.careNeeds?.selectedNeeds ?? undefined,
+        careNeeds,
       });
 
       if (result.success && result.advice) {
@@ -193,7 +204,8 @@ export default function AssistantScreen() {
           generatedAt: new Date().toISOString(),
           checkInDate: yesterday?.date ?? today?.date ?? dateStr,
         };
-        saveBriefing(briefing).catch(() => {});
+        // 简报写入：显式传 familyId
+        saveBriefing(briefing, familyId).catch(() => {});
       } else {
         setError(result.error ?? '小马虎暂时无法生成分析');
       }
