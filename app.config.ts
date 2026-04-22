@@ -35,13 +35,12 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    buildNumber: "7",
+    buildNumber: "8",
     bundleIdentifier: env.iosBundleId,
     usesAppleSignIn: true,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       LSApplicationQueriesSchemes: ['weixin', 'weixinULAPI'],
-      NSSpeechRecognitionUsageDescription: 'This app does not use speech recognition.',
       NSPhotoLibraryUsageDescription: '允许小马虎访问您的相册，用于上传头像和家庭照片。',
     },
     associatedDomains: [

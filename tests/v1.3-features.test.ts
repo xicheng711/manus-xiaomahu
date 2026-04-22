@@ -104,17 +104,7 @@ describe('AI diary reply', () => {
   });
 });
 
-// ─── Test 3: Voice input component structure ─────────────────────────────────
-describe('VoiceInput component', () => {
-  it('should have proper interface definition', () => {
-    // Verify the expected props interface
-    const props = { onResult: (text: string) => {}, language: 'zh-CN' };
-    expect(typeof props.onResult).toBe('function');
-    expect(props.language).toBe('zh-CN');
-  });
-});
-
-// ─── Test 4: Trend chart data processing ─────────────────────────────────────
+// ─── Test 3: Trend chart data processing ─────────────────────────────────────
 describe('Trend chart data processing', () => {
   it('should handle empty check-ins gracefully', () => {
     // Verify empty array produces zero average
