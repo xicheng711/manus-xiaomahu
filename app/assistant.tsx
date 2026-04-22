@@ -135,7 +135,9 @@ export default function AssistantScreen() {
         || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const city = familyProfile?.city || legacyProfile?.city || undefined;
-      const careNeeds = legacyProfile?.careNeeds?.selectedNeeds ?? undefined;
+      const careNeeds = familyProfile?.careNeeds?.selectedNeeds
+        ?? legacyProfile?.careNeeds?.selectedNeeds
+        ?? undefined;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       // 打卡数据：显式传 familyId
