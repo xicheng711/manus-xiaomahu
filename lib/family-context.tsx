@@ -12,12 +12,14 @@ import {
   migrateToMultiFamily,
   removeMembership,
   deleteFamilyAndData,
+  clearScopedFamilyData,
   setActiveRoomIdCache,
   addOrUpdateMembership,
 } from './storage';
 import {
   setCloudSyncState,
   cloudGetRoomDetail,
+  cloudGetMyRooms,
   cloudLeaveRoom,
   cloudDeleteRoom,
 } from './cloud-sync';
@@ -54,7 +56,36 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     await migrateToMultiFamily();
-    const all = await getAllMemberships();
+    let all = await getAllMemberships();
+
+    // ── Server reconciliation ──────────────────────────────────────────────
+    // Pull the authoritative room list from the server and remove any local
+    // memberships that no longer exist on the server (e.g. family was deleted
+    // by the creator while this device was offline).
+    try {
+      const serverRooms = await cloudGetMyRooms();
+      if (Array.isArray(serverRooms) && serverRooms.length >= 0) {
+        const serverIds = new Set(serverRooms.map((r: any) => String(r.roomId)));
+        const stale = all.filter(m => !serverIds.has(m.familyId));
+        if (stale.length > 0) {
+          console.log(
+            `[FamilyContext] reconcile: removing ${stale.length} stale membership(s):`,
+            stale.map(m => m.familyId),
+          );
+          for (const m of stale) {
+            await clearScopedFamilyData(m.familyId);
+            await removeMembership(m.familyId);
+          }
+          // Re-read after cleanup
+          all = await getAllMemberships();
+        }
+      }
+    } catch (e) {
+      // Network unavailable — skip reconciliation, keep local state as-is
+      console.warn('[FamilyContext] reconcile: server unavailable, skipping:', e);
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     const activeId = await getActiveFamilyId();
     const active = all.find(m => m.familyId === activeId) ?? all[0] ?? null;
     setMemberships(all);
@@ -95,6 +126,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
 
     // Try to refresh room detail from server before switching
     let updatedRoom = target.room;
+    let roomIsValid = true;
     try {
       if (!isNaN(serverRoomId)) {
         const detail = await cloudGetRoomDetail(serverRoomId);
@@ -124,11 +156,34 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
           // Update cached membership with fresh room data
           const updatedMembership = { ...target, room: updatedRoom };
           await addOrUpdateMembership(updatedMembership);
+        } else {
+          // Server returned a result but room is null/undefined → room deleted
+          roomIsValid = false;
         }
       }
-    } catch (e) {
-      console.warn('[FamilyContext] switchFamily getRoomDetail failed, using cached room:', e);
+    } catch (e: any) {
+      // Distinguish "room gone" errors from transient network errors.
+      // tRPC wraps server errors; check for NOT_FOUND / FORBIDDEN / UNAUTHORIZED.
+      const code: string = e?.data?.code ?? e?.shape?.data?.code ?? '';
+      const isGone = ['NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED'].includes(code);
+      if (isGone) {
+        roomIsValid = false;
+        console.warn(`[FamilyContext] switchFamily: room ${familyId} no longer exists on server (${code}), cleaning up`);
+      } else {
+        // Transient network error — keep cached room, don't remove membership
+        console.warn('[FamilyContext] switchFamily getRoomDetail failed (network?), using cached room:', e);
+      }
     }
+
+    // ── Room no longer valid on server → clean up and bail out ────────────
+    if (!roomIsValid) {
+      await clearScopedFamilyData(familyId);
+      await removeMembership(familyId);
+      // Switch to another family if available, or clear active state
+      await refresh();
+      return;
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     await saveFamilyRoom(updatedRoom);
 
@@ -148,7 +203,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     }
 
     setActiveMembership({ ...target, room: updatedRoom });
-  }, []);
+  }, [refresh]);
 
   const leaveFamily = useCallback(async (familyId: string) => {
     // Call server leave API using cloud-sync layer (no dynamic import needed)
