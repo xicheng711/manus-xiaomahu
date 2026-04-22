@@ -388,13 +388,19 @@ export default function ProfileScreen() {
 
   const executeDeleteOrLeave = async () => {
     if (!deleteConfirmId) return;
-    if (deleteConfirmType === 'delete') {
-      await deleteFamily(deleteConfirmId);
-    } else {
-      await leaveFamily(deleteConfirmId);
+    try {
+      if (deleteConfirmType === 'delete') {
+        await deleteFamily(deleteConfirmId);
+      } else {
+        await leaveFamily(deleteConfirmId);
+      }
+      setDeleteConfirmId(null);
+      await refresh();
+    } catch (e: any) {
+      const msg = e?.message || '请检查网络后重试';
+      const title = deleteConfirmType === 'delete' ? '解散失败' : '退出失败';
+      Alert.alert(title, msg, [{ text: '知道了' }]);
     }
-    setDeleteConfirmId(null);
-    await refresh();
   };
 
   const ROLE_LABELS: Record<string, string> = {

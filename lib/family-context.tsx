@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import {
   FamilyMembership,
   FamilyMember,
@@ -72,12 +73,24 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             `[FamilyContext] reconcile: removing ${stale.length} stale membership(s):`,
             stale.map(m => m.familyId),
           );
+          const staleNames = stale.map(m => m.room?.elderName || m.familyId);
           for (const m of stale) {
             await clearScopedFamilyData(m.familyId);
             await removeMembership(m.familyId);
           }
           // Re-read after cleanup
           all = await getAllMemberships();
+          // Notify user that stale families were removed
+          if (staleNames.length > 0) {
+            const names = staleNames.join('、');
+            Alert.alert(
+              '家庭已解散',
+              staleNames.length === 1
+                ? `「${names}」已被主照顾者解散，已从你的列表中移除。`
+                : `以下家庭已被解散，已从你的列表中移除：${names}`,
+              [{ text: '知道了' }],
+            );
+          }
         }
       }
     } catch (e) {
@@ -206,28 +219,22 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const leaveFamily = useCallback(async (familyId: string) => {
-    // Call server leave API using cloud-sync layer (no dynamic import needed)
+    // Server call MUST succeed before local cleanup.
+    // If it fails, throw so the caller can show an error to the user.
     const serverRoomId = parseInt(familyId);
     if (!isNaN(serverRoomId)) {
-      try {
-        await cloudLeaveRoom(serverRoomId);
-      } catch (e) {
-        console.warn('[FamilyContext] leaveFamily server call failed (non-fatal):', e);
-      }
+      await cloudLeaveRoom(serverRoomId); // throws on failure
     }
     await removeMembership(familyId);
     await refresh();
   }, [refresh]);
 
   const deleteFamily = useCallback(async (familyId: string) => {
-    // Call server delete API using cloud-sync layer (no dynamic import needed)
+    // Server call MUST succeed before local cleanup.
+    // If it fails, throw so the caller can show an error to the user.
     const serverRoomId = parseInt(familyId);
     if (!isNaN(serverRoomId)) {
-      try {
-        await cloudDeleteRoom(serverRoomId);
-      } catch (e) {
-        console.warn('[FamilyContext] deleteFamily server call failed (non-fatal):', e);
-      }
+      await cloudDeleteRoom(serverRoomId); // throws on failure
     }
     await deleteFamilyAndData(familyId);
     await refresh();

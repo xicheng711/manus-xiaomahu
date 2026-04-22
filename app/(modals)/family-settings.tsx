@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Modal, Platform, Keyboard,
+  StyleSheet, Modal, Platform, Keyboard, Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +41,9 @@ export default function FamilySettingsModal() {
       await deleteFamily(membership.familyId);
       setShowDeleteStep2(false);
       router.back();
+    } catch (e: any) {
+      const msg = e?.message || '请检查网络后重试';
+      Alert.alert('删除失败', msg, [{ text: '知道了' }]);
     } finally {
       setDeleting(false);
     }
@@ -53,6 +56,9 @@ export default function FamilySettingsModal() {
       await leaveFamily(membership.familyId);
       setShowLeaveConfirm(false);
       router.back();
+    } catch (e: any) {
+      const msg = e?.message || '请检查网络后重试';
+      Alert.alert('退出失败', msg, [{ text: '知道了' }]);
     } finally {
       setLeaving(false);
     }
