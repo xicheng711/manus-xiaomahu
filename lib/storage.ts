@@ -166,7 +166,6 @@ export interface DiaryEntry {
   id: string;
   date: string;
   content: string;
-  voiceUri?: string;
   moodEmoji: string;
   moodLabel?: string;
   moodScore?: number;

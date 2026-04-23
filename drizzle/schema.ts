@@ -126,7 +126,6 @@ export const diaryEntries = mysqlTable("diary_entries", {
   authorUserId: int("authorUserId").notNull(),
   date: varchar("date", { length: 10 }).notNull(),
   content: text("content").notNull(),
-  voiceUri: text("voiceUri"),
   moodEmoji: varchar("moodEmoji", { length: 20 }),
   moodLabel: varchar("moodLabel", { length: 50 }),
   moodScore: int("moodScore"),

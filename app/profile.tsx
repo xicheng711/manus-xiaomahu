@@ -77,19 +77,25 @@ export default function ProfileScreen() {
   const handleDeleteAccount = async () => {
     setDeletingAccount(true);
     try {
+      // Server-first: attempt to delete account on server
       await deleteAccountMutation.mutateAsync();
-    } catch (e) {
-      // Ignore server errors — still clear local data
-    }
-    try {
+      
+      // Only clear local data if server deletion succeeded
       await clearAllLocalData();
-    } catch (e) {
-      // Ignore
+      
+      setDeletingAccount(false);
+      setShowDeleteAccountModal(false);
+      // Navigate to onboarding / welcome screen
+      router.replace('/onboarding' as any);
+    } catch (e: any) {
+      setDeletingAccount(false);
+      // If server fails, show error and do NOT clear local data
+      Alert.alert(
+        '注销失败',
+        e?.message || '服务器连接失败，请稍后再试。如果持续失败，请联系客服。',
+        [{ text: '确定' }]
+      );
     }
-    setDeletingAccount(false);
-    setShowDeleteAccountModal(false);
-    // Navigate to onboarding / welcome screen
-    router.replace('/onboarding' as any);
   };
 
   const pickPhoto = useCallback(async (target: 'caregiver' | 'elder') => {
@@ -544,14 +550,14 @@ export default function ProfileScreen() {
                     <Text style={styles.familyCardActionText}>🔄 切换到此家庭</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={[styles.familyCardAction, { marginTop: 4 }]}
-                  onPress={() => confirmDeleteOrLeave(m.familyId, m.role === 'creator' ? 'delete' : 'leave')}
-                >
-                  <Text style={styles.familyCardActionText}>
-                    {m.role === 'creator' ? '🗑️ 解散家庭' : '🚪 退出家庭'}
-                  </Text>
-                </TouchableOpacity>
+                {m.role !== 'creator' && (
+                  <TouchableOpacity
+                    style={[styles.familyCardAction, { marginTop: 4 }]}
+                    onPress={() => confirmDeleteOrLeave(m.familyId, 'leave')}
+                  >
+                    <Text style={styles.familyCardActionText}>🚪 退出家庭</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             );
           })

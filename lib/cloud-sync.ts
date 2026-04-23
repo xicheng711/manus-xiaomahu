@@ -253,7 +253,6 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number) {
       serverDiaryId,
       date: diary.date,
       content: diary.content,
-      voiceUri: diary.voiceUri,
       moodEmoji: diary.moodEmoji,
       moodLabel: diary.moodLabel,
       moodScore: diary.moodScore,

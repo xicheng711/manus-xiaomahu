@@ -355,7 +355,6 @@ export const familyRouter = router({
       serverDiaryId: z.number().optional(),  // if updating existing
       date: z.string(),
       content: z.string(),
-      voiceUri: z.string().optional(),
       moodEmoji: z.string().optional(),
       moodLabel: z.string().optional(),
       moodScore: z.number().optional(),
@@ -391,7 +390,6 @@ export const familyRouter = router({
         authorUserId: userId,
         date: input.date,
         content: input.content,
-        voiceUri: input.voiceUri ?? null,
         moodEmoji: input.moodEmoji ?? null,
         moodLabel: input.moodLabel ?? null,
         moodScore: input.moodScore ?? null,
