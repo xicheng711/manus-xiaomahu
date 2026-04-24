@@ -367,17 +367,21 @@ export default function FamilyScreen() {
   const [isCreator, setIsCreator] = useState(true);
   const [codeCopied, setCodeCopied] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-      if (params.openCompose === '1') {
-        setTimeout(() => {
-          setShowCompose(true);
-          setActiveSection('broadcast');
-        }, 300);
-      }
-    }, [params.openCompose])
-  );
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
+
+  const loadDataCallback = useCallback(() => {
+    loadData();
+    if (params.openCompose === '1') {
+      setTimeout(() => {
+        setShowCompose(true);
+        setActiveSection('broadcast');
+      }, 300);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.openCompose, familyId]);
+
+  useFocusEffect(loadDataCallback);
 
   useEffect(() => {
     Animated.loop(

@@ -698,10 +698,12 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...data };
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: sync updated diary entry to server
-  cloudSyncDiary(all[idx], all[idx].serverDiaryId).then(res => {
-    if (res?.id && !all[idx].serverDiaryId) updateDiaryEntry(id, { serverDiaryId: res.id }, rid ?? undefined);
-  }).catch(() => {});
+  // Cloud sync: only sync when conversation is finished to avoid excessive network requests during AI dialogue
+  if (all[idx].conversationFinished) {
+    cloudSyncDiary(all[idx], all[idx].serverDiaryId).then(res => {
+      if (res?.id && !all[idx].serverDiaryId) updateDiaryEntry(id, { serverDiaryId: res.id }, rid ?? undefined);
+    }).catch(() => {});
+  }
   return all[idx];
 }
 
@@ -1289,4 +1291,6 @@ export async function clearAllLocalData(): Promise<void> {
   // Then clear all global keys
   const allKeys = Object.values(KEYS);
   await AsyncStorage.multiRemove(allKeys);
+  // Clear in-memory caches to prevent stale data on next login
+  _activeRoomIdCache = null;
 }

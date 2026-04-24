@@ -671,6 +671,18 @@ export default function ShareScreen() {
 
   const params = useLocalSearchParams<{ refresh?: string; date?: string }>();
   const loadedRef = useRef(false);
+  // 切换家庭时重置 loadedRef，确保新家庭的简报被重新加载
+  const prevFamilyIdRef = useRef(familyId);
+  useEffect(() => {
+    if (prevFamilyIdRef.current !== familyId) {
+      prevFamilyIdRef.current = familyId;
+      loadedRef.current = false;
+      // 清除旧家庭的内存缓存（新家庭的缓存由 loadAndGenerate 自行加载）
+      setBriefing(null);
+      setShareText('');
+      setError(null);
+    }
+  }, [familyId]);
   // params 处理：历史日期模式或强制刷新，由 useEffect 单独处理
   // 正常首次加载由 useFocusEffect 统一负责，避免重复触发
   useEffect(() => {
