@@ -78,11 +78,16 @@ function buildFeed(
     }
   }
 
-  // 对日记按 id 去重：同一篇日记（无论经历多少次 AI 回复更新）只显示一条记录
+  // 对日记去重：先按 id 去重，再按「日期+内容前20字」去重（应对服务端历史重复写入的数据）
   const seenDiaryIds = new Set<string>();
+  const seenDiaryContent = new Set<string>();
   const uniqueDiaries = diaries.filter(d => {
-    if (!d.id || seenDiaryIds.has(d.id)) return false;
-    seenDiaryIds.add(d.id);
+    if (!d.id || seenDiaryIds.has(String(d.id))) return false;
+    seenDiaryIds.add(String(d.id));
+    // 内容去重：相同日期+相同内容开头的日记只显示一条
+    const contentKey = `${d.date}::${(d.content || '').slice(0, 20)}`;
+    if (seenDiaryContent.has(contentKey)) return false;
+    seenDiaryContent.add(contentKey);
     return true;
   });
   uniqueDiaries.slice(0, 3).forEach(d => {

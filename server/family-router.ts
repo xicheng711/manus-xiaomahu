@@ -129,6 +129,12 @@ export const familyRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
+      // 硬限制：一个用户最多只能是一个家庭的 creator
+      const existingRooms = await getUserFamilyRooms(userId);
+      const alreadyCreator = existingRooms.some(r => r.membership.isCreator);
+      if (alreadyCreator) {
+        throw new Error('您已经是一个家庭的主照顾者了，每位用户只能创建一个家庭档案');
+      }
 
       // Create the room
       const room = await createFamilyRoom({

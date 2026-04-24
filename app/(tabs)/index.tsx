@@ -1,14 +1,14 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
-  ScrollView, View, Text, TouchableOpacity, Modal, TextInput,
-  StyleSheet, Dimensions, Animated, Easing, Platform, Image, Keyboard, KeyboardAvoidingView, Alert,
+  ScrollView, View, Text, TouchableOpacity, Modal,
+  StyleSheet, Dimensions, Animated, Easing, Platform, Image, Keyboard, Alert,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, joinFamilyRoom, getDiaryEntries, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getDiaryEntries, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
 import { getZodiacFromDate } from '@/lib/zodiac';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -18,7 +18,6 @@ import { WeeklyEcho } from '@/components/weekly-echo';
 import { JoinerHomeScreen } from '@/components/joiner-home';
 import { useFamilyContext } from '@/lib/family-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Auth from '@/lib/_core/auth';
 
 const { width } = Dimensions.get('window');
 
@@ -463,11 +462,6 @@ function CreatorHomeScreen() {
   const router = useRouter();
   const { memberships, activeMembership, switchFamily, refresh: refreshFamily } = useFamilyContext();
   const [showSwitcher, setShowSwitcher] = useState(false);
-  const [showJoinSheet, setShowJoinSheet] = useState(false);
-  const [joinCode, setJoinCode] = useState('');
-  const [joinName, setJoinName] = useState('');
-  const [joinLoading, setJoinLoading] = useState(false);
-  const [joinError, setJoinError] = useState('');
   const [greeting, setGreeting] = useState('');
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
   const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
@@ -658,7 +652,7 @@ function CreatorHomeScreen() {
             <View style={styles.appNameRow}>
               <Text style={styles.appName}>一起照顾好每一天</Text>
             </View>
-            {memberships.length > 0 ? (
+            {memberships.length > 0 && (
               <TouchableOpacity
                 onPress={() => setShowSwitcher(true)}
                 activeOpacity={0.75}
@@ -674,20 +668,6 @@ function CreatorHomeScreen() {
                   🏠 {activeMembership?.room.elderName || elderNickname}的家庭
                 </Text>
                 <Text style={{ fontSize: 11, color: AppColors.text.tertiary, fontWeight: '600' }}>⌄</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={() => { setJoinCode(''); setJoinName(''); setJoinError(''); setShowJoinSheet(true); }}
-                activeOpacity={0.75}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6,
-                  backgroundColor: AppColors.purple.soft,
-                  borderWidth: 1, borderColor: AppColors.purple.primary + '60',
-                  borderRadius: 14, paddingHorizontal: 9, paddingVertical: 4,
-                  alignSelf: 'flex-start',
-                }}
-              >
-                <Text style={{ fontSize: 12, color: AppColors.purple.strong, fontWeight: '600' }}>🔗 加入家庭</Text>
               </TouchableOpacity>
             )}
             <Text style={styles.greeting}>{greeting}</Text>
@@ -822,92 +802,6 @@ function CreatorHomeScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Join Family Sheet */}
-      <Modal visible={showJoinSheet} transparent animationType="slide" onRequestClose={() => setShowJoinSheet(false)}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={switStyles.overlay} activeOpacity={1} onPress={() => { setShowJoinSheet(false); Keyboard.dismiss(); }}>
-            <TouchableOpacity activeOpacity={1} onPress={() => {}} style={[switStyles.sheet, { paddingBottom: 48 }]}>
-            <Text style={switStyles.title}>加入已有家庭</Text>
-            <Text style={{ fontSize: 13, color: AppColors.text.secondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 }}>
-              请输入家庭管理员分享的邀请码
-            </Text>
-            <View style={{ marginBottom: 14 }}>
-              <Text style={switStyles.joinLabel}>邀请码</Text>
-              <TextInput
-                style={switStyles.joinInput}
-                placeholder="输入6位邀请码"
-                value={joinCode}
-                onChangeText={t => { setJoinCode(t.toUpperCase()); setJoinError(''); }}
-                maxLength={6}
-                autoCapitalize="characters"
-                placeholderTextColor={AppColors.text.tertiary}
-              />
-            </View>
-            <View style={{ marginBottom: 14 }}>
-              <Text style={switStyles.joinLabel}>您的昵称</Text>
-              <TextInput
-                style={switStyles.joinInput}
-                placeholder="如：小红、大明..."
-                value={joinName}
-                onChangeText={t => { setJoinName(t); setJoinError(''); }}
-                placeholderTextColor={AppColors.text.tertiary}
-              />
-            </View>
-            {joinError ? <Text style={{ color: AppColors.coral.primary, fontSize: 13, textAlign: 'center', marginBottom: 10 }}>{joinError}</Text> : null}
-            <TouchableOpacity
-              style={[switStyles.joinSubmitBtn, (joinCode.length < 6 || !joinName.trim() || joinLoading) && { opacity: 0.5 }]}
-              disabled={joinCode.length < 6 || !joinName.trim() || joinLoading}
-              onPress={async () => {
-                // 检查登录状态
-                const token = await Auth.getSessionToken();
-                if (!token) {
-                  setShowJoinSheet(false);
-                  setTimeout(() => {
-                    Alert.alert(
-                      '需要登录',
-                      '家庭共享功能需要登录账号，请先登录再加入家庭。',
-                      [
-                        { text: '取消', style: 'cancel' },
-                        { text: '去登录', onPress: () => router.push('/login' as any) },
-                      ]
-                    );
-                  }, 300);
-                  return;
-                }
-                setJoinLoading(true);
-                setJoinError('');
-                try {
-                  const result = await joinFamilyRoom(joinCode, { name: joinName.trim(), role: 'family', roleLabel: '家庭成员', emoji: '👤', color: AppColors.purple.primary });
-                  if (!result) { setJoinError('邀请码不正确或已失效，请检查后重试'); return; }
-                  await refreshFamily();
-                  setShowJoinSheet(false);
-                  setJoinCode('');
-                  setJoinName('');
-                } catch (err: any) {
-                  const msg = err?.message || '';
-                  if (msg.includes('already') || msg.includes('已加入') || msg.includes('已在')) {
-                    setJoinError('您已经在这个家庭中了');
-                  } else if (msg.includes('not found') || msg.includes('不存在') || msg.includes('invalid')) {
-                    setJoinError('邀请码不正确或已失效，请重新确认');
-                  } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout') || msg.includes('Network')) {
-                    setJoinError('网络连接失败，请检查网络后重试');
-                  } else {
-                    setJoinError('加入失败，请稍后重试');
-                  }
-                } finally {
-                  setJoinLoading(false);
-                }
-              }}
-            >
-              <Text style={switStyles.joinSubmitText}>{joinLoading ? '加入中...' : '确认加入'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowJoinSheet(false)} style={{ marginTop: 12, alignItems: 'center' }}>
-              <Text style={{ fontSize: 14, color: AppColors.text.tertiary }}>取消</Text>
-            </TouchableOpacity>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }
@@ -927,10 +821,6 @@ const switStyles = StyleSheet.create({
   rolePillTextJoiner: { color: AppColors.purple.strong },
   addBtn: { paddingVertical: 14, alignItems: 'center', borderRadius: 14, borderWidth: 1.5, borderColor: AppColors.border.soft, borderStyle: 'dashed' },
   addText: { fontSize: 13, fontWeight: '600', color: AppColors.text.tertiary },
-  joinLabel: { fontSize: 13, fontWeight: '600', color: AppColors.text.secondary, marginBottom: 6 },
-  joinInput: { borderWidth: 1.5, borderColor: AppColors.border.soft, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: AppColors.text.primary, backgroundColor: AppColors.bg.secondary },
-  joinSubmitBtn: { backgroundColor: AppColors.green.strong, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 4 },
-  joinSubmitText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
 
 const styles = StyleSheet.create({
