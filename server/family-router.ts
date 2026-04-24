@@ -383,7 +383,11 @@ export const familyRouter = router({
           moodLabel: input.moodLabel ?? null,
           moodScore: input.moodScore ?? null,
           tags: input.tags ?? null,
+          caregiverMoodEmoji: input.caregiverMoodEmoji ?? null,
+          caregiverMoodLabel: input.caregiverMoodLabel ?? null,
           aiReply: input.aiReply ?? null,
+          aiEmoji: input.aiEmoji ?? null,
+          aiTip: input.aiTip ?? null,
           conversation: input.conversation ?? null,
           conversationFinished: input.conversationFinished ?? false,
         });

@@ -442,7 +442,8 @@ export function JoinerHomeScreen() {
     // 读取今日简报缓存
     try {
       const todayKey = new Date().toISOString().slice(0, 10);
-      const raw = await AsyncStorage.getItem('share_briefing_cache_v1');
+      const cacheKey = activeFamilyId ? `share_briefing_cache_v1:${activeFamilyId}` : 'share_briefing_cache_v1';
+      const raw = await AsyncStorage.getItem(cacheKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.date === todayKey && parsed.briefing?.summary) {

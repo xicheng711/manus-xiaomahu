@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator } from '@/lib/storage';
+import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -745,6 +746,8 @@ const calStyles = StyleSheet.create({
 
 function JoinerDiaryReadOnly() {
   const router = useRouter();
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [showAll, setShowAll] = useState(false);
   const headerFade = useRef(new Animated.Value(0)).current;
@@ -762,7 +765,8 @@ function JoinerDiaryReadOnly() {
     }).catch(() => {
       getDiaryEntries().then(e => setEntries(e));
     });
-  }, []));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId]));
 
   function openDetail(entryId: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
