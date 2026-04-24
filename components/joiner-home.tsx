@@ -685,22 +685,14 @@ export function JoinerHomeScreen() {
               <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>小马虎</Text>
             </View>
 
-            {/* 操作按钮：查看简报 + 一键分享（仅晚间打卡完成后显示） */}
+            {/* 操作按钮：查看简报（仅晚间打卡完成后显示） */}
             {latestCheckIn?.eveningDone && (
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-                <TouchableOpacity
-                  style={{ flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: AppColors.peach.primary, alignItems: 'center' }}
-                  onPress={() => router.push('/share' as any)}
-                >
-                  <Text style={{ fontSize: 13, color: AppColors.peach.primary, fontWeight: '600' }}>📋 查看简报</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.peach.primary, alignItems: 'center' }}
-                  onPress={() => router.push('/share' as any)}
-                >
-                  <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>📤 一键分享</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.peach.primary, alignItems: 'center' }}
+                onPress={() => router.push('/share' as any)}
+              >
+                <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>📋 查看今日简报</Text>
+              </TouchableOpacity>
             )}
             {/* 晚间未完成时显示引导 */}
             {!latestCheckIn?.eveningDone && (
