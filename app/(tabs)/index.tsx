@@ -816,20 +816,7 @@ function CreatorHomeScreen() {
                 </TouchableOpacity>
               );
             })}
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-              <TouchableOpacity
-                style={[switStyles.addBtn, { flex: 1 }]}
-                onPress={() => { setShowSwitcher(false); setTimeout(() => router.push('/(modals)/create-family' as any), 200); }}
-              >
-                <Text style={switStyles.addText}>＋ 创建新家庭</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[switStyles.addBtn, { flex: 1 }]}
-                onPress={() => { setShowSwitcher(false); setJoinCode(''); setJoinName(''); setJoinError(''); setTimeout(() => setShowJoinSheet(true), 200); }}
-              >
-                <Text style={switStyles.addText}>🔗 加入已有家庭</Text>
-              </TouchableOpacity>
-            </View>
+            {/* 创建/加入家庭入口已移至头像→设置页面，胶囊只用于切换已有家庭 */}
           </View>
           </TouchableOpacity>
         </TouchableOpacity>

@@ -745,12 +745,7 @@ export function JoinerHomeScreen() {
                   {activeMembership?.familyId === m.familyId && <Text style={{ fontSize: 16 }}>✓</Text>}
                 </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              style={styles.switcherAddBtn}
-              onPress={() => { setShowSwitcher(false); setTimeout(() => router.push('/(modals)/create-family' as any), 200); }}
-            >
-              <Text style={styles.switcherAddText}>＋ 创建新家庭</Text>
-            </TouchableOpacity>
+            {/* 创建新家庭入口已移至头像→设置页面，胶囊只用于切换已有家庭 */}
             </View>
           </TouchableOpacity>
         </TouchableOpacity>

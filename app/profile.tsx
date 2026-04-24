@@ -581,7 +581,8 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Notification settings section */}
+        {/* Notification settings section — only shown for creator role */}
+        {activeMembership?.role === 'creator' && (<>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>🔔 提醒设置</Text>
         </View>
@@ -673,6 +674,8 @@ export default function ProfileScreen() {
             </View>
           </View>
         )}
+
+        </>)}
 
         {/* Edit button */}
         <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/onboarding' as any)}>
