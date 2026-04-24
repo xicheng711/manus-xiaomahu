@@ -608,8 +608,8 @@ export default function ProfileScreen() {
 
         {notifEnabled && Platform.OS !== 'web' && (
           <View style={styles.notifInfo}>
-            <Text style={styles.notifInfoText}>☀️ 早上 {currentMorning} — 记录昨晚睡眠情况</Text>
-            <Text style={styles.notifInfoText}>🌙 晚上 {currentEvening} — 记录今日饮食和心情</Text>
+            <Text style={styles.notifInfoText}>☀️ 早上 {currentMorning === 'off' ? '不提醒' : currentMorning} — 记录昨晚睡眠情况</Text>
+            <Text style={styles.notifInfoText}>🌙 晚上 {currentEvening === 'off' ? '不提醒' : currentEvening} — 记录今日饮食和心情</Text>
           </View>
         )}
 

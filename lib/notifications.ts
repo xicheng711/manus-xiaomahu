@@ -267,7 +267,7 @@ export async function sendFamilyAnnouncementNotification(
 export async function areRemindersScheduled(): Promise<boolean> {
   const morningId = await AsyncStorage.getItem(MORNING_NOTIF_ID_KEY);
   const eveningId = await AsyncStorage.getItem(EVENING_NOTIF_ID_KEY);
-  return !!(morningId && eveningId);
+  return !!(morningId || eveningId);
 }
 
 const MED_NOTIF_PREFIX = "@xiaomahuMedNotif_";
