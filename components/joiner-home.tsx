@@ -412,7 +412,21 @@ export function JoinerHomeScreen() {
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest);
     setAllCheckIns(checkIns);
-    setAllDiaries(diaries);
+    // 日记去重：过滤未完成对话的，并按 serverDiaryId/id 去重旧脚数据
+    const seenSrvIds = new Set<number>();
+    const seenLocIds = new Set<string>();
+    const cleanDiaries = diaries.filter(d => {
+      if (d.conversationFinished === false) return false;
+      if (d.serverDiaryId) {
+        if (seenSrvIds.has(d.serverDiaryId)) return false;
+        seenSrvIds.add(d.serverDiaryId);
+      } else {
+        if (seenLocIds.has(String(d.id))) return false;
+        seenLocIds.add(String(d.id));
+      }
+      return true;
+    });
+    setAllDiaries(cleanDiaries);
     // 公告也从云端拉取，确保看到所有家庭成员发的公告
     let announcements: FamilyAnnouncement[] = [];
     try {
@@ -424,7 +438,7 @@ export function JoinerHomeScreen() {
       announcements = await getFamilyAnnouncements(30);
     }
     setLatestAnnounce(announcements[0] ?? null);
-    setFeed(buildFeed(checkIns.slice(0, 2), diaries.slice(0, 3), announcements.slice(0, 2), creatorName));
+    setFeed(buildFeed(checkIns.slice(0, 2), cleanDiaries.slice(0, 3), announcements.slice(0, 2), creatorName));
     // 读取今日简报缓存
     try {
       const todayKey = new Date().toISOString().slice(0, 10);

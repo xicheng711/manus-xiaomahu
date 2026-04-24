@@ -642,12 +642,38 @@ export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
 }
 
 /**
- * 首页专用：只返回最近 N 条日记（默认 20 条）。
- * 首页不需要全量日记，这样切换家庭时读取量会轻得多。
+ * 首页专用：返回已完成的日记，并做去重处理。
+ *
+ * 处理逻辑：
+ * 1. 只保留 conversationFinished === true 的日记（过滤未完成的对话和旧脚数据）
+ * 2. 按 serverDiaryId（优先）或 id 去重（清除历史重复写入的脚数据）
+ * 3. 取最近 N 条（默认 20）
  */
 export async function getDiaryEntriesForHome(roomId?: string, limit = 20): Promise<DiaryEntry[]> {
   const all = await getDiaryEntries(roomId);
-  return all.slice(0, limit);
+
+  // Step 1: 只保留已完成的日记
+  // 如果一条日记从未设置过 conversationFinished（就是 undefined），
+  // 说明它是旧格式数据，保留以兼容。
+  // 只排除明确设为 false 的（即对话进行中未保存的）。
+  const finished = all.filter(d => d.conversationFinished !== false);
+
+  // Step 2: 按 serverDiaryId 或 id 去重
+  // serverDiaryId 相同的两条日记是重复写入的同一条，只保留第一条（最新的）
+  const seenServerIds = new Set<number>();
+  const seenLocalIds = new Set<string>();
+  const deduped = finished.filter(d => {
+    if (d.serverDiaryId) {
+      if (seenServerIds.has(d.serverDiaryId)) return false;
+      seenServerIds.add(d.serverDiaryId);
+    } else {
+      if (seenLocalIds.has(String(d.id))) return false;
+      seenLocalIds.add(String(d.id));
+    }
+    return true;
+  });
+
+  return deduped.slice(0, limit);
 }
 
 export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: string): Promise<DiaryEntry> {

@@ -758,6 +758,8 @@ export default function ShareScreen() {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setError(null);
+    // 立即显示 loading，防止前置检查期间 UI 短暂显示旧 error 或空白（闪屏来源）
+    setLoading(true);
     // ── 最前置 early return：未完成打卡不走任何生成/缓存流程 ──
     try {
       const earlyCheckIn = await getTodayCheckIn(familyId);
