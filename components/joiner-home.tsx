@@ -697,8 +697,8 @@ export function JoinerHomeScreen() {
           </View>
         )}
 
-        {/* 只有当用户在所有 memberships 中都没有 creator 角色时，才显示升级卡 */}
-        {!memberships.some(m => m.role === 'creator') && (
+        {/* 只有当用户完全没有任何 membership（既未创建也未加入任何家庭）时，才显示创建家庭档案卡片。已加入家庭的 joiner 不应再看到此提示 */}
+        {memberships.length === 0 && (
           <UpgradeCard onPress={goSetup} />
         )}
         {/* 如果 joiner 自己也有 creator 身份，显示切换提示 */}
