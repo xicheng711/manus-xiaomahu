@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   cloudSyncCheckIn,
   cloudSyncDiary,
@@ -12,10 +12,9 @@ import {
   cloudLookupRoom,
   cloudUpdateElderProfile,
   setCloudSyncState,
-} from './cloud-sync';
+} from "./cloud-sync";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
+export { cloudGetRoomDetail };
 // Care needs profile types
 export type CareNeedType =
   | 'memory'       // Memory / cognition care (Alzheimer's / dementia)
@@ -173,6 +172,7 @@ export interface DiaryEntry {
   createdAt?: string;
   caregiverMoodEmoji?: string;  // v5.0: 照顾者心情（从打卡移过来）
   caregiverMoodLabel?: string;
+  serverDiaryId?: number;
   // AI reply fields (legacy — kept for backward compatibility)
   aiReply?: string;
   aiEmoji?: string;
@@ -637,7 +637,9 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: stri
   all.unshift(entry);
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync diary entry to server
-  cloudSyncDiary(entry).catch(() => {});
+  cloudSyncDiary(entry).then(res => {
+    if (res?.id) updateDiaryEntry(entry.id, { serverDiaryId: res.id }, rid ?? undefined);
+  }).catch(() => {});
   return entry;
 }
 
@@ -650,7 +652,9 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   all[idx] = { ...all[idx], ...data };
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync updated diary entry to server
-  cloudSyncDiary(all[idx]).catch(() => {});
+  cloudSyncDiary(all[idx], all[idx].serverDiaryId).then(res => {
+    if (res?.id && !all[idx].serverDiaryId) updateDiaryEntry(id, { serverDiaryId: res.id }, rid ?? undefined);
+  }).catch(() => {});
   return all[idx];
 }
 

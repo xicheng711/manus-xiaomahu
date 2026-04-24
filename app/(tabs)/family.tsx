@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
-  getFamilyRoom, getFamilyAnnouncements, saveFamilyAnnouncement,
+  getFamilyRoom, getFamilyAnnouncements, saveFamilyRoom, cloudGetRoomDetail, saveFamilyAnnouncement,
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
   joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
   getAllCheckIns, getDiaryEntries,
@@ -390,13 +390,47 @@ export default function FamilyScreen() {
 
   async function loadData() {
     setLoading(true);
-    const [r, m, localAnns, creatorFlag, cloudAnns] = await Promise.all([
+    const activeRoomId = getActiveRoomIdCache();
+    const [rLocal, m, localAnns, creatorFlag, cloudAnns] = await Promise.all([
       getFamilyRoom(),
       getCurrentMember(),
       getFamilyAnnouncements(),
       getCurrentUserIsCreator(),
       cloudGetAnnouncements(undefined, 50).catch(() => [] as any[]),
     ]);
+    let r = rLocal;
+    if (activeRoomId) {
+      try {
+        const detail = await cloudGetRoomDetail(Number(activeRoomId));
+        if (detail?.room) {
+          const serverMembers = (detail.members ?? []).map((x: any) => ({
+            id: String(x.id),
+            name: x.name,
+            role: x.role ?? "family",
+            roleLabel: x.roleLabel ?? x.role ?? "家人",
+            emoji: x.emoji ?? "👤",
+            color: x.color ?? "#888",
+            photoUri: x.photoUri,
+            joinedAt: x.joinedAt ?? new Date().toISOString(),
+            isCreator: x.isCreator ?? false,
+            isCurrentUser: String(x.userId) === String(m?.id),
+            relationship: x.relationship,
+          }));
+          r = {
+            id: String(detail.room.id ?? activeRoomId),
+            roomCode: detail.room.roomCode ?? r?.roomCode ?? "",
+            elderName: detail.room.elderName ?? r?.elderName ?? "家人",
+            elderEmoji: detail.room.elderEmoji ?? r?.elderEmoji,
+            elderPhotoUri: detail.room.elderPhotoUri ?? r?.elderPhotoUri,
+            members: serverMembers,
+            createdAt: detail.room.createdAt ?? r?.createdAt ?? new Date().toISOString(),
+          };
+          await saveFamilyRoom(r);
+        }
+      } catch (e) {
+        console.warn("[Family] getRoomDetail failed", e);
+      }
+    }
     setRoom(r);
     setCurrentMemberState(m);
     // 优先使用云端公告（包含所有家庭成员发的），失败时降级读本地
@@ -427,9 +461,9 @@ export default function FamilyScreen() {
       // Creator: read local
       const activeRoomId = getActiveRoomIdCache();
       const [localToday, localAll, localDiaries, localFp, localProfile] = await Promise.all([
-        getTodayCheckIn(),
-        getAllCheckIns(),
-        getDiaryEntries(),
+        getTodayCheckIn(activeRoomId || undefined),
+        getAllCheckIns(activeRoomId || undefined),
+        getDiaryEntries(activeRoomId || undefined),
         activeRoomId ? getFamilyProfile(activeRoomId) : Promise.resolve(null),
         getProfile(),
       ]);

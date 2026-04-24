@@ -639,6 +639,7 @@ export default function ShareScreen() {
   const { activeMembership } = useFamilyContext();
   const familyId = activeMembership?.familyId;
   const [loading, setLoading] = useState(!getCachedBriefing(familyId));
+  const loadingRef = useRef(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elderNickname, setElderNickname] = useState('家人');
@@ -717,10 +718,11 @@ export default function ShareScreen() {
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
 
-      const ci = await getCheckInByDate(dateStr);
+      const ci = await getCheckInByDate(dateStr, familyId);
       if (!ci) {
         setError(`${dateStr} 无打卡记录`);
-        setLoading(false);
+        setLoading(false); loadingRef.current = false;
+      loadingRef.current = false;
         return;
       }
 
@@ -739,20 +741,23 @@ export default function ShareScreen() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
-      setLoading(false);
+      setLoading(false); loadingRef.current = false;
+      loadingRef.current = false;
     }
   }
 
   async function recheckBackfill() {
     try {
-      const today = await getTodayCheckIn();
-      const yesterday = await getYesterdayCheckIn();
+      const today = await getTodayCheckIn(familyId);
+      const yesterday = await getYesterdayCheckIn(familyId);
       setTodayCi(today);
       setYesterdayCi(yesterday);
     } catch {}
   }
 
   async function loadAndGenerate(forceRefresh = false) {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setError(null);
 
     if (!forceRefresh) {
@@ -765,7 +770,8 @@ export default function ShareScreen() {
           setCheckIn(memCached.checkIn);
           setMergedTodayCi(memCached.checkIn); // 缓存命中时也要同步合并记录
         }
-        setLoading(false);
+        setLoading(false); loadingRef.current = false;
+      loadingRef.current = false;
         loadSupplementaryData();
         recheckBackfill();
         return;
@@ -782,7 +788,8 @@ export default function ShareScreen() {
           setCheckIn(persisted.checkIn);
           setMergedTodayCi(persisted.checkIn); // 持久化缓存命中时也要同步合并记录
         }
-        setLoading(false);
+        setLoading(false); loadingRef.current = false;
+      loadingRef.current = false;
         loadSupplementaryData();
         recheckBackfill();
         return;
@@ -803,8 +810,8 @@ export default function ShareScreen() {
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
 
-      const today = await getTodayCheckIn();
-      const yesterday = await getYesterdayCheckIn();
+      const today = await getTodayCheckIn(familyId);
+      const yesterday = await getYesterdayCheckIn(familyId);
       setTodayCi(today);
       setYesterdayCi(yesterday);
 
@@ -815,7 +822,8 @@ export default function ShareScreen() {
 
       if (!hasTodayEvening) {
         setError('完成晚间打卡后，就能看到今日完整简报了！');
-        setLoading(false);
+        setLoading(false); loadingRef.current = false;
+      loadingRef.current = false;
         return;
       }
 
@@ -850,7 +858,8 @@ export default function ShareScreen() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
-      setLoading(false);
+      setLoading(false); loadingRef.current = false;
+      loadingRef.current = false;
     }
   }
 

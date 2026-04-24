@@ -190,6 +190,8 @@ export const familyRouter = router({
 
       const room = await getFamilyRoomByCode(input.roomCode);
       if (!room) throw new Error("未找到该家庭房间，请检查邀请码");
+      const existingMember = await requireRoomMember(userId, room.id).catch(() => null);
+      if (existingMember) throw new Error("您已经在这个家庭中了，无需重复加入");
 
       const member = await addFamilyMember({
         roomId: room.id,
@@ -215,30 +217,27 @@ export const familyRouter = router({
       );
 
       return {
-        success: true,
         roomId: room.id,
-        roomCode: room.roomCode,
+        roomCode: room?.roomCode,
         elderName: room.elderName,
         memberId: member.id,
       };
     }),
-
-  /** Look up a room by invite code (for preview before joining) */
   lookupRoom: publicProcedure
     .input(z.object({ roomCode: z.string() }))
     .query(async ({ input }) => {
       const room = await getFamilyRoomByCode(input.roomCode);
       if (!room) return null;
       const members = await getRoomMembers(room.id);
-      return {
         // Top-level fields kept for backward compat with older clients
-        elderName: room.elderName,
+      return {
         elderEmoji: room.elderEmoji,
+        elderName: room.elderName,
         memberCount: members.length,
         // Structured room object for newer clients
         room: {
           id: room.id,
-          roomCode: room.roomCode,
+          roomCode: room?.roomCode,
           elderName: room.elderName,
           elderEmoji: room.elderEmoji,
           elderPhotoUri: room.elderPhotoUri,
@@ -253,7 +252,7 @@ export const familyRouter = router({
     const rooms = await getUserFamilyRooms(userId);
     return rooms.map(({ room, membership }) => ({
       roomId: room.id,
-      roomCode: room.roomCode,
+      roomCode: room?.roomCode,
       elderName: room.elderName,
       elderEmoji: room.elderEmoji,
       isCreator: membership.isCreator,

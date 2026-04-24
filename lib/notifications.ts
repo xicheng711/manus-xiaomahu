@@ -96,15 +96,20 @@ export async function scheduleMorningReminder(elderNickname?: string, familyId?:
   // 读取自定义提醒时间（优先 FamilyProfile，默认 08:00）
   const fp = await getFamilyProfile(familyId).catch(() => null);
   const timeStr = fp?.reminderMorning || '08:00';
-  const [hourStr, minStr] = timeStr.split(':');
-  const hour = parseInt(hourStr, 10) || 8;
-  const minute = parseInt(minStr, 10) || 0;
 
   // Cancel existing morning notification first
   const existingId = await AsyncStorage.getItem(MORNING_NOTIF_ID_KEY);
   if (existingId) {
     await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
+    await AsyncStorage.removeItem(MORNING_NOTIF_ID_KEY);
   }
+
+  // If set to 'off', stop here
+  if (timeStr === 'off') return null;
+
+  const [hourStr, minStr] = timeStr.split(':');
+  const hour = parseInt(hourStr, 10) || 8;
+  const minute = parseInt(minStr, 10) || 0;
 
   const morningMessages = [
     { title: "晨间打卡提醒", body: `请记录${name}昨晚的睡眠情况` },
@@ -150,15 +155,20 @@ export async function scheduleEveningReminder(elderNickname?: string, familyId?:
   // 读取自定义提醒时间（优先 FamilyProfile，默认 21:00）
   const fp = await getFamilyProfile(familyId).catch(() => null);
   const timeStr = fp?.reminderEvening || '21:00';
-  const [hourStr, minStr] = timeStr.split(':');
-  const hour = parseInt(hourStr, 10) || 21;
-  const minute = parseInt(minStr, 10) || 0;
 
   // Cancel existing evening notification first
   const existingId = await AsyncStorage.getItem(EVENING_NOTIF_ID_KEY);
   if (existingId) {
     await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
+    await AsyncStorage.removeItem(EVENING_NOTIF_ID_KEY);
   }
+
+  // If set to 'off', stop here
+  if (timeStr === 'off') return null;
+
+  const [hourStr, minStr] = timeStr.split(':');
+  const hour = parseInt(hourStr, 10) || 21;
+  const minute = parseInt(minStr, 10) || 0;
 
   const eveningMessages = [
     { title: "晚间打卡提醒", body: `请记录${name}今日的饮食、心情和用药情况` },
@@ -193,8 +203,15 @@ export async function scheduleEveningReminder(elderNickname?: string, familyId?:
  * Schedule both morning and evening reminders
  */
 export async function scheduleAllReminders(elderNickname?: string, familyId?: string): Promise<void> {
-  const hasPermission = await requestNotificationPermissions();
-  if (!hasPermission) return;
+  const fp = await getFamilyProfile(familyId).catch(() => null);
+  const wantsMorning = fp?.reminderMorning !== 'off';
+  const wantsEvening = fp?.reminderEvening !== 'off';
+
+  // Only request permission if at least one reminder is enabled
+  if (wantsMorning || wantsEvening) {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) return;
+  }
 
   await scheduleMorningReminder(elderNickname, familyId);
   await scheduleEveningReminder(elderNickname, familyId);

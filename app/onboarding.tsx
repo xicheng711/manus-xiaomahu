@@ -11,6 +11,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { saveProfile, saveUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
 import { scheduleAllReminders } from '@/lib/notifications';
+import { useFamilyContext } from "../lib/family-context";
 import { getZodiac } from '@/lib/zodiac';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
@@ -105,6 +106,7 @@ function ScrollPickerSimple({
 }
 
 export default function OnboardingScreen() {
+  const { refresh, memberships } = useFamilyContext();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -413,10 +415,16 @@ export default function OnboardingScreen() {
         color: AppColors.coral.primary,
       });
     }
+    await refresh();
     router.replace('/(tabs)');
   }
 
   async function handleJoinerFinish() {
+    const exists = memberships.some(m => m.room?.roomCode === joinerCode.trim());
+    if (exists) {
+      Alert.alert("加入失败", "您已经在这个家庭中了，无需重复加入");
+      return;
+    }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const rel = joinerRelationship.trim();
     const result = await joinFamilyRoom(joinerCode.trim(), {
@@ -432,6 +440,7 @@ export default function OnboardingScreen() {
       Alert.alert('加入失败', '邀请码无效或已过期，请确认后重试。');
       return;
     }
+    await refresh();
     router.replace('/(tabs)/family');
   }
 
@@ -1179,13 +1188,13 @@ export default function OnboardingScreen() {
                 <View style={styles.reminderItem}>
                   <Text style={styles.reminderLabel}>🌅 早上打卡</Text>
                   <View style={styles.timePickerRow}>
-                    {['06:00', '07:00', '08:00', '09:00', '10:00'].map(t => (
+                    {['off', '06:00', '07:00', '08:00', '09:00', '10:00'].map(t => (
                       <TouchableOpacity
                         key={t}
                         style={[styles.timeChip, reminderMorning === t && styles.timeChipActive]}
                         onPress={() => setReminderMorning(t)}
                       >
-                        <Text style={[styles.timeChipText, reminderMorning === t && styles.timeChipTextActive]}>{t}</Text>
+                        <Text style={[styles.timeChipText, reminderMorning === t && styles.timeChipTextActive]}>{t === 'off' ? '不提醒' : t}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -1193,13 +1202,13 @@ export default function OnboardingScreen() {
                 <View style={styles.reminderItem}>
                   <Text style={styles.reminderLabel}>🌙 晚上打卡</Text>
                   <View style={styles.timePickerRow}>
-                    {['19:00', '20:00', '21:00', '22:00', '23:00'].map(t => (
+                    {['off', '19:00', '20:00', '21:00', '22:00', '23:00'].map(t => (
                       <TouchableOpacity
                         key={t}
                         style={[styles.timeChip, reminderEvening === t && styles.timeChipActive]}
                         onPress={() => setReminderEvening(t)}
                       >
-                        <Text style={[styles.timeChipText, reminderEvening === t && styles.timeChipTextActive]}>{t}</Text>
+                        <Text style={[styles.timeChipText, reminderEvening === t && styles.timeChipTextActive]}>{t === 'off' ? '不提醒' : t}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>

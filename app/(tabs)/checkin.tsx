@@ -777,8 +777,8 @@ function CheckinScreenContent() {
     (async () => {
       const targetDate = backfillDate || null;
       const existing = targetDate
-        ? await getCheckInByDate(targetDate)
-        : await getTodayCheckIn();
+        ? await getCheckInByDate(targetDate, familyId)
+        : await getTodayCheckIn(familyId);
       setCheckIn(existing);
 
       if (existing) {
@@ -941,7 +941,7 @@ function CheckinScreenContent() {
     // 云端同步（不阻塞 UI）
     cloudSyncCheckIn(data).catch(e => console.warn('[CheckIn] cloud sync failed:', e));
     // 立即刷新 checkIn 状态，确保返回 landing 时显示最新状态
-    const refreshed = backfillDate ? await getCheckInByDate(backfillDate) : await getTodayCheckIn();
+    const refreshed = backfillDate ? await getCheckInByDate(backfillDate) : await getTodayCheckIn(familyId);
     if (refreshed) setCheckIn(refreshed);
     setSaving(false);
     if (mode === 'morning') {

@@ -111,7 +111,7 @@ export default function RootLayout() {
                   fullScreenGestureEnabled: true,
                   animationTypeForReplace: 'push',
                 }}>
-                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="(tabs)" options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
                 <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="oauth/callback" />
                 <Stack.Screen name="login" options={{ presentation: 'fullScreenModal' }} />

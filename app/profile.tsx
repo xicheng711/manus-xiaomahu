@@ -593,7 +593,7 @@ export default function ProfileScreen() {
               {Platform.OS === 'web'
                 ? '仅在手机端可用'
                 : notifEnabled
-                  ? `早上 ${currentMorning} · 晚上 ${currentEvening}`
+                  ? `早上 ${currentMorning === 'off' ? '不提醒' : currentMorning} · 晚上 ${currentEvening === 'off' ? '不提醒' : currentEvening}`
                   : '关闭后将不发送每日打卡提醒'}
             </Text>
           </View>
@@ -620,7 +620,7 @@ export default function ProfileScreen() {
             <View style={styles.reminderEditRow}>
               <Text style={styles.reminderEditLabel}>🌅 早上打卡</Text>
               <View style={styles.timeChipRow}>
-                {['06:00', '07:00', '08:00', '09:00', '10:00'].map(t => (
+                {['off', '06:00', '07:00', '08:00', '09:00', '10:00'].map(t => (
                   <TouchableOpacity
                     key={t}
                     style={[styles.timeChipSmall, currentMorning === t && styles.timeChipSmallActive]}
@@ -639,7 +639,7 @@ export default function ProfileScreen() {
                       }
                     }}
                   >
-                    <Text style={[styles.timeChipSmallText, currentMorning === t && styles.timeChipSmallTextActive]}>{t}</Text>
+                    <Text style={[styles.timeChipSmallText, currentMorning === t && styles.timeChipSmallTextActive]}>{t === 'off' ? '不提醒' : t}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -647,7 +647,7 @@ export default function ProfileScreen() {
             <View style={[styles.reminderEditRow, { marginTop: 12 }]}>
               <Text style={styles.reminderEditLabel}>🌙 晚上打卡</Text>
               <View style={styles.timeChipRow}>
-                {['19:00', '20:00', '21:00', '22:00', '23:00'].map(t => (
+                {['off', '19:00', '20:00', '21:00', '22:00', '23:00'].map(t => (
                   <TouchableOpacity
                     key={t}
                     style={[styles.timeChipSmall, currentEvening === t && styles.timeChipSmallActive]}
@@ -666,7 +666,7 @@ export default function ProfileScreen() {
                       }
                     }}
                   >
-                    <Text style={[styles.timeChipSmallText, currentEvening === t && styles.timeChipSmallTextActive]}>{t}</Text>
+                    <Text style={[styles.timeChipSmallText, currentEvening === t && styles.timeChipSmallTextActive]}>{t === 'off' ? '不提醒' : t}</Text>
                   </TouchableOpacity>
                 ))}
               </View>

@@ -523,14 +523,15 @@ function CreatorHomeScreen() {
       setZodiacColor(zodiac.color);
       setZodiacEmoji(zodiac.emoji);
     }
-    const today = await getTodayCheckIn();
+    const fid = activeMembership?.familyId;
+    const today = await getTodayCheckIn(fid);
     setTodayCheckIn(today);
-    const yesterday = await getYesterdayCheckIn();
+    const yesterday = await getYesterdayCheckIn(fid);
     const latest = today ?? yesterday;
     setLatestCheckIn(latest);
-    const all = await getAllCheckIns();
+    const all = await getAllCheckIns(fid);
     setAllCheckIns(all);
-    const diaries = await getDiaryEntries();
+    const diaries = await getDiaryEntries(fid);
     setAllDiaryEntries(diaries);
     // 读取今日简报缓存的 AI 总结（family-scoped key，和 share.tsx 保持一致）
     try {
