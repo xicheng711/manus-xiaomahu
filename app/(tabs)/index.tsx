@@ -266,7 +266,7 @@ function EnhancedSmartCard({
 
   const handlePress = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (morningDone) pressAnimation(scaleAnim, onPress);
+    if (morningDone && eveningDone) pressAnimation(scaleAnim, onPress);
     else pressAnimation(scaleAnim, onCheckinPress);
   };
 
@@ -303,13 +303,13 @@ function EnhancedSmartCard({
 
             <Text style={styles.aiMessage} numberOfLines={2}>{encouragement}</Text>
 
-            {morningDone ? (
+            {morningDone && eveningDone ? (
               <TouchableOpacity onPress={onPress} style={[styles.aiDetailLink, { backgroundColor: AppColors.purple.strong }]}>
-                <Text style={styles.aiDetailLinkText}>{eveningDone ? '查看今日简报 ›' : '查看记录详情 ›'}</Text>
+                <Text style={styles.aiDetailLinkText}>查看今日简报 ›</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity onPress={onCheckinPress} style={[styles.aiDetailLink, { backgroundColor: AppColors.coral.primary }]}>
-                <Text style={styles.aiDetailLinkText}>去完成打卡 →</Text>
+                <Text style={styles.aiDetailLinkText}>{morningDone ? '去完成晚间打卡 →' : '去完成打卡 →'}</Text>
               </TouchableOpacity>
             )}
           </View>

@@ -778,7 +778,13 @@ export default function ShareScreen() {
         return;
       }
     } catch {
-      // 若获取打卡数据失败，继续走正常流程
+      // 获取打卡数据失败时，安全降级：不进入生成流程
+      setLoading(false);
+      setBriefing(null);
+      setShareText('');
+      setError('完成今日打卡，就能看到今日记录');
+      loadingRef.current = false;
+      return;
     }
     if (!forceRefresh) {
       const memCached = getCachedBriefing(familyId);
