@@ -329,6 +329,16 @@ export default function ProfileScreen() {
         setJoinLoading(false);
         return;
       }
+      // 拦截：不能加入自己已是主照顾者的家庭
+      const upperCode = joinCode.trim().toUpperCase();
+      const isAlreadyCreator = memberships.some(
+        m => m.role === 'creator' && m.room.roomCode === upperCode
+      );
+      if (isAlreadyCreator) {
+        setJoinError('您是这个家庭的主照顾者，无法以家庭成员身份加入');
+        setJoinLoading(false);
+        return;
+      }
       await joinFamilyRoom(joinCode.trim().toUpperCase(), {
         name: joinName.trim(),
         role: 'family',

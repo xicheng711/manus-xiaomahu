@@ -197,7 +197,10 @@ export const familyRouter = router({
       const room = await getFamilyRoomByCode(input.roomCode);
       if (!room) throw new Error("未找到该家庭房间，请检查邀请码");
       const existingMember = await requireRoomMember(userId, room.id).catch(() => null);
-      if (existingMember) throw new Error("您已经在这个家庭中了，无需重复加入");
+      if (existingMember) {
+        if (existingMember.isCreator) throw new Error("您是这个家庭的主照顾者，无法以家庭成员身份加入");
+        throw new Error("您已经在这个家庭中了，无需重复加入");
+      }
 
       const member = await addFamilyMember({
         roomId: room.id,
