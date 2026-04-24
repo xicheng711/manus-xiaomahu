@@ -442,12 +442,11 @@ export function JoinerHomeScreen() {
     } catch { setBriefingSummary(null); }
   }, [activeFamilyId]);
 
+  // 修复：只保留 useFocusEffect 一个加载入口（loadData deps=[activeFamilyId]，切换家庭时自动重新执行）
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
-
+  // 仅在 activeFamilyId 变为 null 时清空 UI（不再重复调用 loadData）
   useEffect(() => {
-    if (activeFamilyId) {
-      loadData();
-    } else {
+    if (!activeFamilyId) {
       setElderNickname('家人');
       setElderEmoji('🌸');
       setCaregiverName('');
