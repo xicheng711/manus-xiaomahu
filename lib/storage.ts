@@ -173,7 +173,7 @@ export interface DiaryEntry {
   caregiverMoodEmoji?: string;  // v5.0: 照顾者心情（从打卡移过来）
   caregiverMoodLabel?: string;
   serverDiaryId?: number;
-  authorName?: string;           // 记录人姓名（从服务端同步时填充）
+  authorName?: string;           // 记录人姓名（本地写入时填充 caregiverName，云端同步时也会填充）
   // AI reply fields (legacy — kept for backward compatibility)
   aiReply?: string;
   aiEmoji?: string;

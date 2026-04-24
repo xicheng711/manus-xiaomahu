@@ -335,6 +335,7 @@ export default function DiaryEditScreen() {
       tags: selectedTags,
       content: content.trim(),
       conversation: [],
+      authorName: caregiverName || undefined,
     });
     setEntryId(savedEntry.id);
     entryRef.current = savedEntry;
