@@ -685,25 +685,22 @@ export function JoinerHomeScreen() {
               <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>小马虎</Text>
             </View>
 
-            {/* 操作按钮：查看简报（仅晚间打卡完成后显示） */}
-            {latestCheckIn?.eveningDone && (
+            {/* 操作按钮：根据打卡状态显示不同内容 */}
+            {latestCheckIn?.eveningDone ? (
               <TouchableOpacity
                 style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.peach.primary, alignItems: 'center' }}
                 onPress={() => router.push('/share' as any)}
               >
                 <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>📋 查看今日简报</Text>
               </TouchableOpacity>
-            )}
-            {/* 晚间未完成时显示引导 */}
-            {!latestCheckIn?.eveningDone && (
-              <TouchableOpacity
-                style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.purple.soft, alignItems: 'center' }}
-                onPress={() => router.push('/(tabs)/checkin' as any)}
-              >
-                <Text style={{ fontSize: 13, color: AppColors.purple.strong, fontWeight: '600' }}>
-                  {latestCheckIn?.morningDone ? '去完成晚间打卡 →' : '去完成今日打卡 →'}
+            ) : (
+              <View style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.bg.secondary, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, color: AppColors.text.tertiary }}>
+                  {latestCheckIn?.morningDone
+                    ? '☕️ 等待晚间打卡完成后可查看简报'
+                    : '🌙 今日暂无打卡记录'}
                 </Text>
-              </TouchableOpacity>
+              </View>
             )}
           </LinearGradient>
         </View>
