@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getAllCheckIns, DailyCheckIn, getDiaryEntries, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
 import { getZodiacFromDate } from '@/lib/zodiac';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -508,7 +508,9 @@ function CreatorHomeScreen() {
       if (member?.photoUri) setMemberPhotoUri(member.photoUri);
     }
     setCaregiverName(cgName);
-    refreshWeather();
+    // 传入当前城市名：城市未变化时跳过天气网络请求
+    const currentCity = familyProfile?.city || legacyProfile?.city || '';
+    refreshWeather(currentCity);
     setGreeting(buildGreeting(cgName || undefined));
     // Elder zodiac: prefer family-scoped birthDate
     const birthDate = familyProfile?.birthDate || legacyProfile?.birthDate;
@@ -523,9 +525,10 @@ function CreatorHomeScreen() {
     const yesterday = await getYesterdayCheckIn(fid);
     const latest = today ?? yesterday;
     setLatestCheckIn(latest);
-    const all = await getAllCheckIns(fid);
+    // 限量读取：只取当年打卡数据（TrendChart 需要）和最近 20 条日记，切换家庭时读取量轻得多
+    const all = await getCheckInsForHome(fid);
     setAllCheckIns(all);
-    const diaries = await getDiaryEntries(fid);
+    const diaries = await getDiaryEntriesForHome(fid, 20);
     setAllDiaryEntries(diaries);
     // 读取今日简报缓存的 AI 总结（family-scoped key，和 share.tsx 保持一致）
     try {
@@ -547,11 +550,8 @@ function CreatorHomeScreen() {
     } catch { setBriefingSummary(null); }
   }, [activeMembership?.familyId]);
 
+  // 修复：只保留 useFocusEffect 一个加载入口，删除 useEffect([familyId]) 避免切换家庭时重复触发双重 IO
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
-
-  useEffect(() => {
-    if (activeMembership?.familyId) loadData();
-  }, [activeMembership?.familyId]);
 
   useEffect(() => {
     if (caregiverName || buildGreeting) {

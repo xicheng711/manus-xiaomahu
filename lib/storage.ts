@@ -505,6 +505,17 @@ export async function getRecentCheckIns(days = 7, roomId?: string): Promise<Dail
   return all.slice(0, days);
 }
 
+/**
+ * 首页专用：只返回当年的打卡数据（最多 365 条）。
+ * TrendChart year 模式需要当年数据，7d 模式只需最近 7 天。
+ * 比全量读取轻得多，尤其是老用户可能有几年数据的情况。
+ */
+export async function getCheckInsForHome(roomId?: string): Promise<DailyCheckIn[]> {
+  const all = await getAllCheckIns(roomId);
+  const currentYear = new Date().getFullYear().toString();
+  return all.filter(c => c.date && c.date.startsWith(currentYear));
+}
+
 export async function getWeeklySleepData(days = 7, roomId?: string): Promise<Array<{
   date: string;
   sleepHours: number;
@@ -628,6 +639,15 @@ export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
     }
   }
   return raw ? JSON.parse(raw) : [];
+}
+
+/**
+ * 首页专用：只返回最近 N 条日记（默认 20 条）。
+ * 首页不需要全量日记，这样切换家庭时读取量会轻得多。
+ */
+export async function getDiaryEntriesForHome(roomId?: string, limit = 20): Promise<DiaryEntry[]> {
+  const all = await getDiaryEntries(roomId);
+  return all.slice(0, limit);
 }
 
 export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: string): Promise<DiaryEntry> {

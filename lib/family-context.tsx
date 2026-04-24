@@ -128,94 +128,86 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     const target = all.find(m => m.familyId === familyId);
     if (!target) return;
 
+    // ── Optimistic switch: 立即切换本地 UI，再后台刷新云端 ─────────────────────
+    // Step 1: 立即更新本地持久化状态
     await setActiveFamilyId(familyId);
     setActiveRoomIdCache(familyId);
 
-    // Sync cloud activeRoomId
-    const serverRoomId = parseInt(familyId);
-    if (!isNaN(serverRoomId)) {
-      await setCloudSyncState({ activeRoomId: serverRoomId });
+    // Step 2: 立即切换 UI（用缓存的 room 数据，不等待网络）
+    const cachedMember =
+      target.room.members.find(m => m.id === target.myMemberId) ?? null;
+    if (cachedMember) {
+      await setCurrentMember(cachedMember);
     }
+    setActiveMembership({ ...target, room: target.room });
 
-    // Try to refresh room detail from server before switching
-    let updatedRoom = target.room;
-    let roomIsValid = true;
-    try {
+    // Step 3: 后台异步刷新云端数据（不阻塞 UI）
+    const serverRoomId = parseInt(familyId);
+    ;(async () => {
+      // 同步 cloud activeRoomId
       if (!isNaN(serverRoomId)) {
+        try { await setCloudSyncState({ activeRoomId: serverRoomId }); } catch {}
+      }
+
+      // 拉取最新 room detail
+      if (isNaN(serverRoomId)) return;
+      try {
         const detail = await cloudGetRoomDetail(serverRoomId);
-        if (detail && detail.room) {
-          const serverMembers: FamilyMember[] = (detail.members ?? []).map((m: any) => ({
-            id: String(m.id),
-            name: m.name,
-            role: m.role ?? 'family',
-            roleLabel: m.roleLabel ?? m.role ?? '家人',
-            emoji: m.emoji ?? '👤',
-            color: m.color ?? '#888',
-            photoUri: m.photoUri,
-            joinedAt: m.joinedAt ?? new Date().toISOString(),
-            isCreator: m.isCreator ?? false,
-            isCurrentUser: false,
-            relationship: m.relationship,
-          }));
-          updatedRoom = {
-            id: String(serverRoomId),
-            roomCode: detail.room.roomCode ?? target.room.roomCode,
-            elderName: detail.room.elderName ?? target.room.elderName,
-            elderEmoji: detail.room.elderEmoji ?? target.room.elderEmoji,
-            elderPhotoUri: detail.room.elderPhotoUri ?? target.room.elderPhotoUri,
-            members: serverMembers.length > 0 ? serverMembers : target.room.members,
-            createdAt: detail.room.createdAt ?? target.room.createdAt,
-          };
-          // Update cached membership with fresh room data
-          const updatedMembership = { ...target, room: updatedRoom };
-          await addOrUpdateMembership(updatedMembership);
+        if (!detail || !detail.room) {
+          // 服务端返回空，说明 room 已删除
+          await clearScopedFamilyData(familyId);
+          await removeMembership(familyId);
+          await refresh();
+          return;
+        }
+        const serverMembers: FamilyMember[] = (detail.members ?? []).map((m: any) => ({
+          id: String(m.id),
+          name: m.name,
+          role: m.role ?? 'family',
+          roleLabel: m.roleLabel ?? m.role ?? '家人',
+          emoji: m.emoji ?? '👤',
+          color: m.color ?? '#888',
+          photoUri: m.photoUri,
+          joinedAt: m.joinedAt ?? new Date().toISOString(),
+          isCreator: m.isCreator ?? false,
+          isCurrentUser: false,
+          relationship: m.relationship,
+        }));
+        const updatedRoom = {
+          id: String(serverRoomId),
+          roomCode: detail.room.roomCode ?? target.room.roomCode,
+          elderName: detail.room.elderName ?? target.room.elderName,
+          elderEmoji: detail.room.elderEmoji ?? target.room.elderEmoji,
+          elderPhotoUri: detail.room.elderPhotoUri ?? target.room.elderPhotoUri,
+          members: serverMembers.length > 0 ? serverMembers : target.room.members,
+          createdAt: detail.room.createdAt ?? target.room.createdAt,
+        };
+        await saveFamilyRoom(updatedRoom);
+        const updatedMembership = { ...target, room: updatedRoom };
+        await addOrUpdateMembership(updatedMembership);
+        // 更新 currentMember（用服务端最新数据）
+        const freshMember =
+          updatedRoom.members.find(m => m.id === target.myMemberId) ??
+          target.room.members.find(m => m.id === target.myMemberId);
+        if (freshMember) await setCurrentMember(freshMember);
+        // 静默更新 activeMembership（UI 已经切过去了，这里只是补充最新数据）
+        setActiveMembership(updatedMembership);
+        setMemberships(prev => prev.map(m => m.familyId === familyId ? updatedMembership : m));
+      } catch (e: any) {
+        const code: string = e?.data?.code ?? e?.shape?.data?.code ?? '';
+        const isGone = ['NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED'].includes(code);
+        if (isGone) {
+          console.warn(`[FamilyContext] switchFamily bg-refresh: room ${familyId} gone (${code}), cleaning up`);
+          await clearScopedFamilyData(familyId);
+          await removeMembership(familyId);
+          await refresh();
         } else {
-          // Server returned a result but room is null/undefined → room deleted
-          roomIsValid = false;
+          // 网络暂时不可用，保持缓存数据，不影响 UI
+          console.warn('[FamilyContext] switchFamily bg-refresh failed (network?), using cached room:', e);
         }
       }
-    } catch (e: any) {
-      // Distinguish "room gone" errors from transient network errors.
-      // tRPC wraps server errors; check for NOT_FOUND / FORBIDDEN / UNAUTHORIZED.
-      const code: string = e?.data?.code ?? e?.shape?.data?.code ?? '';
-      const isGone = ['NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED'].includes(code);
-      if (isGone) {
-        roomIsValid = false;
-        console.warn(`[FamilyContext] switchFamily: room ${familyId} no longer exists on server (${code}), cleaning up`);
-      } else {
-        // Transient network error — keep cached room, don't remove membership
-        console.warn('[FamilyContext] switchFamily getRoomDetail failed (network?), using cached room:', e);
-      }
-    }
-
-    // ── Room no longer valid on server → clean up and bail out ────────────
-    if (!roomIsValid) {
-      await clearScopedFamilyData(familyId);
-      await removeMembership(familyId);
-      // Switch to another family if available, or clear active state
-      await refresh();
-      return;
-    }
-    // ──────────────────────────────────────────────────────────────────────
-
-    await saveFamilyRoom(updatedRoom);
-
-    // Find current member — prefer server-refreshed list, fall back to cached
-    const myMember =
-      updatedRoom.members.find(m => m.id === target.myMemberId) ??
-      target.room.members.find(m => m.id === target.myMemberId);
-
-    if (myMember) {
-      await setCurrentMember(myMember);
-    } else {
-      // Member not found in either list — log warning but don't crash
-      console.warn(
-        `[FamilyContext] switchFamily: myMemberId ${target.myMemberId} not found in room ${familyId}. ` +
-        'Member list may be stale; will resolve on next refresh.',
-      );
-    }
-
-    setActiveMembership({ ...target, room: updatedRoom });
+    })();
+    // ──────────────────────────────────────────────────────────────────────────
   }, [refresh]);
 
   const leaveFamily = useCallback(async (familyId: string) => {
