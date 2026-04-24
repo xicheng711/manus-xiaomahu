@@ -340,6 +340,7 @@ export default function ProfileScreen() {
       setJoinCode('');
       setJoinName('');
       setFamilyModalTab('list');
+      setShowFamilyModal(false);
     } catch (e: any) {
       setJoinError(e?.message || '加入失败，请稍后重试');
     }
@@ -380,6 +381,7 @@ export default function ProfileScreen() {
       setNewElderCity('');
       await refresh();
       setFamilyModalTab('list');
+      setShowFamilyModal(false);
     } catch (e: any) {
       setJoinError(e?.message || '创建失败，请稍后重试');
     }
