@@ -87,6 +87,9 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
           <View style={styles.diaryDateRow}>
             <Text style={styles.diaryDate}>{entry.date}</Text>
             {timeStr ? <Text style={styles.diaryTime}>{timeStr}</Text> : null}
+            {entry.authorName ? (
+              <Text style={styles.diaryAuthor}>记录人：{entry.authorName}</Text>
+            ) : null}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, justifyContent: 'flex-end' }}>
             {editMode && (
@@ -625,9 +628,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 8,
   },
-  diaryDateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  diaryDateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   diaryDate: { fontSize: 14, fontWeight: '700', color: COLORS.text },
   diaryTime: { fontSize: 12, color: COLORS.textSecondary },
+  diaryAuthor: { fontSize: 11, color: COLORS.textSecondary, opacity: 0.75 },
   moodBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill,

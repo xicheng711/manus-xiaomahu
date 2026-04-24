@@ -578,11 +578,13 @@ export function JoinerHomeScreen() {
           </LinearGradient>
         </View>
 
+        {/* ── 今日护理记录卡片（与家人共享页保持一致） ── */}
         <View style={styles.elderCardNew}>
           <LinearGradient
             colors={Gradients.warmCard}
             style={styles.elderCardBody}
           >
+            {/* Header */}
             <View style={styles.elderHeaderRow}>
               <View style={styles.elderAvatarNew}>
                 <LinearGradient
@@ -607,64 +609,98 @@ export function JoinerHomeScreen() {
                 </Text>
               </View>
             </View>
+
+            {/* 四格数据：睡眠/心情/用药/饮食 */}
             <View style={styles.metricsRowNew}>
               {[
-                // 心情：只有晚间打卡完成后才显示真实数据
+                {
+                  emoji: '😴',
+                  label: '睡眠',
+                  val: latestCheckIn?.morningDone && latestCheckIn.sleepHours != null ? `${latestCheckIn.sleepHours}h` : '未记录',
+                  color: AppColors.purple.strong, bg: AppColors.purple.soft
+                },
                 {
                   emoji: latestCheckIn?.eveningDone ? (latestCheckIn.moodEmoji || '😊') : '😊',
                   label: '心情',
-                  val: latestCheckIn?.eveningDone && latestCheckIn.moodScore != null ? `${latestCheckIn.moodScore}/10` : '—',
+                  val: latestCheckIn?.eveningDone ? '已记录' : '未记录',
                   color: AppColors.peach.primary, bg: AppColors.peach.soft
                 },
-                // 睡眠：来自早间打卡，始终显示
                 {
-                  emoji: '💤',
-                  label: '睡眠',
-                  val: latestCheckIn?.morningDone && latestCheckIn.sleepHours != null ? `${latestCheckIn.sleepHours}h` : '—',
-                  color: AppColors.purple.strong, bg: AppColors.purple.soft
-                },
-                // 用药：只有晚间打卡完成后才显示真实状态
-                {
-                  emoji: latestCheckIn?.eveningDone ? (latestCheckIn.medicationTaken ? '✅' : '⚠️') : '💊',
+                  emoji: '💊',
                   label: '用药',
-                  val: latestCheckIn?.eveningDone ? (latestCheckIn.medicationTaken ? '已服' : '未服') : '—',
-                  color: latestCheckIn?.eveningDone ? (latestCheckIn?.medicationTaken ? AppColors.green.strong : AppColors.status.error) : AppColors.text.tertiary,
-                  bg: latestCheckIn?.eveningDone ? (latestCheckIn?.medicationTaken ? AppColors.green.soft : AppColors.coral.soft) : AppColors.bg.secondary
+                  val: latestCheckIn?.eveningDone && latestCheckIn.medicationTaken != null
+                    ? (latestCheckIn.medicationTaken ? '✅' : '❌')
+                    : '未记录',
+                  color: latestCheckIn?.eveningDone
+                    ? (latestCheckIn?.medicationTaken ? AppColors.green.strong : AppColors.status.error)
+                    : AppColors.text.tertiary,
+                  bg: latestCheckIn?.eveningDone
+                    ? (latestCheckIn?.medicationTaken ? AppColors.green.soft : AppColors.coral.soft)
+                    : AppColors.bg.secondary
+                },
+                {
+                  emoji: '🍽️',
+                  label: '饮食',
+                  val: latestCheckIn?.eveningDone
+                    ? (latestCheckIn.mealNotes ? latestCheckIn.mealNotes.slice(0, 4) : '已记')
+                    : '未记录',
+                  color: AppColors.text.secondary, bg: AppColors.bg.secondary
                 },
               ].map((m) => (
                 <View key={m.label} style={[styles.metricItemNew, { backgroundColor: m.bg }]}>
                   <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
                   <Text style={styles.metricLabelNew}>{m.label}</Text>
-                  <Text style={[styles.metricValNew, { color: m.color }]}>{m.val}</Text>
+                  <Text style={[styles.metricValNew, { color: m.color }]} numberOfLines={1}>{m.val}</Text>
                 </View>
               ))}
             </View>
+
+            {/* 最新日记摘要 */}
+            {allDiaries.length > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: AppColors.border.soft }}>
+                <Text style={{ fontSize: 16, marginRight: 6 }}>📔</Text>
+                <Text style={{ fontSize: 13, color: AppColors.text.secondary, flex: 1 }} numberOfLines={2}>
+                  {allDiaries[0].moodEmoji} {allDiaries[0].content || '无详细内容'}
+                </Text>
+              </View>
+            )}
+
+            {/* Footer：记录人 + 小马虎 */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: AppColors.border.soft }}>
+              <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>记录人：{caregiverName || '照顾者'}</Text>
+              <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>小马虎</Text>
+            </View>
+
+            {/* 操作按钮：查看简报 + 一键分享（仅晚间打卡完成后显示） */}
+            {latestCheckIn?.eveningDone && (
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: AppColors.peach.primary, alignItems: 'center' }}
+                  onPress={() => router.push('/share' as any)}
+                >
+                  <Text style={{ fontSize: 13, color: AppColors.peach.primary, fontWeight: '600' }}>📋 查看简报</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.peach.primary, alignItems: 'center' }}
+                  onPress={() => router.push('/share' as any)}
+                >
+                  <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>📤 一键分享</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {/* 晚间未完成时显示引导 */}
+            {!latestCheckIn?.eveningDone && (
+              <TouchableOpacity
+                style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.purple.soft, alignItems: 'center' }}
+                onPress={() => router.push('/(tabs)/checkin' as any)}
+              >
+                <Text style={{ fontSize: 13, color: AppColors.purple.strong, fontWeight: '600' }}>
+                  {latestCheckIn?.morningDone ? '去完成晚间打卡 →' : '去完成今日打卡 →'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </LinearGradient>
         </View>
-
-        {/* 今日简报入口 */}
-        {briefingSummary && (
-          <TouchableOpacity
-            style={styles.briefingEntryCard}
-            onPress={() => router.push('/share' as any)}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={['#FFF0F5', '#FFF5F0']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.briefingEntryInner}
-            >
-              <View style={styles.briefingEntryIcon}>
-                <Text style={{ fontSize: 22 }}>🌸</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.briefingEntryTitle}>今日护理简报已生成</Text>
-                <Text style={styles.briefingEntrySummary} numberOfLines={2}>{briefingSummary}</Text>
-              </View>
-              <Text style={{ fontSize: 18, color: '#FB7185' }}>›</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
 
         <AnnouncementCard
           latest={latestAnnounce}

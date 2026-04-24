@@ -158,10 +158,40 @@ export async function updateDiaryEntry(id: number, data: Partial<InsertDiaryEntr
 export async function getDiaryEntriesByRoom(roomId: number, limit = 30) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(diaryEntries)
+  const rows = await db
+    .select({
+      id: diaryEntries.id,
+      roomId: diaryEntries.roomId,
+      authorUserId: diaryEntries.authorUserId,
+      date: diaryEntries.date,
+      content: diaryEntries.content,
+      moodEmoji: diaryEntries.moodEmoji,
+      moodLabel: diaryEntries.moodLabel,
+      moodScore: diaryEntries.moodScore,
+      tags: diaryEntries.tags,
+      caregiverMoodEmoji: diaryEntries.caregiverMoodEmoji,
+      caregiverMoodLabel: diaryEntries.caregiverMoodLabel,
+      aiReply: diaryEntries.aiReply,
+      aiEmoji: diaryEntries.aiEmoji,
+      aiTip: diaryEntries.aiTip,
+      conversation: diaryEntries.conversation,
+      conversationFinished: diaryEntries.conversationFinished,
+      createdAt: diaryEntries.createdAt,
+      updatedAt: diaryEntries.updatedAt,
+      authorName: familyMembers.name,
+    })
+    .from(diaryEntries)
+    .leftJoin(
+      familyMembers,
+      and(
+        eq(familyMembers.userId, diaryEntries.authorUserId),
+        eq(familyMembers.roomId, diaryEntries.roomId),
+      )
+    )
     .where(eq(diaryEntries.roomId, roomId))
     .orderBy(desc(diaryEntries.date))
     .limit(limit);
+  return rows;
 }
 
 // ─── Announcements ───────────────────────────────────────────────────────────
