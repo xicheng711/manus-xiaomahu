@@ -587,8 +587,8 @@ function WeeklyNapChart({ weeklyData }: { weeklyData: Array<{ date: string; napM
           height={120}
           barBorderTopLeftRadius={6}
           barBorderTopRightRadius={6}
-          noOfSections={3}
-          maxValue={Math.max(90, Math.max(...weeklyData.map(d => d.napMinutes)) + 20)}
+          noOfSections={Math.max(180, Math.ceil(Math.max(...weeklyData.map(d => d.napMinutes)) / 60) * 60 + 30) <= 180 ? 3 : 4}
+          maxValue={Math.max(180, Math.ceil(Math.max(...weeklyData.map(d => d.napMinutes)) / 60) * 60 + 30)}
           yAxisThickness={0}
           yAxisLabelWidth={30}
           xAxisThickness={1}
@@ -671,23 +671,22 @@ export default function ShareScreen() {
 
   const params = useLocalSearchParams<{ refresh?: string; date?: string }>();
   const loadedRef = useRef(false);
+  // params 处理：历史日期模式或强制刷新，由 useEffect 单独处理
+  // 正常首次加载由 useFocusEffect 统一负责，避免重复触发
   useEffect(() => {
-    if (!loadedRef.current) {
+    const forceRefresh = params.refresh === '1';
+    const historyDate = params.date;
+    if (historyDate) {
       loadedRef.current = true;
-      const forceRefresh = params.refresh === '1';
-      const historyDate = params.date; // 历史日期参数，如 '2025-04-01'
-      if (historyDate) {
-        // 历史模式：直接加载指定日期数据，不走缓存
-        loadHistoryDate(historyDate);
-      } else {
-        if (forceRefresh) {
-          _briefingCacheMap.delete(getCacheKey(familyId));
-          AsyncStorage.removeItem(getCacheKey(familyId)).catch(() => {});
-        }
-        loadAndGenerate(forceRefresh);
-      }
+      loadHistoryDate(historyDate);
+    } else if (forceRefresh) {
+      loadedRef.current = true;
+      _briefingCacheMap.delete(getCacheKey(familyId));
+      AsyncStorage.removeItem(getCacheKey(familyId)).catch(() => {});
+      loadAndGenerate(true);
     }
-  }, []);
+    // 普通进入不在这里触发，交给 useFocusEffect
+  }, [params.refresh, params.date]);
   useFocusEffect(useCallback(() => {
     if (!loadedRef.current) {
       loadedRef.current = true;
@@ -721,7 +720,7 @@ export default function ShareScreen() {
       const ci = await getCheckInByDate(dateStr, familyId);
       if (!ci) {
         setError(`${dateStr} 无打卡记录`);
-        setLoading(false); loadingRef.current = false;
+        setLoading(false);
       loadingRef.current = false;
         return;
       }
@@ -741,7 +740,7 @@ export default function ShareScreen() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
-      setLoading(false); loadingRef.current = false;
+      setLoading(false);
       loadingRef.current = false;
     }
   }
@@ -759,7 +758,28 @@ export default function ShareScreen() {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setError(null);
-
+    // ── 最前置 early return：未完成打卡不走任何生成/缓存流程 ──
+    try {
+      const earlyCheckIn = await getTodayCheckIn(familyId);
+      if (!earlyCheckIn?.morningDone) {
+        setLoading(false);
+        setBriefing(null);
+        setShareText('');
+        setError('完成今日打卡，就能看到今日记录');
+        loadingRef.current = false;
+        return;
+      }
+      if (!earlyCheckIn?.eveningDone) {
+        setLoading(false);
+        setBriefing(null);
+        setShareText('');
+        setError('早间打卡已完成，完成晚间打卡后就能看到今日记录');
+        loadingRef.current = false;
+        return;
+      }
+    } catch {
+      // 若获取打卡数据失败，继续走正常流程
+    }
     if (!forceRefresh) {
       const memCached = getCachedBriefing(familyId);
       if (memCached) {
@@ -770,7 +790,7 @@ export default function ShareScreen() {
           setCheckIn(memCached.checkIn);
           setMergedTodayCi(memCached.checkIn); // 缓存命中时也要同步合并记录
         }
-        setLoading(false); loadingRef.current = false;
+        setLoading(false);
       loadingRef.current = false;
         loadSupplementaryData();
         recheckBackfill();
@@ -788,7 +808,7 @@ export default function ShareScreen() {
           setCheckIn(persisted.checkIn);
           setMergedTodayCi(persisted.checkIn); // 持久化缓存命中时也要同步合并记录
         }
-        setLoading(false); loadingRef.current = false;
+        setLoading(false);
       loadingRef.current = false;
         loadSupplementaryData();
         recheckBackfill();
@@ -822,7 +842,7 @@ export default function ShareScreen() {
 
       if (!hasTodayEvening) {
         setError('完成晚间打卡后，就能看到今日完整简报了！');
-        setLoading(false); loadingRef.current = false;
+        setLoading(false);
       loadingRef.current = false;
         return;
       }
@@ -858,7 +878,7 @@ export default function ShareScreen() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
-      setLoading(false); loadingRef.current = false;
+      setLoading(false);
       loadingRef.current = false;
     }
   }

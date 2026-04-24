@@ -727,7 +727,13 @@ function CreatorHomeScreen() {
           eveningDone={eveningDone}
           encouragement={encouragement}
           motivation={getDailyStatusHint(todayCheckIn)}
-          onPress={() => router.push('/share' as any)}
+          onPress={() => {
+            if (!morningDone || !eveningDone) {
+              router.push('/(tabs)/checkin' as any);
+            } else {
+              router.push('/share' as any);
+            }
+          }}
           onCheckinPress={() => router.push('/(tabs)/checkin' as any)}
         />
 
