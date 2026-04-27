@@ -129,7 +129,8 @@ function MedicationScreenContent() {
   }, [adding]);
 
   useFocusEffect(useCallback(() => {
-    getMedications().then(setMeds);
+    // 修复：传入 familyId，避免依赖 _activeRoomIdCache（在 FamilyContext refresh 完成前可能为 null）
+    getMedications(familyId).then(setMeds);
     Promise.all([getFamilyProfile(familyId), getProfile()]).then(([fp, lp]) => {
       setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
       setCareNeeds(fp?.careNeeds?.selectedNeeds || lp?.careNeeds?.selectedNeeds || []);
@@ -180,7 +181,7 @@ function MedicationScreenContent() {
         icon,
         reminderEnabled,
       };
-      await updateMedication(editingMed.id, patch);
+      await updateMedication(editingMed.id, patch, familyId);
       const updated = meds.map(m => m.id === editingMed.id ? { ...m, ...patch } : m);
       setMeds(updated);
       // handle reminders—差集算法：取消已删除的时间点，新增新时间点
@@ -216,7 +217,7 @@ function MedicationScreenContent() {
         icon,
         active: true,
         reminderEnabled,
-      });
+      }, familyId);
       setMeds(prev => [...prev, newMed]);
       if (reminderEnabled) {
         for (const t of selectedTimes) {
@@ -235,7 +236,7 @@ function MedicationScreenContent() {
     const target = meds.find(m => m.id === id);
     if (!target) return;
     // updateMedication 自带云端同步
-    await updateMedication(id, { active: !target.active });
+    await updateMedication(id, { active: !target.active }, familyId);
     setMeds(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }
@@ -247,7 +248,7 @@ function MedicationScreenContent() {
       {
         text: '删除', style: 'destructive', onPress: async () => {
           // deleteMedication 自带云端同步
-          await deleteMedication(id);
+          await deleteMedication(id, familyId);
           setMeds(prev => prev.filter(m => m.id !== id));
         }
       }

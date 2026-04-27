@@ -313,8 +313,9 @@ export default function OnboardingScreen() {
     // Step 1: Create the cloud family room FIRST.
     // If this fails we abort immediately — no local data is written, so the
     // device stays in a clean state and the user can safely retry.
+    let newRoom: Awaited<ReturnType<typeof createFamilyRoom>> | null = null;
     try {
-      await createFamilyRoom(
+      newRoom = await createFamilyRoom(
         elderNickname || elderName || '家人',
         {
           name: caregiverName || '家人',
@@ -401,7 +402,8 @@ export default function OnboardingScreen() {
     });
     // Schedule daily check-in reminders
     scheduleAllReminders(elderNickname || elderName || undefined).catch(() => {});
-    // Save medications
+    // Save medications — 明确传入 roomId 避免依赖 _activeRoomIdCache
+    const newRoomId = newRoom?.id ?? undefined;
     for (const med of medications) {
       await saveMedication({
         name: med.name,
@@ -413,7 +415,7 @@ export default function OnboardingScreen() {
         active: true,
         reminderEnabled: true,
         color: AppColors.coral.primary,
-      });
+      }, newRoomId);
     }
     await refresh();
     router.replace('/(tabs)');
