@@ -11,6 +11,7 @@ import {
   cloudGetRoomDetail,
   cloudLookupRoom,
   cloudUpdateElderProfile,
+  cloudUpdateMemberProfile,
   setCloudSyncState,
 } from "./cloud-sync";
 
@@ -247,6 +248,8 @@ export interface FamilyMembership {
   role: 'creator' | 'joiner';
   room: FamilyRoom;       // 缓存的家庭信息
   joinedAt: string;
+  memberEmoji?: string;
+  memberPhotoUri?: string;
 }
 
 // ─── UserProfile & FamilyProfile (split from legacy ElderProfile) ────────────
@@ -1013,6 +1016,14 @@ export async function updateFamilyMemberPhoto(memberId: string, photoUri: string
     const current = await getCurrentMember();
     if (current && current.id === memberId) {
       await setCurrentMember({ ...current, photoUri });
+      // Cloud sync: update member profile on server
+      const roomId = parseInt(room.id);
+      if (!isNaN(roomId)) {
+        cloudUpdateMemberProfile({
+          roomId,
+          photoUri,
+        }).catch(e => console.warn('[Storage] cloudUpdateMemberProfile failed:', e));
+      }
     }
   }
 }

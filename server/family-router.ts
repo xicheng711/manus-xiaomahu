@@ -7,7 +7,7 @@ import { z } from "zod";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
   createFamilyRoom, getFamilyRoomByCode, getFamilyRoomById, getUserFamilyRooms,
-  addFamilyMember, getRoomMembers, getMemberByUserId,
+  addFamilyMember, getRoomMembers, getMemberByUserId, updateFamilyMember,
   removeFamilyMember, deleteFamilyRoom,
   upsertElderProfile, getElderProfile,
   upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
@@ -264,9 +264,12 @@ export const familyRouter = router({
       roomCode: room?.roomCode,
       elderName: room.elderName,
       elderEmoji: room.elderEmoji,
+      elderPhotoUri: room.elderPhotoUri,
       isCreator: membership.isCreator,
       role: membership.role,
       roleLabel: membership.roleLabel,
+      memberEmoji: membership.emoji,
+      memberPhotoUri: membership.photoUri,
     }));
   }),
 
@@ -702,6 +705,26 @@ export const familyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       await updatePushToken(userId, input.pushToken);
+      return { success: true };
+    }),
+  /** Update current user's member profile in a room (e.g. photo, emoji) */
+  updateMemberProfile: protectedProcedure
+    .input(z.object({
+      roomId: z.number(),
+      name: z.string().optional(),
+      emoji: z.string().optional(),
+      photoUri: z.string().optional(),
+      relationship: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const member = await requireRoomMember(userId, input.roomId);
+      await updateFamilyMember(member.id, {
+        name: input.name,
+        emoji: input.emoji,
+        photoUri: input.photoUri,
+        relationship: input.relationship,
+      });
       return { success: true };
     }),
 });

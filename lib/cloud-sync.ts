@@ -163,6 +163,23 @@ export async function cloudLeaveRoom(roomId: number) {
   }
 }
 
+/** Update current user's member profile in a room (e.g. photo, emoji) */
+export async function cloudUpdateMemberProfile(params: {
+  roomId: number;
+  name?: string;
+  emoji?: string;
+  photoUri?: string;
+  relationship?: string;
+}) {
+  try {
+    const client = getClient();
+    return await client.family.updateMemberProfile.mutate(params);
+  } catch (e) {
+    console.warn('[CloudSync] updateMemberProfile failed:', e);
+    return null;
+  }
+}
+
 /** Delete a family room (creator only) */
 export async function cloudDeleteRoom(roomId: number) {
   try {

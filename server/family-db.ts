@@ -84,6 +84,12 @@ export async function getMemberByUserId(roomId: number, userId: number) {
   return rows[0] ?? null;
 }
 
+export async function updateFamilyMember(id: number, data: Partial<InsertFamilyMember>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(familyMembers).set(data).where(eq(familyMembers.id, id));
+}
+
 // ─── Elder Profiles ──────────────────────────────────────────────────────────
 
 export async function upsertElderProfile(data: InsertElderProfile) {
