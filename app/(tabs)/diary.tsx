@@ -303,6 +303,8 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function DiaryScreenContent() {
   const router = useRouter();
+  const { activeMembership } = useFamilyContext();
+  const familyId = activeMembership?.familyId;
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -326,10 +328,11 @@ function DiaryScreenContent() {
     loadEntries();
     setEditMode(false);
     setShowAll(false);
-  }, []));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId]));
 
   async function loadEntries() {
-    const e = await getDiaryEntries();
+    const e = await getDiaryEntries(familyId);
     setEntries(e);
   }
 
@@ -350,10 +353,10 @@ function DiaryScreenContent() {
 
   async function executeDelete() {
     if (!deleteTarget) return;
-    await deleteDiaryEntry(deleteTarget.id);
+    await deleteDiaryEntry(deleteTarget.id, familyId);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setDeleteTarget(null);
-    const updated = await getDiaryEntries();
+    const updated = await getDiaryEntries(familyId);
     const next = updated.slice(0, 30);
     setEntries(next);
     if (next.length === 0) setEditMode(false);

@@ -937,11 +937,11 @@ function CheckinScreenContent() {
         eveningDone: true,
       });
     }
-    await upsertCheckIn(data);
+    await upsertCheckIn(data, familyId);
     // 云端同步（不阻塞 UI）
     cloudSyncCheckIn(data).catch(e => console.warn('[CheckIn] cloud sync failed:', e));
     // 立即刷新 checkIn 状态，确保返回 landing 时显示最新状态
-    const refreshed = backfillDate ? await getCheckInByDate(backfillDate) : await getTodayCheckIn(familyId);
+    const refreshed = backfillDate ? await getCheckInByDate(backfillDate, familyId) : await getTodayCheckIn(familyId);
     if (refreshed) setCheckIn(refreshed);
     setSaving(false);
     if (mode === 'morning') {

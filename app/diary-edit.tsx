@@ -258,7 +258,7 @@ export default function DiaryEditScreen() {
 
   async function loadProfile() {
     const [userProfile, familyProfile, legacyProfile, entries, checkIn, creatorFlag] = await Promise.all([
-      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(), getTodayCheckIn(), getCurrentUserIsCreator(),
+      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(familyId), getTodayCheckIn(familyId), getCurrentUserIsCreator(),
     ]);
     if (!creatorFlag) {
       setRoleReadOnly(true);
