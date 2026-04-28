@@ -35,7 +35,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    buildNumber: "8",
+    buildNumber: "25",
     bundleIdentifier: env.iosBundleId,
     usesAppleSignIn: true,
     infoPlist: {
