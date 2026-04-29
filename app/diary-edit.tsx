@@ -18,6 +18,7 @@ import {
   getTodayCheckIn, DailyCheckIn, getCurrentUserIsCreator,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
+import { cloudGetDiaries } from '@/lib/cloud-sync';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
@@ -278,13 +279,28 @@ export default function DiaryEditScreen() {
 
   async function loadExistingEntry(id: string) {
     setLoadingEntry(true);
-    const entry = await getDiaryEntryById(id);
+    let entry: DiaryEntry | null = await getDiaryEntryById(id);
+    // readOnly 模式下（joiner 查看主照顾者日记）：本地找不到时尝试从云端拉取
+    if (!entry && isReadOnly) {
+      try {
+        const cloudEntries = await cloudGetDiaries();
+        // 云端 id 是数字，本地传入的 id 可能是字符串形式的数字
+        const matched = cloudEntries.find(
+          (e: any) => String(e.id) === String(id)
+        );
+        if (matched) {
+          entry = matched as unknown as DiaryEntry;
+        }
+      } catch (e) {
+        console.warn('[DiaryEdit] cloudGetDiaries fallback failed:', e);
+      }
+    }
     if (entry) {
       entryRef.current = entry;
-      const moodIdx = MOOD_OPTIONS.findIndex(m => m.emoji === entry.moodEmoji);
+      const moodIdx = MOOD_OPTIONS.findIndex(m => m.emoji === entry!.moodEmoji);
       setSelectedMood(moodIdx >= 0 ? moodIdx : 0);
       if (entry.caregiverMoodEmoji) {
-        const cgIdx = CAREGIVER_MOODS.findIndex(m => m.emoji === entry.caregiverMoodEmoji);
+        const cgIdx = CAREGIVER_MOODS.findIndex(m => m.emoji === entry!.caregiverMoodEmoji);
         if (cgIdx >= 0) setCaregiverMoodIdx(cgIdx);
       }
       setSelectedTags(entry.tags ?? []);

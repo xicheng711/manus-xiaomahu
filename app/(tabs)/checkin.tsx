@@ -938,8 +938,7 @@ function CheckinScreenContent() {
       });
     }
     await upsertCheckIn(data, familyId);
-    // 云端同步（不阻塞 UI）
-    cloudSyncCheckIn(data).catch(e => console.warn('[CheckIn] cloud sync failed:', e));
+    // 注意：upsertCheckIn 内部已经调用了 cloudSyncCheckIn，无需重复调用
     // 立即刷新 checkIn 状态，确保返回 landing 时显示最新状态
     const refreshed = backfillDate ? await getCheckInByDate(backfillDate, familyId) : await getTodayCheckIn(familyId);
     if (refreshed) setCheckIn(refreshed);

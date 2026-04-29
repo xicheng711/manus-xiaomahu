@@ -14,7 +14,7 @@ import {
   getAllCheckIns, getDiaryEntries,
   getProfile, getFamilyProfile, getUserProfile,
   FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
-  updateFamilyMemberPhoto, getCurrentUserIsCreator, toggleAnnouncementReaction, todayStr,
+  updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
   getActiveRoomIdCache,
 } from '@/lib/storage';
 import { cloudDeleteAnnouncement, cloudToggleReaction } from '@/lib/cloud-sync';
@@ -756,7 +756,8 @@ export default function FamilyScreen() {
                   isNew={ann.id === newAnnouncementId}
                   currentMember={currentMember}
                   onReactionToggle={async (emoji) => {
-                    // Server-first: sync reaction to server before updating locally
+                    if (!currentMember) return;
+                    // Server-first: toggle reaction on server, then refresh from cloud
                     const numericAnnId = parseInt(ann.id);
                     if (!isNaN(numericAnnId)) {
                       try {
@@ -766,12 +767,7 @@ export default function FamilyScreen() {
                         return;
                       }
                     }
-                    // Server succeeded — now update locally
-                    await toggleAnnouncementReaction(ann.id, emoji, {
-                      memberId: currentMember.id,
-                      memberName: currentMember.name,
-                      memberEmoji: currentMember.emoji,
-                    });
+                    // Reload from cloud so both creator and joiner see updated reactions
                     await loadData();
                   }}
                 />
@@ -793,7 +789,8 @@ export default function FamilyScreen() {
                     onDelete={() => handleDeleteAnnouncement(ann.id)}
                     currentMember={currentMember}
                     onReactionToggle={async (emoji) => {
-                      // Server-first: sync reaction to server before updating locally
+                      if (!currentMember) return;
+                      // Server-first: toggle reaction on server, then refresh from cloud
                       const numericAnnId = parseInt(ann.id);
                       if (!isNaN(numericAnnId)) {
                         try {
@@ -803,12 +800,7 @@ export default function FamilyScreen() {
                           return;
                         }
                       }
-                      // Server succeeded — now update locally
-                      await toggleAnnouncementReaction(ann.id, emoji, {
-                        memberId: currentMember.id,
-                        memberName: currentMember.name,
-                        memberEmoji: currentMember.emoji,
-                      });
+                      // Reload from cloud so both creator and joiner see updated reactions
                       await loadData();
                     }}
                   />

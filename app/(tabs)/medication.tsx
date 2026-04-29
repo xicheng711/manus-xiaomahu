@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { getMedications, saveMedication, updateMedication, deleteMedication, Medication, getProfile, getUserProfile, getFamilyProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
+import { cloudGetMedications } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -129,8 +130,20 @@ function MedicationScreenContent() {
   }, [adding]);
 
   useFocusEffect(useCallback(() => {
-    // 修复：传入 familyId，避免依赖 _activeRoomIdCache（在 FamilyContext refresh 完成前可能为 null）
-    getMedications(familyId).then(setMeds);
+    // joiner 视角：从云端拉取主照顾者的用药记录；creator 视角：读本地
+    getCurrentUserIsCreator().then(creator => {
+      if (creator) {
+        getMedications(familyId).then(setMeds);
+      } else {
+        cloudGetMedications().then(cloudMeds => {
+          if (cloudMeds && cloudMeds.length > 0) {
+            setMeds(cloudMeds as unknown as Medication[]);
+          } else {
+            getMedications(familyId).then(setMeds);
+          }
+        }).catch(() => getMedications(familyId).then(setMeds));
+      }
+    });
     Promise.all([getFamilyProfile(familyId), getProfile()]).then(([fp, lp]) => {
       setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
       setCareNeeds(fp?.careNeeds?.selectedNeeds || lp?.careNeeds?.selectedNeeds || []);
