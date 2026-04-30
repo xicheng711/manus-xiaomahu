@@ -11,7 +11,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
-import { cloudSyncCheckIn } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
