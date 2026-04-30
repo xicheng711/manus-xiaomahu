@@ -1,6 +1,6 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -22,6 +22,7 @@ import { FamilyProvider } from "@/lib/family-context";
 import { WeatherProvider } from "@/lib/weather-context";
 import { initCloudSync } from "@/lib/cloud-sync";
 import { registerPushToken } from "@/lib/notifications";
+import * as Notifications from "expo-notifications";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -36,6 +37,7 @@ export default function RootLayout() {
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
+  const router = useRouter();
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
@@ -50,6 +52,39 @@ export default function RootLayout() {
     }, 3000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Handle push notification tap: navigate to the relevant screen
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as any;
+      if (!data?.screen) return;
+      // Small delay to ensure the navigator is ready
+      setTimeout(() => {
+        try {
+          switch (data.screen) {
+            case "diary":
+              router.push("/(tabs)/diary" as any);
+              break;
+            case "family":
+              router.push("/(tabs)/family" as any);
+              break;
+            case "checkin":
+              router.push("/(tabs)/checkin" as any);
+              break;
+            case "medication":
+              router.push("/(tabs)/medication" as any);
+              break;
+            default:
+              break;
+          }
+        } catch (e) {
+          console.warn("[Layout] notification navigation failed:", e);
+        }
+      }, 300);
+    });
+    return () => subscription.remove();
+  }, [router]);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
