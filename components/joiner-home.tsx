@@ -439,7 +439,9 @@ export function JoinerHomeScreen() {
     }
     setLatestAnnounce(announcements[0] ?? null);
     // Filter to today-only data for the activity feed (avoid showing historical records as "today")
-    const todayKey = new Date().toISOString().slice(0, 10);
+    // Use local date (same as todayStr() in storage.ts) to avoid UTC offset issues
+    const _d = new Date();
+    const todayKey = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
     const todayCheckIns = checkIns.filter(c => c.date === todayKey).slice(0, 2);
     const todayDiaries = cleanDiaries.filter(d => {
       if (d.date === todayKey) return true;

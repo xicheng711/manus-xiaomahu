@@ -72,7 +72,7 @@ export default function ProfileScreen() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
 
-  const { memberships, activeMembership, switchFamily, leaveFamily, deleteFamily, refresh } = useFamilyContext();
+  const { memberships, activeMembership, switchFamily, leaveFamily, deleteFamily, refresh, ready: contextReady } = useFamilyContext();
 
   const handleDeleteAccount = async () => {
     setDeletingAccount(true);
@@ -428,7 +428,7 @@ export default function ProfileScreen() {
     nurse: '护理人员',
   };
 
-  if (loading) {
+  if (loading || !contextReady) {
     return (
       <ScreenContainer className="items-center justify-center">
         <Text style={styles.loading}>加载中...</Text>
