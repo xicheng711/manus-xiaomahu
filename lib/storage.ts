@@ -703,9 +703,27 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: only sync when conversation is finished to avoid excessive network requests during AI dialogue
   if (all[idx].conversationFinished) {
-    cloudSyncDiary(all[idx], all[idx].serverDiaryId).then(res => {
-      if (res?.id && !all[idx].serverDiaryId) updateDiaryEntry(id, { serverDiaryId: res.id }, rid ?? undefined);
-    }).catch(() => {});
+    const syncEntry = all[idx];
+    if (syncEntry.serverDiaryId) {
+      // serverDiaryId already known — update existing cloud record (no push notification)
+      cloudSyncDiary(syncEntry, syncEntry.serverDiaryId).catch(() => {});
+    } else {
+      // serverDiaryId not yet available (saveDiaryEntry's async .then() may still be in flight)
+      // Wait up to 5 seconds for serverDiaryId to be written, then sync once
+      ;(async () => {
+        let latestEntry: DiaryEntry | null = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          await new Promise(r => setTimeout(r, 1000));
+          latestEntry = await getDiaryEntryById(id, rid ?? undefined);
+          if (latestEntry?.serverDiaryId) break;
+        }
+        if (latestEntry?.serverDiaryId) {
+          // Now we have serverDiaryId — update existing cloud record (no push notification)
+          cloudSyncDiary(latestEntry, latestEntry.serverDiaryId).catch(() => {});
+        }
+        // If still no serverDiaryId after 5s, skip sync to avoid duplicate cloud entry
+      })();
+    }
   }
   return all[idx];
 }

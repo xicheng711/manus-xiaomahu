@@ -437,7 +437,9 @@ export default function ProfileScreen() {
   }
 
   // Show setup prompt only if both scoped profiles are empty AND legacy profile is also empty
-  if (!profile && !userProfile && !familyProfile) {
+  // Exception: joiners (role !== 'creator') don't have local profile data but still have memberships — show page normally
+  const isJoiner = activeMembership != null && activeMembership.role !== 'creator';
+  if (!profile && !userProfile && !familyProfile && !isJoiner) {
     return (
       <ScreenContainer className="items-center justify-center p-6">
         <Text style={styles.noProfile}>还没有设置个人信息</Text>

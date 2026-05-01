@@ -438,10 +438,18 @@ export function JoinerHomeScreen() {
       announcements = await getFamilyAnnouncements(30);
     }
     setLatestAnnounce(announcements[0] ?? null);
-    setFeed(buildFeed(checkIns.slice(0, 2), cleanDiaries.slice(0, 3), announcements.slice(0, 2), creatorName));
+    // Filter to today-only data for the activity feed (avoid showing historical records as "today")
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayCheckIns = checkIns.filter(c => c.date === todayKey).slice(0, 2);
+    const todayDiaries = cleanDiaries.filter(d => {
+      if (d.date === todayKey) return true;
+      if (d.createdAt && d.createdAt.slice(0, 10) === todayKey) return true;
+      return false;
+    }).slice(0, 3);
+    const todayAnnouncements = announcements.filter(a => a.createdAt && a.createdAt.slice(0, 10) === todayKey).slice(0, 2);
+    setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));
     // 读取今日简报缓存
     try {
-      const todayKey = new Date().toISOString().slice(0, 10);
       const cacheKey = activeFamilyId ? `share_briefing_cache_v1:${activeFamilyId}` : 'share_briefing_cache_v1';
       const raw = await AsyncStorage.getItem(cacheKey);
       if (raw) {

@@ -759,8 +759,9 @@ export default function FamilyScreen() {
                     if (!currentMember) return;
                     // Server-first: toggle reaction on server, then refresh from cloud
                     const numericAnnId = parseInt(String(ann.id));
+                    const numericRoomId = room?.id ? parseInt(String(room.id)) : undefined;
                     if (!isNaN(numericAnnId)) {
-                      const result = await cloudToggleReaction(numericAnnId, emoji);
+                      const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
                       if (result === null) {
                         Alert.alert('操作失败', '无法同步表情，请稍后重试');
                         return;
@@ -791,8 +792,9 @@ export default function FamilyScreen() {
                       if (!currentMember) return;
                       // Server-first: toggle reaction on server, then refresh from cloud
                       const numericAnnId = parseInt(String(ann.id));
+                      const numericRoomId = room?.id ? parseInt(String(room.id)) : undefined;
                       if (!isNaN(numericAnnId)) {
-                        const result = await cloudToggleReaction(numericAnnId, emoji);
+                        const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
                         if (result === null) {
                           Alert.alert('操作失败', '无法同步表情，请稍后重试');
                           return;
