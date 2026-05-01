@@ -14,6 +14,7 @@ import {
   getFamilyProfile, saveFamilyProfile, FamilyProfile,
   getUserProfile, saveUserProfile,
   generateId, generateRoomCode, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode,
+  getCurrentMember, FamilyMember,
 } from '@/lib/storage';
 import { getZodiac } from '@/lib/zodiac';
 import {
@@ -32,6 +33,8 @@ export default function ProfileScreen() {
   const [familyProfile, setFamilyProfile] = useState<FamilyProfile | null>(null);
   // Keep legacy profile as a thin compatibility shim for handlers that still need it
   const [profile, setProfile] = useState<ElderProfile | null>(null);
+  // Joiner's own member record (name, emoji, photoUri)
+  const [currentMember, setCurrentMember] = useState<FamilyMember | null>(null);
   const [loading, setLoading] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -152,15 +155,17 @@ export default function ProfileScreen() {
     const loadProfiles = async () => {
       setLoading(true);
       try {
-        // Load all three in parallel: legacy (compat shim), user-scoped, family-scoped
-        const [legacyP, up, fp] = await Promise.all([
+        // Load all three in parallel: legacy (compat shim), user-scoped, family-scoped, plus currentMember for joiner
+        const [legacyP, up, fp, cm] = await Promise.all([
           getProfile(),
           getUserProfile(),
           activeMembership?.familyId ? getFamilyProfile(activeMembership.familyId) : Promise.resolve(null),
+          getCurrentMember(),
         ]);
         setProfile(legacyP);
         setUserProfile(up);
         setFamilyProfile(fp);
+        setCurrentMember(cm);
         // Seed draft fields from authoritative scoped sources
         setCaregiverNameDraft(up?.caregiverName || legacyP?.caregiverName || '');
         setElderNicknameDraft(fp?.nickname || legacyP?.nickname || legacyP?.name || '');
@@ -464,34 +469,56 @@ export default function ProfileScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Caregiver Card — sourced from UserProfile (authoritative) */}
-        <Text style={styles.sectionLabel}>👤 照顾者</Text>
+        {/* Caregiver Card — for joiner: show their own member info; for creator: show UserProfile */}
+        <Text style={styles.sectionLabel}>{isJoiner ? '👤 我的信息' : '👤 照顾者'}</Text>
         <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
           <View style={styles.avatarWrap}>
-            {(userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri) ? (
-              <Image source={{ uri: userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri }} style={styles.avatarPhoto} />
+            {isJoiner ? (
+              currentMember?.photoUri ? (
+                <Image source={{ uri: currentMember.photoUri }} style={styles.avatarPhoto} />
+              ) : (
+                <Text style={styles.cardEmoji}>{currentMember?.emoji || '🧑'}</Text>
+              )
             ) : (
-              <Text style={styles.cardEmoji}>🧑</Text>
+              (userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri) ? (
+                <Image source={{ uri: userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri }} style={styles.avatarPhoto} />
+              ) : (
+                <Text style={styles.cardEmoji}>🧑</Text>
+              )
             )}
-            <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('caregiver')}>
-              <Text style={styles.cameraChipText}>📷</Text>
-            </TouchableOpacity>
+            {!isJoiner && (
+              <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('caregiver')}>
+                <Text style={styles.cameraChipText}>📷</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.cardInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.cardName}>{userProfile?.caregiverName || profile?.caregiverName || '照顾者'}</Text>
-              <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('caregiver')}>
-                <Text style={{ fontSize: 14 }}>✏️</Text>
-              </TouchableOpacity>
+              <Text style={styles.cardName}>
+                {isJoiner
+                  ? (currentMember?.name || '家庭成员')
+                  : (userProfile?.caregiverName || profile?.caregiverName || '照顾者')}
+              </Text>
+              {!isJoiner && (
+                <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('caregiver')}>
+                  <Text style={{ fontSize: 14 }}>✏️</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            <Text style={styles.cardSub}>
-              {(userProfile?.caregiverZodiacName || profile?.caregiverZodiacName) ? `属${userProfile?.caregiverZodiacName || profile?.caregiverZodiacName} · ` : ''}
-              {(userProfile?.caregiverBirthYear || profile?.caregiverBirthYear) ? `${userProfile?.caregiverBirthYear || profile?.caregiverBirthYear}年` : '未设置年份'}
-            </Text>
-            <Text style={styles.cardSub2}>照顾者</Text>
-            <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('caregiver')}>
-              <Text style={styles.editDetailBtnText}>编辑详情</Text>
-            </TouchableOpacity>
+            {isJoiner ? (
+              <Text style={styles.cardSub2}>{currentMember?.roleLabel || '家庭成员'}</Text>
+            ) : (
+              <>
+                <Text style={styles.cardSub}>
+                  {(userProfile?.caregiverZodiacName || profile?.caregiverZodiacName) ? `属${userProfile?.caregiverZodiacName || profile?.caregiverZodiacName} · ` : ''}
+                  {(userProfile?.caregiverBirthYear || profile?.caregiverBirthYear) ? `${userProfile?.caregiverBirthYear || profile?.caregiverBirthYear}年` : '未设置年份'}
+                </Text>
+                <Text style={styles.cardSub2}>照顾者</Text>
+                <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('caregiver')}>
+                  <Text style={styles.editDetailBtnText}>编辑详情</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
 
@@ -499,30 +526,50 @@ export default function ProfileScreen() {
         <Text style={styles.sectionLabel}>🧡 被照顾者</Text>
         <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
           <View style={styles.avatarWrap}>
-            {(familyProfile?.elderPhotoUri || profile?.photoUri) ? (
-              <Image source={{ uri: familyProfile?.elderPhotoUri || profile?.photoUri }} style={styles.avatarPhoto} />
+            {isJoiner ? (
+              activeMembership?.room?.elderPhotoUri ? (
+                <Image source={{ uri: activeMembership.room.elderPhotoUri }} style={styles.avatarPhoto} />
+              ) : (
+                <Text style={styles.cardEmoji}>{activeMembership?.room?.elderEmoji || '👵'}</Text>
+              )
             ) : (
-              <Text style={styles.cardEmoji}>👵</Text>
+              (familyProfile?.elderPhotoUri || profile?.photoUri) ? (
+                <Image source={{ uri: familyProfile?.elderPhotoUri || profile?.photoUri }} style={styles.avatarPhoto} />
+              ) : (
+                <Text style={styles.cardEmoji}>👵</Text>
+              )
             )}
-            <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('elder')}>
-              <Text style={styles.cameraChipText}>📷</Text>
-            </TouchableOpacity>
+            {!isJoiner && (
+              <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('elder')}>
+                <Text style={styles.cameraChipText}>📷</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.cardInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.cardName}>{familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || '家人'}</Text>
-              <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('elder')}>
-                <Text style={{ fontSize: 14 }}>✏️</Text>
-              </TouchableOpacity>
+              <Text style={styles.cardName}>
+                {isJoiner
+                  ? (activeMembership?.room?.elderName || '家人')
+                  : (familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || '家人')}
+              </Text>
+              {!isJoiner && (
+                <TouchableOpacity style={styles.editIconBtn} onPress={() => openEditModal('elder')}>
+                  <Text style={{ fontSize: 14 }}>✏️</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            <Text style={styles.cardSub}>
-              {(familyProfile?.zodiacName || profile?.zodiacName) ? `属${familyProfile?.zodiacName || profile?.zodiacName} · ` : ''}
-              {(familyProfile?.birthDate || profile?.birthDate) ? `${new Date((familyProfile?.birthDate || profile?.birthDate) + 'T00:00:00').getFullYear()}年` : '未设置年份'}
-            </Text>
-            <Text style={styles.cardSub2}>{familyProfile?.name || profile?.name || '家人'}</Text>
-            <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('elder')}>
-              <Text style={styles.editDetailBtnText}>编辑详情</Text>
-            </TouchableOpacity>
+            {!isJoiner && (
+              <>
+                <Text style={styles.cardSub}>
+                  {(familyProfile?.zodiacName || profile?.zodiacName) ? `属${familyProfile?.zodiacName || profile?.zodiacName} · ` : ''}
+                  {(familyProfile?.birthDate || profile?.birthDate) ? `${new Date((familyProfile?.birthDate || profile?.birthDate) + 'T00:00:00').getFullYear()}年` : '未设置年份'}
+                </Text>
+                <Text style={styles.cardSub2}>{familyProfile?.name || profile?.name || '家人'}</Text>
+                <TouchableOpacity style={styles.editDetailBtn} onPress={() => openEditModal('elder')}>
+                  <Text style={styles.editDetailBtnText}>编辑详情</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
 
