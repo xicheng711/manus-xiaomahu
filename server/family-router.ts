@@ -18,6 +18,7 @@ import {
   upsertMedication, getMedicationsByRoom, deleteMedication,
 } from "./family-db";
 import { updatePushToken, getUsersByIds } from "./db";
+import { storagePut } from "./storage";
 
 // ─── Expo Push Notification Helper ──────────────────────────────────────────
 
@@ -726,5 +727,30 @@ export const familyRouter = router({
         relationship: input.relationship,
       });
       return { success: true };
+    }),
+  /** Upload a photo (base64) to S3 and return the public URL */
+  uploadPhoto: protectedProcedure
+    .input(z.object({
+      base64: z.string(),          // data:image/jpeg;base64,... or raw base64
+      mimeType: z.string().default("image/jpeg"),
+      scope: z.enum(["member", "elder"]).default("member"),
+      roomId: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      // Strip data URI prefix if present
+      const raw = input.base64.replace(/^data:[^;]+;base64,/, "");
+      const buffer = Buffer.from(raw, "base64");
+      const ext = input.mimeType === "image/png" ? "png" : "jpg";
+      const key = `avatars/${input.scope}/${userId}-${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, buffer, input.mimeType);
+      // If uploading member photo and roomId provided, update DB immediately
+      if (input.scope === "member" && input.roomId) {
+        const member = await getMemberByUserId(input.roomId, userId).catch(() => null);
+        if (member) {
+          await updateFamilyMember(member.id, { photoUri: url });
+        }
+      }
+      return { success: true, url };
     }),
 });

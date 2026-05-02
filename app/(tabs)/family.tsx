@@ -17,7 +17,7 @@ import {
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
   getActiveRoomIdCache,
 } from '@/lib/storage';
-import { cloudDeleteAnnouncement, cloudToggleReaction } from '@/lib/cloud-sync';
+import { cloudDeleteAnnouncement, cloudToggleReaction, cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'react-native';
@@ -669,7 +669,20 @@ export default function FamilyScreen() {
               const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (status !== 'granted') { Alert.alert('需要权限', '请允许访问相册以上传头像'); return; }
               const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-              if (!result.canceled && result.assets[0]) { await updateFamilyMemberPhoto(m.id, result.assets[0].uri); loadData(); }
+              if (!result.canceled && result.assets[0]) {
+                const localUri = result.assets[0].uri;
+                // Optimistic update immediately
+                await updateFamilyMemberPhoto(m.id, localUri);
+                loadData();
+                // Upload to S3 in background, then update with cloud URL
+                const roomId = getActiveRoomIdCache();
+                cloudUploadPhoto(localUri, 'member', roomId ? parseInt(roomId) : undefined).then(async (cloudUrl) => {
+                  if (cloudUrl) {
+                    await updateFamilyMemberPhoto(m.id, cloudUrl);
+                    loadData();
+                  }
+                }).catch(() => {});
+              }
             }}
             activeOpacity={currentMember?.id === m.id ? 0.7 : 1}
           >

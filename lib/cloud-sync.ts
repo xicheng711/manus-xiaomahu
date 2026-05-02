@@ -559,3 +559,40 @@ export async function cloudUpdatePushToken(pushToken: string) {
     return false;
   }
 }
+
+// ─── Photo Upload ──────────────────────────────────────────────────────────
+/**
+ * Upload a photo to cloud storage (S3) and return the public URL.
+ * Reads the local file URI, converts to base64, and sends to server.
+ * @param localUri  - Local file URI from expo-image-picker (file://...)
+ * @param scope     - "member" for joiner/caregiver self-photo, "elder" for elder photo
+ * @param roomId    - Optional room ID; if provided, also updates member.photoUri in DB
+ */
+export async function cloudUploadPhoto(
+  localUri: string,
+  scope: 'member' | 'elder' = 'member',
+  roomId?: number,
+): Promise<string | null> {
+  try {
+    const client = getClient();
+    // Read file as base64 using expo-file-system
+    const FileSystem = require('expo-file-system');
+    const base64 = await FileSystem.readAsStringAsync(localUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const mimeType = localUri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    const result = await client.family.uploadPhoto.mutate({
+      base64,
+      mimeType,
+      scope,
+      roomId,
+    });
+    if (result?.success && result.url) {
+      return result.url;
+    }
+    return null;
+  } catch (e) {
+    console.warn('[CloudSync] uploadPhoto failed:', e);
+    return null;
+  }
+}

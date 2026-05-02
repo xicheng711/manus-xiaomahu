@@ -372,9 +372,14 @@ export function JoinerHomeScreen() {
     }
     const member = await getCurrentMember();
     setCurrentMember(member);
-    // 头像统一：优先用 profile 的照片/生肖，与主照顾者首页保持一致
-    if (profile?.caregiverAvatarType === 'photo' && profile?.caregiverPhotoUri) {
-      setMemberPhotoUri(profile.caregiverPhotoUri);
+    // 头像优先级：云端 member.photoUri（S3 URL）> 本地 member.photoUri > profile 照片 > emoji
+    // 从 activeMembership.room.members 中找当前用户的云端 photoUri
+    const cloudMember = activeMembership?.room?.members?.find(
+      (m: any) => m.isCurrentUser || String(m.id) === String(member?.id)
+    );
+    const cloudPhotoUri = cloudMember?.photoUri || null;
+    if (cloudPhotoUri) {
+      setMemberPhotoUri(cloudPhotoUri);
       setZodiacEmoji('');
     } else if (member?.photoUri) {
       setMemberPhotoUri(member.photoUri);

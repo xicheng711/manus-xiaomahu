@@ -25,6 +25,7 @@ import {
 } from '@/lib/notifications';
 import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
+import { cloudUploadPhoto, cloudUpdateMemberProfile, cloudUpdateElderProfile } from '@/lib/cloud-sync';
 import { clearAllLocalData } from '@/lib/storage';
 
 export default function ProfileScreen() {
@@ -101,7 +102,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const pickPhoto = useCallback(async (target: 'caregiver' | 'elder') => {
+  const pickPhoto = useCallback(async (target: 'caregiver' | 'elder' | 'member') => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       setPermDenied(true);
@@ -114,42 +115,108 @@ export default function ProfileScreen() {
       quality: 0.7,
     });
     if (result.canceled || !result.assets?.[0]?.uri) return;
-    const uri = result.assets[0].uri;
+    const localUri = result.assets[0].uri;
+
+    if (target === 'member') {
+      // Joiner uploading their own photo
+      // 1. Show local URI immediately for instant feedback
+      const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
+      const optimisticMember = currentMember ? { ...currentMember, photoUri: localUri } : null;
+      if (optimisticMember) setCurrentMember(optimisticMember);
+      // 2. Upload to S3 in background
+      cloudUploadPhoto(localUri, 'member', roomId).then(async (cloudUrl) => {
+        const finalUri = cloudUrl ?? localUri; // fallback to local if upload fails
+        // 3. Update local storage with final URI
+        const { updateFamilyMemberPhoto } = await import('@/lib/storage');
+        if (currentMember?.id) {
+          await updateFamilyMemberPhoto(currentMember.id, finalUri);
+        }
+        // 4. Also update currentMember state with cloud URL
+        if (cloudUrl) {
+          setCurrentMember(prev => prev ? { ...prev, photoUri: cloudUrl } : prev);
+        }
+      }).catch(() => {});
+      return;
+    }
 
     if (target === 'caregiver') {
-      // Write to authoritative UserProfile first
+      // 1. Save local URI immediately
       const updatedUp = await saveUserProfile({
         ...(userProfile ?? {}),
-        caregiverPhotoUri: uri,
+        caregiverPhotoUri: localUri,
         caregiverAvatarType: 'photo',
       });
       setUserProfile(updatedUp);
-      // Also sync to legacy profile for backward compat
       setProfile(prev => {
         if (!prev) return prev;
-        const updated = { ...prev, caregiverPhotoUri: uri, caregiverAvatarType: 'photo' as const };
+        const updated = { ...prev, caregiverPhotoUri: localUri, caregiverAvatarType: 'photo' as const };
         saveProfile(updated);
         return updated;
       });
+      // 2. Upload to S3 and update with cloud URL
+      const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
+      cloudUploadPhoto(localUri, 'member', roomId).then(async (cloudUrl) => {
+        if (!cloudUrl) return;
+        // Update local storage with cloud URL
+        const up2 = await saveUserProfile({
+          ...(userProfile ?? {}),
+          caregiverPhotoUri: cloudUrl,
+          caregiverAvatarType: 'photo',
+        });
+        setUserProfile(up2);
+        setProfile(prev => {
+          if (!prev) return prev;
+          const updated = { ...prev, caregiverPhotoUri: cloudUrl, caregiverAvatarType: 'photo' as const };
+          saveProfile(updated);
+          return updated;
+        });
+        // Also sync to member profile so joiner can see it
+        if (roomId) {
+          cloudUpdateMemberProfile({ roomId, photoUri: cloudUrl }).catch(() => {});
+        }
+      }).catch(() => {});
     } else {
-      // Write to authoritative FamilyProfile first (family-scoped)
+      // elder photo
+      // 1. Save local URI immediately
       if (activeMembership?.familyId) {
         const updatedFp = await saveFamilyProfile({
           ...(familyProfile ?? {}),
-          elderPhotoUri: uri,
+          elderPhotoUri: localUri,
           elderAvatarType: 'photo',
         }, activeMembership.familyId);
         setFamilyProfile(updatedFp);
       }
-      // Also sync to legacy profile for backward compat
       setProfile(prev => {
         if (!prev) return prev;
-        const updated = { ...prev, photoUri: uri, elderAvatarType: 'photo' as const };
+        const updated = { ...prev, photoUri: localUri, elderAvatarType: 'photo' as const };
         saveProfile(updated);
         return updated;
       });
+      // 2. Upload to S3 and update with cloud URL
+      const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
+      cloudUploadPhoto(localUri, 'elder', roomId).then(async (cloudUrl) => {
+        if (!cloudUrl) return;
+        if (activeMembership?.familyId) {
+          const fp2 = await saveFamilyProfile({
+            ...(familyProfile ?? {}),
+            elderPhotoUri: cloudUrl,
+            elderAvatarType: 'photo',
+          }, activeMembership.familyId);
+          setFamilyProfile(fp2);
+        }
+        setProfile(prev => {
+          if (!prev) return prev;
+          const updated = { ...prev, photoUri: cloudUrl, elderAvatarType: 'photo' as const };
+          saveProfile(updated);
+          return updated;
+        });
+        // Also sync elder photo to server
+        if (roomId) {
+          cloudUpdateElderProfile({ elderPhotoUri: cloudUrl, elderAvatarType: 'photo' }, roomId).catch(() => {});
+        }
+      }).catch(() => {});
     }
-  }, [userProfile, familyProfile, activeMembership]);
+  }, [userProfile, familyProfile, activeMembership, currentMember]);
 
   useFocusEffect(useCallback(() => {
     const loadProfiles = async () => {
@@ -486,7 +553,11 @@ export default function ProfileScreen() {
                 <Text style={styles.cardEmoji}>🧑</Text>
               )
             )}
-            {!isJoiner && (
+            {isJoiner ? (
+              <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('member')}>
+                <Text style={styles.cameraChipText}>📷</Text>
+              </TouchableOpacity>
+            ) : (
               <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('caregiver')}>
                 <Text style={styles.cameraChipText}>📷</Text>
               </TouchableOpacity>
