@@ -257,8 +257,18 @@ export async function upsertMedication(data: InsertMedication & { id?: number })
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (data.id) {
+    // Update by primary key
     await db.update(medications).set(data).where(eq(medications.id, data.id));
     return data;
+  }
+  // No id: find existing by roomId + name to avoid duplicates
+  const existing = await db.select().from(medications)
+    .where(and(eq(medications.roomId, data.roomId), eq(medications.name, data.name)))
+    .limit(1);
+  if (existing.length > 0) {
+    const existingId = existing[0].id;
+    await db.update(medications).set(data).where(eq(medications.id, existingId));
+    return { id: existingId, ...data };
   }
   const result = await db.insert(medications).values(data);
   return { id: result[0].insertId, ...data };

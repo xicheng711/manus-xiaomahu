@@ -302,11 +302,11 @@ function MedicationScreenContent() {
         </Animated.View>
 
         {!isCreator && (
-          <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-            <View style={{ backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' }}>
-              <Text style={{ fontSize: 16 }}>🔒</Text>
-              <Text style={{ fontSize: 13, color: AppColors.text.secondary, flex: 1 }}>
-                您当前为家庭成员身份，仅可查看用药记录。如需修改，请联系主照顾者。
+          <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)' }}>
+              <Text style={{ fontSize: 13 }}>👁️</Text>
+              <Text style={{ fontSize: 12, color: AppColors.text.secondary, flex: 1 }}>
+                仅查看模式，如需修改请联系主照顾者
               </Text>
             </View>
           </View>
