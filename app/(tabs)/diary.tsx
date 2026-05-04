@@ -773,7 +773,8 @@ function JoinerDiaryReadOnly() {
 
   function openDetail(entryId: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({ pathname: '/diary-edit', params: { id: entryId, readOnly: '1' } } as any);
+    // joiner 跳转到完整日记详情页（含 AI 回复/小马虎对话）
+    router.push({ pathname: '/diary-detail', params: { id: entryId, readOnly: '1' } } as any);
   }
 
   const displayEntries = showAll ? entries : entries.slice(0, 5);

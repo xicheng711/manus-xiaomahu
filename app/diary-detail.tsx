@@ -7,6 +7,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { getDiaryEntryById, DiaryEntry, getProfile, getUserProfile, getFamilyProfile, formatDate } from '@/lib/storage';
+import { cloudGetDiaries } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
 import * as Haptics from 'expo-haptics';
 import { BackButton } from '@/components/back-button';
@@ -23,7 +24,8 @@ const MOOD_OPTIONS = [
 ];
 
 export default function DiaryDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, readOnly } = useLocalSearchParams<{ id: string; readOnly?: string }>();
+  const isReadOnly = readOnly === '1';
   const router = useRouter();
   const { activeMembership } = useFamilyContext();
   const familyId = activeMembership?.familyId;
@@ -58,8 +60,22 @@ export default function DiaryDetailScreen() {
     setElderNickname(nickname);
     setCaregiverName(caregiver);
     if (id) {
-      const e = await getDiaryEntryById(id);
+      let e: DiaryEntry | null = await getDiaryEntryById(id);
+      // readOnly 模式（joiner 查看）：本地找不到时从云端拉取
+      if (!e && isReadOnly) {
+        try {
+          const cloudEntries = await cloudGetDiaries();
+          const matched = cloudEntries.find((ce: any) => String(ce.id) === String(id));
+          if (matched) e = matched as unknown as DiaryEntry;
+        } catch (err) {
+          console.warn('[DiaryDetail] cloud fallback failed:', err);
+        }
+      }
       if (e) {
+        // 字段名兼容：云端返回 aiReply/aiTip，本地用 smartReply/smartTip
+        const anyE = e as any;
+        if (!anyE.smartReply && anyE.aiReply) anyE.smartReply = anyE.aiReply;
+        if (!anyE.smartTip && anyE.aiTip) anyE.smartTip = anyE.aiTip;
         if (typeof (e.tags as any) === 'string') {
           try { e.tags = JSON.parse(e.tags as any); } catch { e.tags = []; }
         }
@@ -275,10 +291,10 @@ export default function DiaryDetailScreen() {
             </View>
           )}
 
-          {/* 继续追问智能助手 */}
+          {/* 继续追问智能助手 — readOnly 时只展示已有对话，不显示输入框 */}
           {entry.smartReply && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💬 继续和小马虎说说</Text>
+              <Text style={styles.sectionTitle}>{isReadOnly ? '💬 小马虎对话' : '💬 继续和小马虎说说'}</Text>
               <View style={styles.chatBox}>
                 {followUpHistory.map((msg, i) => (
                   msg.role === 'user' ? (
@@ -313,34 +329,43 @@ export default function DiaryDetailScreen() {
                   </View>
                 )}
               </View>
-              <View style={styles.followUpRow}>
-                <TextInput
-                  style={styles.followUpInput}
-                  value={followUpInput}
-                  onChangeText={setFollowUpInput}
-                  placeholder="继续和小马虎说说...💗"
-                  placeholderTextColor={AppColors.text.tertiary}
-                  returnKeyType="send"
-                  onSubmitEditing={handleFollowUp}
-                  editable={!followUpLoading}
-                />
-                <TouchableOpacity
-                  style={[styles.followUpSend, followUpLoading && { opacity: 0.5 }]}
-                  onPress={handleFollowUp}
-                  disabled={followUpLoading}
-                >
-                  <Text style={styles.followUpSendText}>发送</Text>
-                </TouchableOpacity>
-              </View>
+              {!isReadOnly && (
+                <View style={styles.followUpRow}>
+                  <TextInput
+                    style={styles.followUpInput}
+                    value={followUpInput}
+                    onChangeText={setFollowUpInput}
+                    placeholder="继续和小马虎说说...💗"
+                    placeholderTextColor={AppColors.text.tertiary}
+                    returnKeyType="send"
+                    onSubmitEditing={handleFollowUp}
+                    editable={!followUpLoading}
+                  />
+                  <TouchableOpacity
+                    style={[styles.followUpSend, followUpLoading && { opacity: 0.5 }]}
+                    onPress={handleFollowUp}
+                    disabled={followUpLoading}
+                  >
+                    <Text style={styles.followUpSendText}>发送</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {isReadOnly && (
+                <View style={{ alignItems: 'center', marginTop: 8 }}>
+                  <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>👀 只读模式，无法发送消息</Text>
+                </View>
+              )}
             </View>
           )}
 
           {/* Bottom actions */}
           <View style={styles.bottomActions}>
-            <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
-              <Text style={styles.actionIcon}>💬</Text>
-              <Text style={styles.actionText}>分享到微信</Text>
-            </TouchableOpacity>
+            {!isReadOnly && (
+              <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
+                <Text style={styles.actionIcon}>💬</Text>
+                <Text style={styles.actionText}>分享到微信</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => {
@@ -349,7 +374,7 @@ export default function DiaryDetailScreen() {
               }}
             >
               <Text style={styles.actionIcon}>📖</Text>
-              <Text style={styles.actionText}>返回日记列表</Text>
+              <Text style={styles.actionText}>返回日记本</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
