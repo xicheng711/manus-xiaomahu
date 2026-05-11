@@ -110,7 +110,7 @@ function getOssClient(): OSS {
 }
 
 /**
- * 上传图片到阿里云 OSS，返回签名 URL（7 天有效）
+ * 上传图片到阿里云 OSS，返回永久公共 URL（公共读 Bucket）
  * key 示例：avatars/member/123-1715000000000.jpg
  */
 export async function ossUploadAvatar(
@@ -120,15 +120,18 @@ export async function ossUploadAvatar(
 ): Promise<{ key: string; url: string }> {
   const client = getOssClient();
   await client.put(key, data, { mime: contentType });
-  // 生成 7 天有效的签名 URL（私有 Bucket）
-  const url = client.signatureUrl(key, { expires: 7 * 24 * 3600 });
+  // 公共读 Bucket：直接返回永久 URL，无需签名
+  const region = ENV.ossRegion ?? "oss-cn-beijing";
+  const bucket = ENV.ossBucket;
+  const url = `https://${bucket}.${region}.aliyuncs.com/${key}`;
   return { key, url };
 }
 
 /**
- * 为已存储的 OSS key 刷新签名 URL（7 天有效）
+ * 根据 OSS key 生成永久公共 URL（公共读 Bucket）
  */
-export async function ossGetSignedUrl(key: string): Promise<string> {
-  const client = getOssClient();
-  return client.signatureUrl(key, { expires: 7 * 24 * 3600 });
+export async function ossGetPublicUrl(key: string): Promise<string> {
+  const region = ENV.ossRegion ?? "oss-cn-beijing";
+  const bucket = ENV.ossBucket;
+  return `https://${bucket}.${region}.aliyuncs.com/${key}`;
 }
