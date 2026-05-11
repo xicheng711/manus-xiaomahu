@@ -13,4 +13,9 @@ export const ENV = {
   appleTeamId: process.env.APPLE_TEAM_ID ?? "",
   appleKeyId: process.env.APPLE_KEY_ID ?? "",
   appleServiceId: process.env.APPLE_SERVICE_ID ?? "",
+  // 阿里云 OSS 配置
+  ossRegion: process.env.OSS_REGION ?? "oss-cn-beijing",
+  ossBucket: process.env.OSS_BUCKET ?? "",
+  ossAccessKeyId: process.env.OSS_ACCESS_KEY_ID ?? "",
+  ossAccessKeySecret: process.env.OSS_ACCESS_KEY_SECRET ?? "",
 };

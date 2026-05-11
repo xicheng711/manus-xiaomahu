@@ -18,7 +18,7 @@ import {
   upsertMedication, getMedicationsByRoom, deleteMedication,
 } from "./family-db";
 import { updatePushToken, getUsersByIds } from "./db";
-import { storagePut } from "./storage";
+import { ossUploadAvatar } from "./storage";
 
 // ─── Expo Push Notification Helper ──────────────────────────────────────────
 
@@ -743,7 +743,7 @@ export const familyRouter = router({
       const buffer = Buffer.from(raw, "base64");
       const ext = input.mimeType === "image/png" ? "png" : "jpg";
       const key = `avatars/${input.scope}/${userId}-${Date.now()}.${ext}`;
-      const { url } = await storagePut(key, buffer, input.mimeType);
+      const { url } = await ossUploadAvatar(key, buffer, input.mimeType);
       // If uploading member photo and roomId provided, update DB immediately
       if (input.scope === "member" && input.roomId) {
         const member = await getMemberByUserId(input.roomId, userId).catch(() => null);

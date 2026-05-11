@@ -93,3 +93,42 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
     url: await buildDownloadUrl(baseUrl, key, apiKey),
   };
 }
+
+// ─── 阿里云 OSS 头像上传 ──────────────────────────────────────────────────────
+import OSS from "ali-oss";
+
+function getOssClient(): OSS {
+  if (!ENV.ossAccessKeyId || !ENV.ossAccessKeySecret || !ENV.ossBucket) {
+    throw new Error("OSS credentials missing: set OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET");
+  }
+  return new OSS({
+    region: ENV.ossRegion,
+    accessKeyId: ENV.ossAccessKeyId,
+    accessKeySecret: ENV.ossAccessKeySecret,
+    bucket: ENV.ossBucket,
+  });
+}
+
+/**
+ * 上传图片到阿里云 OSS，返回签名 URL（7 天有效）
+ * key 示例：avatars/member/123-1715000000000.jpg
+ */
+export async function ossUploadAvatar(
+  key: string,
+  data: Buffer,
+  contentType = "image/jpeg",
+): Promise<{ key: string; url: string }> {
+  const client = getOssClient();
+  await client.put(key, data, { mime: contentType });
+  // 生成 7 天有效的签名 URL（私有 Bucket）
+  const url = client.signatureUrl(key, { expires: 7 * 24 * 3600 });
+  return { key, url };
+}
+
+/**
+ * 为已存储的 OSS key 刷新签名 URL（7 天有效）
+ */
+export async function ossGetSignedUrl(key: string): Promise<string> {
+  const client = getOssClient();
+  return client.signatureUrl(key, { expires: 7 * 24 * 3600 });
+}

@@ -80,6 +80,12 @@ export default function DiaryDetailScreen() {
           try { e.tags = JSON.parse(e.tags as any); } catch { e.tags = []; }
         }
         if (!Array.isArray(e.tags)) e.tags = [];
+        // 从 conversation 字段恢复对话历史（主照顾者重开页面 / joiner 查看时都能看到完整对话）
+        if (Array.isArray((e as any).conversation) && (e as any).conversation.length > 0) {
+          setFollowUpHistory(
+            (e as any).conversation.map((m: any) => ({ role: m.role as 'user' | 'ai', text: m.text }))
+          );
+        }
       }
       setEntry(e);
     }
@@ -352,7 +358,13 @@ export default function DiaryDetailScreen() {
               )}
               {isReadOnly && (
                 <View style={{ alignItems: 'center', marginTop: 8 }}>
-                  <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>👀 只读模式，无法发送消息</Text>
+                  {(entry as any).conversationFinished ? (
+                    <View style={{ backgroundColor: '#DCFCE7', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8 }}>
+                      <Text style={{ fontSize: 13, color: '#16A34A', fontWeight: '600' }}>✅ 对话已结束并保存</Text>
+                    </View>
+                  ) : (
+                    <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>👀 只读模式</Text>
+                  )}
                 </View>
               )}
             </View>

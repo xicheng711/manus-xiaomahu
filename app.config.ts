@@ -27,7 +27,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "2.0.2",
+  version: "2.0.3",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -35,7 +35,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    buildNumber: "27",
+    buildNumber: "28",
     bundleIdentifier: env.iosBundleId,
     usesAppleSignIn: true,
     infoPlist: {
