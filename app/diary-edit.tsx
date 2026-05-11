@@ -266,6 +266,10 @@ export default function DiaryEditScreen() {
       if (!existingId) {
         router.replace('/(tabs)/diary' as any);
         return;
+      } else {
+        // joiner 有 id 时：直接跳转到日记详情页（含小马虎对话）
+        router.replace({ pathname: '/diary-detail', params: { id: existingId, readOnly: '1' } } as any);
+        return;
       }
     }
     // family-scoped 优先，fallback 到 legacy
