@@ -152,7 +152,7 @@ function AnnouncementCard({ latest, onViewAll, onCompose }: {
   );
 }
 
-function FeedRow({ item, isLast }: { item: FeedItem; isLast: boolean }) {
+function FeedRow({ item, isLast, onPress }: { item: FeedItem; isLast: boolean; onPress?: () => void }) {
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(12)).current;
   useEffect(() => {
@@ -169,7 +169,7 @@ function FeedRow({ item, isLast }: { item: FeedItem; isLast: boolean }) {
         </View>
         {!isLast && <View style={styles.feedLine} />}
       </View>
-      <View style={styles.feedContent}>
+      <TouchableOpacity style={styles.feedContent} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>
         <View style={styles.feedTagRow}>
           <View style={[styles.feedTag, { backgroundColor: item.bg }]}>
             <Text style={[styles.feedTagText, { color: item.color }]}>{item.tag}</Text>
@@ -184,7 +184,7 @@ function FeedRow({ item, isLast }: { item: FeedItem; isLast: boolean }) {
         </View>
         <Text style={styles.feedTitle}>{item.title}</Text>
         <Text style={styles.feedDetail}>{item.detail}</Text>
-      </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -733,7 +733,15 @@ export function JoinerHomeScreen() {
               <Text style={styles.feedSectionLabel}>今日活动记录</Text>
             </View>
             {feed.map((item, i) => (
-              <FeedRow key={item.id} item={item} isLast={i === feed.length - 1} />
+              <FeedRow
+                key={item.id}
+                item={item}
+                isLast={i === feed.length - 1}
+                onPress={item.type === 'diary' ? () => {
+                  const diaryId = item.id.replace('diary-', '');
+                  router.push({ pathname: '/diary-detail', params: { id: diaryId, readOnly: '1' } } as any);
+                } : undefined}
+              />
             ))}
           </View>
         )}
