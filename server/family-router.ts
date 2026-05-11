@@ -697,6 +697,22 @@ export const familyRouter = router({
         member.emoji,
         input.emoji,
       );
+      // 判断是添加还是取消 reaction（只有添加时才发通知）
+      const isAdding = reactions.some((r: any) =>
+        r.emoji === input.emoji &&
+        r.members.some((m: any) => String(m.memberId) === String(member.id))
+      );
+      if (isAdding) {
+        const senderName = member.name || '家人';
+        await notifyRoomMembers(
+          input.roomId,
+          userId,
+          '公告收到新表情 📣',
+          `${senderName} 对公告回复了 ${input.emoji}`,
+          { type: 'reaction', announcementId: input.announcementId, roomId: input.roomId },
+          'toggleReaction',
+        );
+      }
       return { success: true, reactions };
     }),
 
