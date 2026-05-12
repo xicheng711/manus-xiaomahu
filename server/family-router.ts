@@ -760,11 +760,11 @@ export const familyRouter = router({
       const ext = input.mimeType === "image/png" ? "png" : "jpg";
       const key = `avatars/${input.scope}/${userId}-${Date.now()}.${ext}`;
       const { url } = await ossUploadAvatar(key, buffer, input.mimeType);
-      // If uploading member photo and roomId provided, update DB immediately
-      if (input.scope === "member" && input.roomId) {
-        const member = await getMemberByUserId(input.roomId, userId).catch(() => null);
-        if (member) {
-          await updateFamilyMember(member.id, { photoUri: url });
+      // If uploading member photo, update photoUri in ALL rooms the user belongs to
+      if (input.scope === "member") {
+        const allRooms = await getUserFamilyRooms(userId).catch(() => []);
+        for (const { membership } of allRooms) {
+          await updateFamilyMember(membership.id, { photoUri: url }).catch(() => {});
         }
       }
       return { success: true, url };

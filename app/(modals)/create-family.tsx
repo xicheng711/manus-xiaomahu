@@ -48,8 +48,12 @@ export default function CreateFamilyModal() {
   useEffect(() => {
     // 优先读取 UserProfile，fallback 到 legacy getProfile
     getUserProfile().then(up => {
-      if (up?.caregiverName) { setMyName(up.caregiverName); return; }
-      getProfile().then(p => { if (p?.caregiverName) setMyName(p.caregiverName); });
+      if (up?.caregiverName) setMyName(up.caregiverName);
+      // 自动带入已有头像，避免用户重复上传
+      if (up?.caregiverPhotoUri) setMyPhotoUri(up.caregiverPhotoUri);
+      if (!up?.caregiverName) {
+        getProfile().then(p => { if (p?.caregiverName) setMyName(p.caregiverName); });
+      }
     });
   }, []);
 
