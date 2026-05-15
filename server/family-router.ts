@@ -200,7 +200,16 @@ export const familyRouter = router({
       const existingMember = await requireRoomMember(userId, room.id).catch(() => null);
       if (existingMember) {
         if (existingMember.isCreator) throw new Error("您是这个家庭的主照顾者，无法以家庭成员身份加入");
-        throw new Error("您已经在这个家庭中了，无需重复加入");
+        // 用户已经是成员（可能是重新设置后重新加入）：幂等返回已有数据，不报错
+        console.log(`[joinRoom] User ${userId} already member of room ${room.id}, returning existing member`);
+        return {
+          success: true,
+          roomId: room.id,
+          roomCode: room.roomCode,
+          elderName: room.elderName,
+          memberId: existingMember.id,
+          alreadyMember: true,
+        };
       }
 
       const member = await addFamilyMember({
@@ -754,12 +763,22 @@ export const familyRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
+      console.log(`[uploadPhoto] userId=${userId} scope=${input.scope} mimeType=${input.mimeType} base64Len=${input.base64.length}`);
       // Strip data URI prefix if present
       const raw = input.base64.replace(/^data:[^;]+;base64,/, "");
       const buffer = Buffer.from(raw, "base64");
       const ext = input.mimeType === "image/png" ? "png" : "jpg";
       const key = `avatars/${input.scope}/${userId}-${Date.now()}.${ext}`;
-      const { url } = await ossUploadAvatar(key, buffer, input.mimeType);
+      console.log(`[uploadPhoto] Uploading to OSS key=${key} bufferSize=${buffer.length}`);
+      let url: string;
+      try {
+        const result = await ossUploadAvatar(key, buffer, input.mimeType);
+        url = result.url;
+        console.log(`[uploadPhoto] OSS upload success, url=${url}`);
+      } catch (ossErr) {
+        console.error(`[uploadPhoto] OSS upload FAILED:`, ossErr);
+        throw ossErr;
+      }
       // If uploading member photo, update photoUri in ALL rooms the user belongs to
       if (input.scope === "member") {
         const allRooms = await getUserFamilyRooms(userId).catch(() => []);

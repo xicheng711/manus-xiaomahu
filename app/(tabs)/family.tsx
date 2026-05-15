@@ -407,19 +407,26 @@ export default function FamilyScreen() {
       try {
         const detail = await cloudGetRoomDetail(Number(activeRoomId));
         if (detail?.room) {
-          const serverMembers = (detail.members ?? []).map((x: any) => ({
-            id: String(x.id),
-            name: x.name,
-            role: x.role ?? "family",
-            roleLabel: x.roleLabel ?? x.role ?? "家人",
-            emoji: x.emoji ?? "👤",
-            color: x.color ?? "#888",
-            photoUri: x.photoUri,
-            joinedAt: x.joinedAt ?? new Date().toISOString(),
-            isCreator: x.isCreator ?? false,
-            isCurrentUser: String(x.userId) === String(m?.id),
-            relationship: x.relationship,
-          }));
+          // 本地已有成员数据（用于备用本地 photoUri）
+          const localMembersMap = new Map((rLocal?.members ?? []).map((lm: any) => [String(lm.id), lm]));
+          const serverMembers = (detail.members ?? []).map((x: any) => {
+            const localMember = localMembersMap.get(String(x.id));
+            // 服务器 photoUri 为空时，保留本地已有的（可能是上传中的临时本地 URI）
+            const photoUri = x.photoUri || localMember?.photoUri || undefined;
+            return {
+              id: String(x.id),
+              name: x.name,
+              role: x.role ?? "family",
+              roleLabel: x.roleLabel ?? x.role ?? "家人",
+              emoji: x.emoji ?? "👤",
+              color: x.color ?? "#888",
+              photoUri,
+              joinedAt: x.joinedAt ?? new Date().toISOString(),
+              isCreator: x.isCreator ?? false,
+              isCurrentUser: String(x.userId) === String(m?.id),
+              relationship: x.relationship,
+            };
+          });
           r = {
             id: String(detail.room.id ?? activeRoomId),
             roomCode: detail.room.roomCode ?? r?.roomCode ?? "",

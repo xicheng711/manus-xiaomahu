@@ -701,8 +701,12 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...data };
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: only sync when conversation is finished to avoid excessive network requests during AI dialogue
-  if (all[idx].conversationFinished) {
+  // Cloud sync: sync when conversation is finished OR when an AI reply has been added
+  // This ensures joiner can see the conversation even if caregiver didn't tap "End & Save"
+  const shouldSync = all[idx].conversationFinished ||
+    (data.conversation !== undefined && (all[idx].conversation ?? []).some((m: any) => m.role === 'ai')) ||
+    (data.aiReply !== undefined && !!all[idx].aiReply);
+  if (shouldSync) {
     const syncEntry = all[idx];
     if (syncEntry.serverDiaryId) {
       // serverDiaryId already known — update existing cloud record (no push notification)
