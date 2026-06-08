@@ -75,6 +75,15 @@ export default function ProfileScreen() {
   // Account deletion state
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+
+  async function handleSignOut() {
+    await clearAllLocalData();
+    await removeSessionToken();
+    await clearUserInfo();
+    setShowSignOutModal(false);
+    router.replace('/login' as any);
+  }
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
 
   const { memberships, activeMembership, switchFamily, leaveFamily, deleteFamily, refresh, ready: contextReady } = useFamilyContext();
@@ -818,6 +827,14 @@ export default function ProfileScreen() {
           <Text style={styles.editBtnText}>✏️ 重新设置所有信息</Text>
         </TouchableOpacity>
 
+        {/* Sign Out button */}
+        <TouchableOpacity
+          style={styles.signOutBtn}
+          onPress={() => setShowSignOutModal(true)}
+        >
+          <Text style={styles.signOutBtnText}>🚪 退出登录</Text>
+        </TouchableOpacity>
+
         {/* Delete Account button */}
         <TouchableOpacity
           style={styles.deleteAccountBtn}
@@ -1069,6 +1086,33 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* ── 退出登录确认 Modal ── */}
+      <Modal visible={showSignOutModal} transparent animationType="fade" onRequestClose={() => setShowSignOutModal(false)}>
+        <View style={styles.permOverlay}>
+          <View style={styles.confirmBox}>
+            <Text style={styles.confirmEmoji}>🚪</Text>
+            <Text style={styles.confirmTitle}>确认退出登录？</Text>
+            <Text style={styles.confirmMsg}>
+              退出登录后，您的账号和所有数据在服务器上安全保留，下次登录后可以完整恢复。
+            </Text>
+            <View style={styles.confirmBtnRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setShowSignOutModal(false)}
+              >
+                <Text style={styles.confirmCancelBtnText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmDeleteBtn, { backgroundColor: '#E53935' }]}
+                onPress={handleSignOut}
+              >
+                <Text style={styles.confirmDeleteBtnText}>确认退出</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── 删除/离开确认 Modal ── */}
       <Modal visible={!!deleteConfirmId} transparent animationType="fade" onRequestClose={() => setDeleteConfirmId(null)}>
         <View style={styles.permOverlay}>
@@ -1253,7 +1297,9 @@ const styles = StyleSheet.create({
   },
   editBtnText: { fontSize: 16, fontWeight: '600', color: AppColors.text.secondary },
 
-  deleteAccountBtn: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
+  signOutBtn: { marginTop: 16, paddingVertical: 14, alignItems: 'center', backgroundColor: '#FFF5F5', borderRadius: 12, borderWidth: 1, borderColor: '#FFCDD2' },
+  signOutBtnText: { fontSize: 15, color: '#E53935', fontWeight: '600' },
+  deleteAccountBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center' },
   deleteAccountBtnText: { fontSize: 14, color: AppColors.text.tertiary, textDecorationLine: 'underline' },
 
   btn: {
