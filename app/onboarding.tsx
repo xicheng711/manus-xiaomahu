@@ -12,6 +12,7 @@ import { AppColors, Gradients } from '@/lib/design-tokens';
 import { saveProfile, saveUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
 import { getSessionToken } from '@/lib/_core/auth';
 import { scheduleAllReminders } from '@/lib/notifications';
+import { cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from "../lib/family-context";
 import { getZodiac } from '@/lib/zodiac';
 import * as Haptics from 'expo-haptics';
@@ -320,6 +321,27 @@ export default function OnboardingScreen() {
     const birthDate = `${elderBirthYear}-${String(birthMonthIdx + 1).padStart(2, '0')}-${String(birthDayIdx + 1).padStart(2, '0')}`;
 
     // ── Plan A: cloud-first ──────────────────────────────────────────────────
+    // Step 0: Upload photos to S3 first so the server stores https:// URLs
+    // (not file:// local paths which are inaccessible to other devices)
+    let finalCaregiverPhotoUri = caregiverPhotoUri;
+    let finalElderPhotoUri = elderPhotoUri;
+    if (caregiverPhotoUri && caregiverPhotoUri.startsWith('file://')) {
+      try {
+        const uploaded = await cloudUploadPhoto(caregiverPhotoUri, 'member');
+        if (uploaded) finalCaregiverPhotoUri = uploaded;
+      } catch (e) {
+        console.warn('[Onboarding] Failed to upload caregiver photo, using local URI:', e);
+      }
+    }
+    if (elderPhotoUri && elderPhotoUri.startsWith('file://')) {
+      try {
+        const uploaded = await cloudUploadPhoto(elderPhotoUri, 'elder');
+        if (uploaded) finalElderPhotoUri = uploaded;
+      } catch (e) {
+        console.warn('[Onboarding] Failed to upload elder photo, using local URI:', e);
+      }
+    }
+
     // Step 1: Create the cloud family room FIRST.
     // If this fails we abort immediately — no local data is written, so the
     // device stays in a clean state and the user can safely retry.
@@ -332,11 +354,11 @@ export default function OnboardingScreen() {
           role: 'caregiver',
           roleLabel: '主要照顾者',
           emoji: '👩',
-          photoUri: caregiverPhotoUri,
+          photoUri: finalCaregiverPhotoUri,
           color: AppColors.coral.primary,
         },
         previewRoomCode,
-        { emoji: elderZodiac.emoji, photoUri: elderPhotoUri },
+        { emoji: elderZodiac.emoji, photoUri: finalElderPhotoUri },
         // Pass the full onboarding draft so the cloud room is complete from the
         // very first moment — even before saveFamilyProfile() is called below.
         {
@@ -368,7 +390,7 @@ export default function OnboardingScreen() {
       caregiverBirthYear: String(caregiverBirthYear),
       caregiverZodiacEmoji: caregiverZodiac.emoji,
       caregiverZodiacName: caregiverZodiac.name,
-      caregiverPhotoUri,
+      caregiverPhotoUri: finalCaregiverPhotoUri,
       caregiverAvatarType,
     });
     await saveFamilyProfile({
@@ -377,7 +399,7 @@ export default function OnboardingScreen() {
       birthDate,
       zodiacEmoji: elderZodiac.emoji,
       zodiacName: elderZodiac.name,
-      elderPhotoUri,
+      elderPhotoUri: finalElderPhotoUri,
       elderAvatarType,
       city: city || '北京',
       reminderMorning,
@@ -394,13 +416,13 @@ export default function OnboardingScreen() {
       birthDate,
       zodiacEmoji: elderZodiac.emoji,
       zodiacName: elderZodiac.name,
-      elderPhotoUri,
+      elderPhotoUri: finalElderPhotoUri,
       elderAvatarType,
       caregiverName: caregiverName || '家人',
       caregiverBirthYear: String(caregiverBirthYear),
       caregiverZodiacEmoji: caregiverZodiac.emoji,
       caregiverZodiacName: caregiverZodiac.name,
-      caregiverPhotoUri,
+      caregiverPhotoUri: finalCaregiverPhotoUri,
       caregiverAvatarType,
       city: city || '北京',
       reminderMorning,
