@@ -280,6 +280,7 @@ export const familyRouter = router({
       roleLabel: membership.roleLabel,
       memberEmoji: membership.emoji,
       memberPhotoUri: membership.photoUri,
+      myMemberId: membership.id,  // the current user's member row ID in this room
     }));
   }),
 
