@@ -197,6 +197,14 @@ export const familyRouter = router({
 
       const room = await getFamilyRoomByCode(input.roomCode);
       if (!room) throw new Error("未找到该家庭房间，请检查邀请码");
+
+      // 服务器端校验：Joiner 最多加入 3 个家庭
+      const allRooms = await getUserFamilyRooms(userId);
+      const joinedRooms = allRooms.filter(r => !r.membership.isCreator);
+      if (joinedRooms.length >= 3) {
+        throw new Error('您最多只能加入 3 个家庭，请先退出一个家庭后再加入新家庭');
+      }
+
       const existingMember = await requireRoomMember(userId, room.id).catch(() => null);
       if (existingMember) {
         if (existingMember.isCreator) throw new Error("您是这个家庭的主照顾者，无法以家庭成员身份加入");
