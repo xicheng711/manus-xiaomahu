@@ -743,7 +743,8 @@ export function JoinerHomeScreen() {
                 isLast={i === feed.length - 1}
                 onPress={item.type === 'diary' ? () => {
                   const diaryId = item.id.replace('diary-', '');
-                  router.push({ pathname: '/diary-detail', params: { id: diaryId, readOnly: '1' } } as any);
+                  // joiner 和主照顾者都用同一页面查看日记
+                  router.push({ pathname: '/diary-edit', params: { id: diaryId } } as any);
                 } : undefined}
               />
             ))}

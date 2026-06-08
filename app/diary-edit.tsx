@@ -264,13 +264,12 @@ export default function DiaryEditScreen() {
     if (!creatorFlag) {
       setRoleReadOnly(true);
       if (!existingId) {
+        // joiner 没有 id（想新建日记）：回到日记列表
         router.replace('/(tabs)/diary' as any);
         return;
-      } else {
-        // joiner 有 id 时：直接跳转到日记详情页（含小马虎对话）
-        router.replace({ pathname: '/diary-detail', params: { id: existingId, readOnly: '1' } } as any);
-        return;
       }
+      // joiner 有 id 时：留在当前页面，以 readOnly 模式查看（和主照顾者体验完全一致）
+      // 不再 redirect，loadExistingEntry 已经在 useEffect 里被调用了
     }
     // family-scoped 优先，fallback 到 legacy
     setElderNickname(familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人');
@@ -284,8 +283,9 @@ export default function DiaryEditScreen() {
   async function loadExistingEntry(id: string) {
     setLoadingEntry(true);
     let entry: DiaryEntry | null = await getDiaryEntryById(id);
-    // readOnly 模式下（joiner 查看主照顾者日记）：本地找不到时尝试从云端拉取
-    if (!entry && isReadOnly) {
+    // 本地找不到时（无论是 joiner 还是主照顾者）尝试从云端拉取
+    // 注意：不能依赖 isReadOnly 状态（因为 loadProfile 是异步的，可能还没执行完）
+    if (!entry) {
       try {
         const cloudEntries = await cloudGetDiaries();
         // 云端 id 是数字，本地传入的 id 可能是字符串形式的数字

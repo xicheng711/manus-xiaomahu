@@ -778,8 +778,9 @@ function JoinerDiaryReadOnly() {
 
   function openDetail(entryId: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // joiner 跳转到完整日记详情页（含 AI 回复/小马虎对话）
-    router.push({ pathname: '/diary-detail', params: { id: entryId, readOnly: '1' } } as any);
+    // joiner 和主照顾者都用同一个页面查看日记，体验完全一致
+    // diary-edit 内部会检测角色，自动设置 readOnly 模式
+    router.push({ pathname: '/diary-edit', params: { id: entryId } } as any);
   }
 
   const displayEntries = showAll ? entries : entries.slice(0, 5);
