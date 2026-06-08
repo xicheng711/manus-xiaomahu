@@ -187,9 +187,9 @@ export default function DiaryDetailScreen() {
   }
 
   const mood = MOOD_OPTIONS.find(m => m.emoji === entry.moodEmoji) || MOOD_OPTIONS[2];
-  const timeStr = entry.createdAt
+  const timeStr = entry.localTimeStr || (entry.createdAt
     ? new Date(entry.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    : '';
+    : '');
 
   return (
     <ScreenContainer>

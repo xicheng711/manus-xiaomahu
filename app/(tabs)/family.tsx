@@ -411,8 +411,11 @@ export default function FamilyScreen() {
           const localMembersMap = new Map((rLocal?.members ?? []).map((lm: any) => [String(lm.id), lm]));
           const serverMembers = (detail.members ?? []).map((x: any) => {
             const localMember = localMembersMap.get(String(x.id));
-            // 服务器 photoUri 为空时，保留本地已有的（可能是上传中的临时本地 URI）
-            const photoUri = x.photoUri || localMember?.photoUri || undefined;
+            // Only use server photoUri if it's a valid https:// URL (not a local file:// path)
+            // Fall back to local photoUri (could be a temporary local URI during upload)
+            const serverPhotoUri = x.photoUri && x.photoUri.startsWith('https://') ? x.photoUri : null;
+            const localPhotoUri = localMember?.photoUri || undefined;
+            const photoUri = serverPhotoUri || localPhotoUri;
             return {
               id: String(x.id),
               name: x.name,

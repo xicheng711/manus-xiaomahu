@@ -44,6 +44,11 @@ function timeStr(iso: string): string {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Prefer localTimeStr (writer's local time) over createdAt (UTC timestamp)
+function getTimeDisplay(entry: DiaryEntry): string {
+  return entry.localTimeStr || (entry.createdAt ? timeStr(entry.createdAt) : entry.date);
+}
+
 function buildFeed(
   checkIns: DailyCheckIn[],
   diaries: DiaryEntry[],
@@ -93,12 +98,12 @@ function buildFeed(
   uniqueDiaries.slice(0, 3).forEach(d => {
     items.push({
       id: `diary-${d.id}`, type: 'diary',
-      time: d.createdAt ? timeStr(d.createdAt) : d.date,
+      time: getTimeDisplay(d),
       icon: '📔', color: AppColors.peach.primary, bg: AppColors.peach.soft, tag: '护理日记',
       title: d.content.length > 20 ? d.content.slice(0, 20) + '…' : d.content,
       detail: d.tags && d.tags.length ? d.tags.slice(0, 3).join(' · ') : `${d.moodEmoji || '😊'} ${d.moodLabel || ''}`,
       author: caregiverName || '照顾者',
-      sortKey: d.createdAt ? new Date(d.createdAt).getTime() : new Date(d.date).getTime(),
+      sortKey: new Date(d.date).getTime(),  // Sort by date field (YYYY-MM-DD) instead of createdAt (UTC)
     });
   });
 
@@ -417,11 +422,11 @@ export function JoinerHomeScreen() {
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest);
     setAllCheckIns(checkIns);
-    // 日记去重：过滤未完成对话的，并按 serverDiaryId/id 去重旧脚数据
+    // 日记去重：按 serverDiaryId/id 去重，不再按 conversationFinished 过滤
+    // （主照顾者如果没有点“结束并保存”，joiner 也应该能看到日记和 AI 对话）
     const seenSrvIds = new Set<number>();
     const seenLocIds = new Set<string>();
     const cleanDiaries = diaries.filter(d => {
-      if (d.conversationFinished === false) return false;
       if (d.serverDiaryId) {
         if (seenSrvIds.has(d.serverDiaryId)) return false;
         seenSrvIds.add(d.serverDiaryId);
@@ -449,9 +454,8 @@ export function JoinerHomeScreen() {
     const todayKey = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
     const todayCheckIns = checkIns.filter(c => c.date === todayKey).slice(0, 2);
     const todayDiaries = cleanDiaries.filter(d => {
-      if (d.date === todayKey) return true;
-      if (d.createdAt && d.createdAt.slice(0, 10) === todayKey) return true;
-      return false;
+      // Use date field (YYYY-MM-DD, local date) instead of createdAt (UTC timestamp)
+      return d.date === todayKey;
     }).slice(0, 3);
     const todayAnnouncements = announcements.filter(a => a.createdAt && a.createdAt.slice(0, 10) === todayKey).slice(0, 2);
     setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));

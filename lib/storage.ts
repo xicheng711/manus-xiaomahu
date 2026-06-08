@@ -185,6 +185,7 @@ export interface DiaryEntry {
   // Multi-turn conversation history (new in v3.0)
   conversation?: ConversationMessage[];
   conversationFinished?: boolean; // true when user tapped "End and Save"
+  localTimeStr?: string;  // e.g. "14:23" — writer's local time, timezone-safe
 }
 
 export interface CareBriefing {
@@ -679,17 +680,35 @@ export async function getDiaryEntriesForHome(roomId?: string, limit = 20): Promi
   return deduped.slice(0, limit);
 }
 
+// Map from local diary id to a promise that resolves with serverDiaryId once cloud sync completes
+const _serverDiaryIdPromises: Map<string, Promise<number | null>> = new Map();
+
+export function waitForServerDiaryId(localId: string): Promise<number | null> {
+  return _serverDiaryIdPromises.get(localId) ?? Promise.resolve(null);
+}
+
 export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: string): Promise<DiaryEntry> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.DIARY, rid);
   const all = await getDiaryEntries(rid ?? undefined);
-  const entry: DiaryEntry = { id: generateId(), createdAt: new Date().toISOString(), ...data };
+  const now = new Date();
+  const localTimeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const entry: DiaryEntry = { id: generateId(), createdAt: now.toISOString(), localTimeStr, ...data };
   all.unshift(entry);
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: sync diary entry to server
-  cloudSyncDiary(entry).then(res => {
-    if (res?.id) updateDiaryEntry(entry.id, { serverDiaryId: res.id }, rid ?? undefined);
-  }).catch(() => {});
+  // Cloud sync: sync diary entry to server, and expose the serverDiaryId promise
+  const serverIdPromise = cloudSyncDiary(entry).then(res => {
+    if (res?.id) {
+      updateDiaryEntry(entry.id, { serverDiaryId: res.id }, rid ?? undefined);
+      return res.id as number;
+    }
+    return null;
+  }).catch(() => null);
+  _serverDiaryIdPromises.set(entry.id, serverIdPromise);
+  // Clean up after 30s to avoid memory leak
+  serverIdPromise.finally(() => {
+    setTimeout(() => _serverDiaryIdPromises.delete(entry.id), 30000);
+  });
   return entry;
 }
 
@@ -1038,13 +1057,15 @@ export async function updateFamilyMemberPhoto(memberId: string, photoUri: string
     const current = await getCurrentMember();
     if (current && current.id === memberId) {
       await setCurrentMember({ ...current, photoUri });
-      // Cloud sync: update member profile on server
-      const roomId = parseInt(room.id);
-      if (!isNaN(roomId)) {
-        cloudUpdateMemberProfile({
-          roomId,
-          photoUri,
-        }).catch(e => console.warn('[Storage] cloudUpdateMemberProfile failed:', e));
+      // Cloud sync: only sync https:// URLs (not local file:// URIs which are device-specific)
+      if (photoUri.startsWith('https://')) {
+        const roomId = parseInt(room.id);
+        if (!isNaN(roomId)) {
+          cloudUpdateMemberProfile({
+            roomId,
+            photoUri,
+          }).catch(e => console.warn('[Storage] cloudUpdateMemberProfile failed:', e));
+        }
       }
     }
   }

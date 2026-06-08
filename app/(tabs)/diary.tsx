@@ -48,9 +48,9 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
   const aiPreview = entry.aiReply
     ? entry.aiReply.length > 60 ? entry.aiReply.slice(0, 60) + '...' : entry.aiReply
     : null;
-  const timeStr = entry.createdAt
+  const timeStr = entry.localTimeStr || (entry.createdAt
     ? new Date(entry.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    : '';
+    : '');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -189,9 +189,9 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
   const entriesByDate = useMemo(() => {
     const m: Record<string, DiaryEntry[]> = {};
     entries.forEach(e => {
-       const d = new Date(e.createdAt ?? '');
-      if (!isNaN(d.getTime())) {
-        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      // Use date field (YYYY-MM-DD) directly instead of parsing createdAt (UTC timestamp)
+      const key = e.date;
+      if (key && /^\d{4}-\d{2}-\d{2}$/.test(key)) {
         if (!m[key]) m[key] = [];
         m[key].push(e);
       }
@@ -457,10 +457,15 @@ function DiaryScreenContent() {
               {!editMode && showAll && (() => {
                 const grouped: Record<string, DiaryEntry[]> = {};
                 entries.slice(3).forEach(e => {
-                  const d = new Date(e.createdAt ?? '');
-                  const key = `${d.getFullYear()}年${d.getMonth() + 1}月`;
-                  if (!grouped[key]) grouped[key] = [];
-                  grouped[key].push(e);
+                  // Parse date field (YYYY-MM-DD) to get year and month
+                  const parts = e.date.split('-');
+                  if (parts.length === 3) {
+                    const year = parts[0];
+                    const month = parseInt(parts[1], 10);
+                    const key = `${year}年${month}月`;
+                    if (!grouped[key]) grouped[key] = [];
+                    grouped[key].push(e);
+                  }
                 });
                 return Object.entries(grouped).map(([month, monthEntries]) => (
                   <View key={month}>

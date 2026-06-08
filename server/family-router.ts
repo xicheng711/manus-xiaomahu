@@ -18,7 +18,7 @@ import {
   upsertMedication, getMedicationsByRoom, deleteMedication,
 } from "./family-db";
 import { updatePushToken, getUsersByIds } from "./db";
-import { ossUploadAvatar } from "./storage";
+import { ossUploadAvatar, storagePut } from "./storage";
 
 // ─── Expo Push Notification Helper ──────────────────────────────────────────
 
@@ -387,6 +387,7 @@ export const familyRouter = router({
       aiTip: z.string().optional(),
       conversation: z.any().optional(),
       conversationFinished: z.boolean().optional(),
+      localTimeStr: z.string().optional(),  // e.g. "14:23" — writer's local time
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
@@ -406,6 +407,7 @@ export const familyRouter = router({
           aiTip: input.aiTip ?? null,
           conversation: input.conversation ?? null,
           conversationFinished: input.conversationFinished ?? false,
+          localTimeStr: input.localTimeStr ?? null,
         });
         return { success: true, diaryId: input.serverDiaryId };
       }
@@ -426,6 +428,7 @@ export const familyRouter = router({
         aiTip: input.aiTip ?? null,
         conversation: input.conversation ?? null,
         conversationFinished: input.conversationFinished ?? false,
+        localTimeStr: input.localTimeStr ?? null,
       });
 
       // Notify family members about the new diary entry
@@ -769,15 +772,22 @@ export const familyRouter = router({
       const buffer = Buffer.from(raw, "base64");
       const ext = input.mimeType === "image/png" ? "png" : "jpg";
       const key = `avatars/${input.scope}/${userId}-${Date.now()}.${ext}`;
-      console.log(`[uploadPhoto] Uploading to OSS key=${key} bufferSize=${buffer.length}`);
+      console.log(`[uploadPhoto] Uploading key=${key} bufferSize=${buffer.length}`);
       let url: string;
       try {
         const result = await ossUploadAvatar(key, buffer, input.mimeType);
         url = result.url;
         console.log(`[uploadPhoto] OSS upload success, url=${url}`);
       } catch (ossErr) {
-        console.error(`[uploadPhoto] OSS upload FAILED:`, ossErr);
-        throw ossErr;
+        console.warn(`[uploadPhoto] OSS upload failed, falling back to built-in storage:`, ossErr);
+        try {
+          const fallback = await storagePut(key, buffer, input.mimeType);
+          url = fallback.url;
+          console.log(`[uploadPhoto] Built-in storage upload success, url=${url}`);
+        } catch (storageErr) {
+          console.error(`[uploadPhoto] Both OSS and built-in storage failed:`, storageErr);
+          throw storageErr;
+        }
       }
       // If uploading member photo, update photoUri in ALL rooms the user belongs to
       if (input.scope === "member") {

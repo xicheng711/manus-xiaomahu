@@ -15,10 +15,10 @@ import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
-  getTodayCheckIn, DailyCheckIn, getCurrentUserIsCreator,
+  getTodayCheckIn, DailyCheckIn, getCurrentUserIsCreator, waitForServerDiaryId,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries } from '@/lib/cloud-sync';
+import { cloudGetDiaries, cloudSyncDiary } from '@/lib/cloud-sync';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
@@ -399,7 +399,16 @@ export default function DiaryEditScreen() {
     const conv2 = [...conv1, aiMsg];
     setConversation(conv2);
     setAiLoading(false);
+    // Save locally first
     await updateDiaryEntry(savedEntry.id, { aiReply: aiText, conversation: conv2 });
+    // Reliably sync conversation to server: wait for serverDiaryId (from saveDiaryEntry's cloud sync)
+    // then explicitly push the full entry including conversation and aiReply
+    waitForServerDiaryId(savedEntry.id).then(async (serverDiaryId) => {
+      if (serverDiaryId) {
+        const fullEntry = { ...savedEntry, aiReply: aiText, conversation: conv2 };
+        cloudSyncDiary(fullEntry, serverDiaryId).catch(() => {});
+      }
+    });
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
   }
 

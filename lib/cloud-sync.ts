@@ -281,6 +281,7 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number) {
       aiTip: diary.aiTip ?? diary.smartTip,
       conversation: diary.conversation,
       conversationFinished: diary.conversationFinished,
+      localTimeStr: diary.localTimeStr,
     });
   } catch (e) {
     console.warn('[CloudSync] syncDiary failed:', e);

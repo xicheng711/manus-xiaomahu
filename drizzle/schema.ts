@@ -137,6 +137,7 @@ export const diaryEntries = mysqlTable("diary_entries", {
   aiTip: text("aiTip"),
   conversation: json("conversation"),
   conversationFinished: boolean("conversationFinished").default(false),
+  localTimeStr: varchar("localTimeStr", { length: 10 }),  // e.g. "14:23" — writer's local time, timezone-safe
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

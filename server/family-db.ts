@@ -182,6 +182,7 @@ export async function getDiaryEntriesByRoom(roomId: number, limit = 30) {
       aiTip: diaryEntries.aiTip,
       conversation: diaryEntries.conversation,
       conversationFinished: diaryEntries.conversationFinished,
+      localTimeStr: diaryEntries.localTimeStr,
       createdAt: diaryEntries.createdAt,
       updatedAt: diaryEntries.updatedAt,
       authorName: familyMembers.name,
