@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Auth from '@/lib/_core/auth';
 import { getApiBaseUrl } from '@/constants/oauth';
 import type { Router } from 'expo-router';
+import { getProfile, getFamilyProfile } from '@/lib/storage';
 
 const API_BASE = getApiBaseUrl();
 
@@ -33,6 +34,24 @@ async function exchangeProviderToken(provider: 'wechat' | 'apple', payload: Reco
   return data;
 }
 
+/** After login, go to onboarding if first-time user, otherwise go to tabs */
+async function navigateAfterLogin(router: Router) {
+  try {
+    const [legacyProfile, familyProfile] = await Promise.all([
+      getProfile(),
+      getFamilyProfile(),
+    ]);
+    const setupDone = legacyProfile?.setupComplete || familyProfile?.setupComplete;
+    if (setupDone) {
+      router.replace('/(tabs)' as any);
+    } else {
+      router.replace('/onboarding' as any);
+    }
+  } catch {
+    router.replace('/onboarding' as any);
+  }
+}
+
 export async function loginWithWeChat(router: Router) {
   if (Platform.OS === 'web') {
     throw new Error('微信登录需要在手机 App 中使用');
@@ -57,7 +76,7 @@ export async function loginWithWeChat(router: Router) {
   }
 
   await exchangeProviderToken('wechat', { code: response.code });
-  router.replace('/(tabs)' as any);
+  await navigateAfterLogin(router);
 }
 
 export async function loginWithApple(router: Router) {
@@ -95,5 +114,5 @@ export async function loginWithApple(router: Router) {
     email: credential.email,
   });
 
-  router.replace('/(tabs)' as any);
+  await navigateAfterLogin(router);
 }

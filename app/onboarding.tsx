@@ -10,6 +10,7 @@ import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg';
 import { ScreenContainer } from '@/components/screen-container';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { saveProfile, saveUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
+import { getSessionToken } from '@/lib/_core/auth';
 import { scheduleAllReminders } from '@/lib/notifications';
 import { useFamilyContext } from "../lib/family-context";
 import { getZodiac } from '@/lib/zodiac';
@@ -112,6 +113,15 @@ export default function OnboardingScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const sparkle1 = useRef(new Animated.Value(1)).current;
   const sparkle2 = useRef(new Animated.Value(1)).current;
+
+  // Check login on mount — if no token, redirect to login first
+  useEffect(() => {
+    getSessionToken().then(token => {
+      if (!token) {
+        router.replace('/login' as any);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const loop1 = Animated.loop(
@@ -422,11 +432,8 @@ export default function OnboardingScreen() {
   }
 
   async function handleJoinerFinish() {
-    const exists = memberships.some(m => m.room?.roomCode === joinerCode.trim());
-    if (exists) {
-      Alert.alert("加入失败", "您已经在这个家庭中了，无需重复加入");
-      return;
-    }
+    // 注意：不在这里做本地 memberships 前置检查，因为用户可能已经重新设置了本地数据
+    // 但服务器上仍然有记录。服务器端 joinRoom 会幂等处理（已是成员时返回成功）。
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const rel = joinerRelationship.trim();
     const result = await joinFamilyRoom(joinerCode.trim(), {

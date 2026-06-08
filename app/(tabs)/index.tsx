@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
+import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiacFromDate } from '@/lib/zodiac';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
