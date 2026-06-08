@@ -27,6 +27,7 @@ import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
 import { cloudUploadPhoto, cloudUpdateMemberProfile, cloudUpdateElderProfile } from '@/lib/cloud-sync';
 import { clearAllLocalData } from '@/lib/storage';
+import { removeSessionToken, clearUserInfo } from '@/lib/_core/auth';
 
 export default function ProfileScreen() {
   // Split into two independent states — caregiver data vs elder/family data
@@ -86,6 +87,8 @@ export default function ProfileScreen() {
       
       // Only clear local data if server deletion succeeded
       await clearAllLocalData();
+      await removeSessionToken();
+      await clearUserInfo();
       
       setDeletingAccount(false);
       setShowDeleteAccountModal(false);
