@@ -157,9 +157,10 @@ export default function ProfileScreen() {
       const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
       cloudUploadPhoto(localUri, 'member', roomId).then(async (cloudUrl) => {
         if (!cloudUrl) return;
-        // Update local storage with cloud URL
+        // Update local storage with cloud URL — read fresh value to avoid stale closure
+        const freshUp = await getUserProfile();
         const up2 = await saveUserProfile({
-          ...(userProfile ?? {}),
+          ...(freshUp ?? userProfile ?? {}),
           caregiverPhotoUri: cloudUrl,
           caregiverAvatarType: 'photo',
         });

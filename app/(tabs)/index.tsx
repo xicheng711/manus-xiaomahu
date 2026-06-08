@@ -469,6 +469,7 @@ function CreatorHomeScreen() {
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('');
   const [memberPhotoUri, setMemberPhotoUri] = useState<string | null>(null);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
   const [zodiacColor, setZodiacColor] = useState(AppColors.coral.primary);
   const [zodiacEmoji, setZodiacEmoji] = useState('🐎');
   const { weatherData, cityName, buildGreeting, refresh: refreshWeather } = useWeather();
@@ -500,13 +501,21 @@ function CreatorHomeScreen() {
     setElderNickname(elderNick);
     // Caregiver data: prefer userProfile, fall back to legacy
     const cgName = userProfile?.caregiverName || legacyProfile?.caregiverName || '';
-    if ((userProfile?.caregiverAvatarType ?? legacyProfile?.caregiverAvatarType) === 'photo') {
-      const photoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
-      if (photoUri) setMemberPhotoUri(photoUri);
-    } else {
-      const member = await getCurrentMember();
-      if (member?.photoUri) setMemberPhotoUri(member.photoUri);
-    }
+    // Avatar: try all sources in priority order
+    // 1. caregiverPhotoUri (from userProfile or legacyProfile) — set by profile page
+    // 2. member.photoUri (from getCurrentMember) — set by member upload
+    // Use whichever is a valid https:// URL, or fall back to any non-null value
+    const caregiverPhotoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
+    const member = await getCurrentMember();
+    const memberPhotoUriVal = member?.photoUri;
+    // Prefer https:// URLs, then any available URI
+    const resolvedPhotoUri =
+      (caregiverPhotoUri?.startsWith('https://') ? caregiverPhotoUri : null) ??
+      (memberPhotoUriVal?.startsWith('https://') ? memberPhotoUriVal : null) ??
+      caregiverPhotoUri ??
+      memberPhotoUriVal ??
+      null;
+    if (resolvedPhotoUri) { setMemberPhotoUri(resolvedPhotoUri); setPhotoLoadError(false); }
     setCaregiverName(cgName);
     // 传入当前城市名：城市未变化时跳过天气网络请求
     const currentCity = familyProfile?.city || legacyProfile?.city || '';
@@ -674,17 +683,21 @@ function CreatorHomeScreen() {
           </View>
           <Animated.View style={{ transform: [{ scale: avatarScale }] }}>
             <TouchableOpacity
-              style={[styles.profileBtn, memberPhotoUri ? { backgroundColor: 'transparent', borderWidth: 0 } : {}]}
+              style={[styles.profileBtn, memberPhotoUri && !photoLoadError ? { backgroundColor: 'transparent', borderWidth: 0 } : {}]}
               onPress={() => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/profile' as any);
               }}
             >
-              {memberPhotoUri ? (
-                <Image source={{ uri: memberPhotoUri }} style={styles.profilePhoto} />
+              {memberPhotoUri && !photoLoadError ? (
+                <Image
+                  source={{ uri: memberPhotoUri }}
+                  style={styles.profilePhoto}
+                  onError={() => setPhotoLoadError(true)}
+                />
               ) : (
                 <LinearGradient colors={[...Gradients.coral]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileGradient}>
-                  <Text style={{ fontSize: 24 }}>{zodiacEmoji}</Text>
+                  <Text style={{ fontSize: 24 }}>{zodiacEmoji || '🧑'}</Text>
                 </LinearGradient>
               )}
             </TouchableOpacity>
