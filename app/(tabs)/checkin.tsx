@@ -2445,8 +2445,25 @@ function JoinerCheckinView() {
   const [elderNickname, setElderNickname] = useState('家人');
 
   useFocusEffect(useCallback(() => {
-    getTodayCheckIn(familyId).then(setCheckIn);
-    getAllCheckIns(familyId).then(setAllCheckIns);
+    // joiner 视角：从云端拉取主照顾者的打卡数据（本地数据库里没有主照顾者的记录）
+    const todayDate = new Date();
+    const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+    import('@/lib/cloud-sync').then(({ cloudGetCheckIns }) => {
+      cloudGetCheckIns(undefined, 30).then((cloudCIs: any[]) => {
+        if (cloudCIs && cloudCIs.length > 0) {
+          const todayCi = cloudCIs.find((ci: any) => ci.date === todayKey) ?? null;
+          setCheckIn(todayCi);
+          setAllCheckIns(cloudCIs as DailyCheckIn[]);
+        } else {
+          // 降级到本地
+          getTodayCheckIn(familyId).then(setCheckIn);
+          getAllCheckIns(familyId).then(setAllCheckIns);
+        }
+      }).catch(() => {
+        getTodayCheckIn(familyId).then(setCheckIn);
+        getAllCheckIns(familyId).then(setAllCheckIns);
+      });
+    });
     Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]).then(([up, fp, lp]) => {
       setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
     });
