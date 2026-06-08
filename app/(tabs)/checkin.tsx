@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
+import { getSessionToken } from '@/lib/_core/auth';
 import { useFamilyContext } from '@/lib/family-context';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -885,6 +886,19 @@ function CheckinScreenContent() {
   }
 
   async function handleSave() {
+    // 游客模式检查：打卡记录需要登录才能同步到云端
+    const token = await getSessionToken();
+    if (!token) {
+      Alert.alert(
+        '需要登录',
+        '打卡记录需要登录账号才能保存并与家人共享，登录后数据会自动同步。',
+        [
+          { text: '暂不登录', style: 'cancel' },
+          { text: '去登录', onPress: () => router.push('/login' as any) },
+        ]
+      );
+      return;
+    }
     setSaving(true);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const data: Partial<DailyCheckIn> & { date: string } = { date: backfillDate || todayStr() };

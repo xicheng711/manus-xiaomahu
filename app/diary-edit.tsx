@@ -19,6 +19,7 @@ import {
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, cloudSyncDiary } from '@/lib/cloud-sync';
+import { getSessionToken } from '@/lib/_core/auth';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
@@ -343,6 +344,19 @@ export default function DiaryEditScreen() {
 
   async function handleSubmit() {
     if (submitting) return;
+    // 游客模式检查：日记需要登录才能同步到云端
+    const token = await getSessionToken();
+    if (!token) {
+      Alert.alert(
+        '需要登录',
+        '日记需要登录账号才能保存并与家人共享，登录后数据会自动同步。',
+        [
+          { text: '暂不登录', style: 'cancel' },
+          { text: '去登录', onPress: () => router.push('/login' as any) },
+        ]
+      );
+      return;
+    }
     setSubmitting(true);
     const mood = MOOD_OPTIONS[selectedMood];
     const cgMood = caregiverMoodIdx >= 0 ? CAREGIVER_MOODS[caregiverMoodIdx] : undefined;

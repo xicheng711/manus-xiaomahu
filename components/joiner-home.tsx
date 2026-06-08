@@ -347,6 +347,7 @@ export function JoinerHomeScreen() {
   const [latestAnnounce, setLatestAnnounce] = useState<FamilyAnnouncement | null>(null);
   const [currentMember, setCurrentMember] = useState<FamilyMember | null>(null);
   const [memberPhotoUri, setMemberPhotoUri] = useState<string | null>(null);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
   const [zodiacEmoji, setZodiacEmoji] = useState<string>('');
   const [briefingSummary, setBriefingSummary] = useState<string | null>(null);
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -385,9 +386,11 @@ export function JoinerHomeScreen() {
     const cloudPhotoUri = cloudMember?.photoUri || null;
     if (cloudPhotoUri) {
       setMemberPhotoUri(cloudPhotoUri);
+      setPhotoLoadError(false);
       setZodiacEmoji('');
     } else if (member?.photoUri) {
       setMemberPhotoUri(member.photoUri);
+      setPhotoLoadError(false);
       setZodiacEmoji('');
     } else {
       setMemberPhotoUri(null);
@@ -586,8 +589,12 @@ export function JoinerHomeScreen() {
             onPress={() => router.push('/profile' as any)}
             activeOpacity={0.8}
           >
-            {memberPhotoUri ? (
-              <Image source={{ uri: memberPhotoUri }} style={styles.avatarPhoto} />
+            {memberPhotoUri && !photoLoadError ? (
+              <Image
+                source={{ uri: memberPhotoUri }}
+                style={styles.avatarPhoto}
+                onError={() => setPhotoLoadError(true)}
+              />
             ) : (
               <LinearGradient
                 colors={Gradients.coral}

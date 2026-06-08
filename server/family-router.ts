@@ -568,7 +568,8 @@ export const familyRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
-      await requireRoomMember(userId, input.roomId);
+      const member = await requireRoomMember(userId, input.roomId);
+      if (!member.isCreator) throw new Error("只有主照顾者可以修改用药记录");
       const med = await upsertMedication({
         id: input.serverMedId,
         roomId: input.roomId,
@@ -599,7 +600,8 @@ export const familyRouter = router({
     .input(z.object({ roomId: z.number(), medicationId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
-      await requireRoomMember(userId, input.roomId);
+      const member = await requireRoomMember(userId, input.roomId);
+      if (!member.isCreator) throw new Error("只有主照顾者可以删除用药记录");
       await deleteMedication(input.medicationId);
       return { success: true };
     }),

@@ -101,8 +101,8 @@ export default function ProfileScreen() {
       
       setDeletingAccount(false);
       setShowDeleteAccountModal(false);
-      // Navigate to onboarding / welcome screen
-      router.replace('/onboarding' as any);
+      // 注销后直接跳转到登录页，而不是 onboarding（因为 token 已清除，onboarding 会再跳一次）
+      router.replace('/login' as any);
     } catch (e: any) {
       setDeletingAccount(false);
       // If server fails, show error and do NOT clear local data
