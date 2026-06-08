@@ -824,7 +824,7 @@ export default function ProfileScreen() {
 
         {/* Edit button */}
         <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/onboarding' as any)}>
-          <Text style={styles.editBtnText}>✏️ 重新设置所有信息</Text>
+          <Text style={styles.editBtnText}>✏️ 重新设置被照顾者基本信息</Text>
         </TouchableOpacity>
 
         {/* Sign Out button */}
