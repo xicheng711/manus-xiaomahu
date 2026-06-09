@@ -503,14 +503,22 @@ function CreatorHomeScreen() {
     // Caregiver data: prefer userProfile, fall back to legacy
     const cgName = userProfile?.caregiverName || legacyProfile?.caregiverName || '';
     // Avatar: try all sources in priority order
-    // 1. caregiverPhotoUri (from userProfile or legacyProfile) — set by profile page
-    // 2. member.photoUri (from getCurrentMember) — set by member upload
+    // 1. activeMembership.room.members 中当前用户的 photoUri（云端权威，https://）
+    // 2. caregiverPhotoUri (from userProfile or legacyProfile) — set by profile page
+    // 3. member.photoUri (from getCurrentMember) — set by member upload
     // Use whichever is a valid https:// URL, or fall back to any non-null value
-    const caregiverPhotoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
     const member = await getCurrentMember();
+    // 从 activeMembership.room.members 中找当前用户的云端头像
+    const cloudMember = activeMembership?.room?.members?.find(
+      (m: any) => m.isCurrentUser || (member?.id && String(m.id) === String(member.id))
+    );
+    const cloudMemberPhotoUri = cloudMember?.photoUri && cloudMember.photoUri.startsWith('https://')
+      ? cloudMember.photoUri : null;
+    const caregiverPhotoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
     const memberPhotoUriVal = member?.photoUri;
     // Prefer https:// URLs, then any available URI
     const resolvedPhotoUri =
+      cloudMemberPhotoUri ??
       (caregiverPhotoUri?.startsWith('https://') ? caregiverPhotoUri : null) ??
       (memberPhotoUriVal?.startsWith('https://') ? memberPhotoUriVal : null) ??
       caregiverPhotoUri ??

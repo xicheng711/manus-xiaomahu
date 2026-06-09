@@ -59,10 +59,11 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     await migrateToMultiFamily();
     let all = await getAllMemberships();
 
-    // ── Server reconciliation ──────────────────────────────────────────────
+    // ── Server reconciliation + 头像同步 ───────────────────────────────────────────────────────────────────────────────────────
     // Pull the authoritative room list from the server and remove any local
     // memberships that no longer exist on the server (e.g. family was deleted
     // by the creator while this device was offline).
+    // Also sync member avatars from server to ensure https:// URLs are used.
     try {
       const serverRooms = await cloudGetMyRooms();
       if (Array.isArray(serverRooms) && serverRooms.length >= 0) {
@@ -92,12 +93,52 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             );
           }
         }
+        // 同步每个家庭的成员头像（从服务器拉取 https:// URL）
+        for (const sr of serverRooms) {
+          try {
+            const roomId = String(sr.roomId);
+            const membership = all.find(m => m.familyId === roomId);
+            if (!membership) continue;
+            const detail = await cloudGetRoomDetail(parseInt(roomId));
+            if (!detail?.members) continue;
+            const serverMembers: import('./storage').FamilyMember[] = detail.members.map((m: any) => ({
+              id: String(m.id),
+              name: m.name,
+              role: m.role ?? 'family',
+              roleLabel: m.roleLabel ?? m.role ?? '家人',
+              emoji: m.emoji ?? '👤',
+              color: m.color ?? '#888',
+              photoUri: m.photoUri && m.photoUri.startsWith('https://') ? m.photoUri : (membership.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined),
+              joinedAt: m.joinedAt ?? new Date().toISOString(),
+              isCreator: m.isCreator ?? false,
+              isCurrentUser: String(m.id) === String(membership.myMemberId),
+              relationship: m.relationship,
+            }));
+            const updatedRoom = {
+              ...membership.room,
+              elderPhotoUri: detail.room?.elderPhotoUri && detail.room.elderPhotoUri.startsWith('https://') ? detail.room.elderPhotoUri : membership.room.elderPhotoUri,
+              members: serverMembers.length > 0 ? serverMembers : membership.room.members,
+            };
+            const updatedMembership = {
+              ...membership,
+              room: updatedRoom,
+              memberPhotoUri: sr.memberPhotoUri && sr.memberPhotoUri.startsWith('https://') ? sr.memberPhotoUri : membership.memberPhotoUri,
+            };
+            await saveFamilyRoom(updatedRoom);
+            await addOrUpdateMembership(updatedMembership);
+            // 更新 all 中的数据
+            const idx = all.findIndex(m => m.familyId === roomId);
+            if (idx >= 0) all[idx] = updatedMembership;
+          } catch (e) {
+            console.warn('[FamilyContext] refresh: failed to sync room detail for', sr.roomId, e);
+          }
+        }
       }
     } catch (e) {
       // Network unavailable — skip reconciliation, keep local state as-is
       console.warn('[FamilyContext] reconcile: server unavailable, skipping:', e);
     }
-    // ──────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────────────────────
 
     const activeId = await getActiveFamilyId();
     const active = all.find(m => m.familyId === activeId) ?? all[0] ?? null;

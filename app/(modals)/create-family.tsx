@@ -11,6 +11,7 @@ import {
   createFamilyRoom, getProfile, getUserProfile, generateId,
   addOrUpdateMembership, setActiveFamilyId, FamilyMembership,
 } from '@/lib/storage';
+import { cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
 import { COLORS, SHADOWS, RADIUS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -94,16 +95,35 @@ export default function CreateFamilyModal() {
     setSaving(true);
     try {
       if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // 先上传照片到 S3，确保其他设备可以访问
+      let finalMyPhotoUri = myPhotoUri || undefined;
+      let finalElderPhotoUri = elderPhotoUri || undefined;
+      if (myPhotoUri && myPhotoUri.startsWith('file://')) {
+        try {
+          const uploaded = await cloudUploadPhoto(myPhotoUri, 'member');
+          if (uploaded) finalMyPhotoUri = uploaded;
+        } catch (e) {
+          console.warn('[CreateFamily] Failed to upload my photo:', e);
+        }
+      }
+      if (elderPhotoUri && elderPhotoUri.startsWith('file://')) {
+        try {
+          const uploaded = await cloudUploadPhoto(elderPhotoUri, 'elder');
+          if (uploaded) finalElderPhotoUri = uploaded;
+        } catch (e) {
+          console.warn('[CreateFamily] Failed to upload elder photo:', e);
+        }
+      }
       const room = await createFamilyRoom(elderName.trim(), {
         name: myName.trim() || '我',
         role: myRole,
         roleLabel: myRoleLabel,
         emoji: myEmoji,
-        photoUri: myPhotoUri || undefined,
+        photoUri: finalMyPhotoUri,
         color: myColor,
         isCreator: true,
         isCurrentUser: true,
-      }, undefined, { emoji: elderEmoji, photoUri: elderPhotoUri || undefined }, {
+      }, undefined, { emoji: elderEmoji, photoUri: finalElderPhotoUri }, {
         name: elderName.trim(),
         nickname: elderName.trim(),
       });
