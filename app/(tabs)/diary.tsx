@@ -874,9 +874,6 @@ const jStyles = StyleSheet.create({
 });
 
 export default function DiaryScreen() {
-  const [isCreator, setIsCreator] = useState<boolean | null>(null);
-  useFocusEffect(useCallback(() => { getCurrentUserIsCreator().then(v => setIsCreator(v)); }, []));
-  if (isCreator === null) return null;
-  if (!isCreator) return <JoinerDiaryReadOnly />;
+  // Joiner 和主照顾者都使用同一个完整日记页面，支持写日记、AI 对话、删除
   return <DiaryScreenContent />;
 }

@@ -822,10 +822,12 @@ export default function ProfileScreen() {
 
         </>)}
 
-        {/* Edit button */}
-        <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/onboarding' as any)}>
-          <Text style={styles.editBtnText}>✏️ 重新设置被照顾者基本信息</Text>
-        </TouchableOpacity>
+        {/* Edit button — only shown for creator, not joiner */}
+        {!isJoiner && (
+          <TouchableOpacity style={styles.editBtn} onPress={() => router.push({ pathname: '/onboarding', params: { fromProfile: '1' } } as any)}>
+            <Text style={styles.editBtnText}>✏️ 重新设置被照顾者基本信息</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Sign Out button */}
         <TouchableOpacity

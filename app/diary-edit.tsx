@@ -15,7 +15,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
-  getTodayCheckIn, DailyCheckIn, getCurrentUserIsCreator, waitForServerDiaryId,
+  getTodayCheckIn, DailyCheckIn, waitForServerDiaryId,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, cloudSyncDiary } from '@/lib/cloud-sync';
@@ -259,19 +259,10 @@ export default function DiaryEditScreen() {
   }, [familyId]);
 
   async function loadProfile() {
-    const [userProfile, familyProfile, legacyProfile, entries, checkIn, creatorFlag] = await Promise.all([
-      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(familyId), getTodayCheckIn(familyId), getCurrentUserIsCreator(),
+    const [userProfile, familyProfile, legacyProfile, entries, checkIn] = await Promise.all([
+      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(familyId), getTodayCheckIn(familyId),
     ]);
-    if (!creatorFlag) {
-      setRoleReadOnly(true);
-      if (!existingId) {
-        // joiner 没有 id（想新建日记）：回到日记列表
-        router.replace('/(tabs)/diary' as any);
-        return;
-      }
-      // joiner 有 id 时：留在当前页面，以 readOnly 模式查看（和主照顾者体验完全一致）
-      // 不再 redirect，loadExistingEntry 已经在 useEffect 里被调用了
-    }
+    // Joiner 和主照顾者都可以写日记、有 AI 对话、可删除，不再区分只读模式
     // family-scoped 优先，fallback 到 legacy
     setElderNickname(familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人');
     setCaregiverName(userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者');

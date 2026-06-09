@@ -3,13 +3,13 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Animated, Dimensions, Platform, Image, Keyboard, Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg';
 import { ScreenContainer } from '@/components/screen-container';
 import { AppColors, Gradients } from '@/lib/design-tokens';
-import { saveProfile, saveUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
+import { saveProfile, saveUserProfile, getUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
 import { getSessionToken } from '@/lib/_core/auth';
 import { scheduleAllReminders } from '@/lib/notifications';
 import { cloudUploadPhoto } from '@/lib/cloud-sync';
@@ -110,6 +110,8 @@ function ScrollPickerSimple({
 export default function OnboardingScreen() {
   const { refresh, memberships } = useFamilyContext();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ fromProfile?: string }>();
+  const fromProfile = params.fromProfile === '1';
   const [step, setStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const sparkle1 = useRef(new Animated.Value(1)).current;
@@ -367,7 +369,7 @@ export default function OnboardingScreen() {
           birthDate,
           zodiacEmoji: elderZodiac.emoji,
           zodiacName: elderZodiac.name,
-          elderPhotoUri,
+          elderPhotoUri: finalElderPhotoUri,
           elderAvatarType,
           city: city || '北京',
           reminderMorning,
@@ -457,6 +459,16 @@ export default function OnboardingScreen() {
     // 注意：不在这里做本地 memberships 前置检查，因为用户可能已经重新设置了本地数据
     // 但服务器上仍然有记录。服务器端 joinRoom 会幂等处理（已是成员时返回成功）。
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // 先上传照片到 S3，确保其他设备可以访问
+    let finalJoinerPhotoUri = joinerPhotoUri;
+    if (joinerPhotoUri && joinerPhotoUri.startsWith('file://')) {
+      try {
+        const uploaded = await cloudUploadPhoto(joinerPhotoUri, 'member');
+        if (uploaded) finalJoinerPhotoUri = uploaded;
+      } catch (e) {
+        console.warn('[Onboarding] Failed to upload joiner photo, using local URI:', e);
+      }
+    }
     const rel = joinerRelationship.trim();
     const result = await joinFamilyRoom(joinerCode.trim(), {
       name: joinerName.trim() || '家人',
@@ -464,6 +476,7 @@ export default function OnboardingScreen() {
       roleLabel: rel || '家庭成员',
       emoji: joinerEmoji,
       color: '#A855F7',
+      photoUri: finalJoinerPhotoUri,
       relationship: rel || undefined,
     });
     if (!result) {
@@ -471,6 +484,14 @@ export default function OnboardingScreen() {
       Alert.alert('加入失败', '邀请码无效或已过期，请确认后重试。');
       return;
     }
+    // 保存 joiner 自己的用户信息（头像、名字）到本地，先读取再合并避免覆盖其他字段
+    const existingUserProfile = await getUserProfile();
+    await saveUserProfile({
+      ...existingUserProfile,
+      caregiverName: joinerName.trim() || '家人',
+      caregiverPhotoUri: finalJoinerPhotoUri,
+      caregiverAvatarType: joinerAvatarType === 'photo' ? 'photo' : 'zodiac',
+    });
     await refresh();
     router.replace('/(tabs)/family');
   }
@@ -1254,9 +1275,9 @@ export default function OnboardingScreen() {
 
       {/* Navigation buttons */}
       <View style={[styles.navButtons, { paddingBottom: insets.bottom + 8 }]}>
-        {step > 0 && (
-          <TouchableOpacity style={styles.backBtn} onPress={prevStep}>
-            <Text style={styles.backBtnText}>← 上一步</Text>
+        {(step > 0 || fromProfile) && (
+          <TouchableOpacity style={styles.backBtn} onPress={step > 0 ? prevStep : () => router.back()}>
+            <Text style={styles.backBtnText}>{step > 0 ? '← 上一步' : '← 返回'}</Text>
           </TouchableOpacity>
         )}
         {/* Step 1 = role selection: no next button, user taps cards */}

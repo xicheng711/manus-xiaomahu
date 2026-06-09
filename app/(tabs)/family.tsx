@@ -113,6 +113,16 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
     }
     setLoading(true);
     try {
+      // 先上传照片到 S3，确保其他设备可以访问
+      let finalPhotoUri = customPhotoUri ?? undefined;
+      if (customPhotoUri && customPhotoUri.startsWith('file://')) {
+        try {
+          const uploaded = await cloudUploadPhoto(customPhotoUri, 'member');
+          if (uploaded) finalPhotoUri = uploaded;
+        } catch (e) {
+          console.warn('[FamilySetup] Failed to upload photo:', e);
+        }
+      }
       // Prefer FamilyProfile for elder name, fallback to legacy getProfile
       const roomId = getActiveRoomIdCache();
       const [fp, legacyP] = await Promise.all([
@@ -126,7 +136,7 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
         roleLabel: memberRoleLabel,
         emoji: memberEmoji,
         color: memberColor,
-        photoUri: customPhotoUri ?? undefined,
+        photoUri: finalPhotoUri,
       });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSetupComplete();
@@ -152,13 +162,23 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
     }
     setLoading(true);
     try {
+      // 先上传照片到 S3，确保其他设备可以访问
+      let finalPhotoUri = customPhotoUri ?? undefined;
+      if (customPhotoUri && customPhotoUri.startsWith('file://')) {
+        try {
+          const uploaded = await cloudUploadPhoto(customPhotoUri, 'member');
+          if (uploaded) finalPhotoUri = uploaded;
+        } catch (e) {
+          console.warn('[FamilySetup] Failed to upload photo:', e);
+        }
+      }
       const result = await joinFamilyRoom(roomCode, {
         name: memberName.trim(),
         role: memberRole,
         roleLabel: memberRoleLabel,
         emoji: memberEmoji,
         color: memberColor,
-        photoUri: customPhotoUri ?? undefined,
+        photoUri: finalPhotoUri,
       });
       if (!result) {
         Alert.alert('加入失败', '邀请码不正确，请检查后重试');
