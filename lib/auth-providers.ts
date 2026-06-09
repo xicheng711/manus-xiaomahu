@@ -102,6 +102,28 @@ async function navigateAfterLogin(router: Router) {
           await saveFamilyRoom(room);
           await addOrUpdateMembership(membership);
 
+          // Restore UserProfile (caregiver name + photo) from my member entry
+          // This ensures the homepage avatar is correct after reinstall/login
+          if (myMember) {
+            try {
+              const { getUserProfile, saveUserProfile } = await import('@/lib/storage');
+              const existing = await getUserProfile();
+              const updatedName = myMember.name || existing?.caregiverName;
+              const updatedPhoto = (myMember.photoUri && myMember.photoUri.startsWith('https://'))
+                ? myMember.photoUri
+                : existing?.caregiverPhotoUri;
+              if (updatedName || updatedPhoto) {
+                await saveUserProfile({
+                  ...existing,
+                  ...(updatedName ? { caregiverName: updatedName } : {}),
+                  ...(updatedPhoto ? { caregiverPhotoUri: updatedPhoto, caregiverAvatarType: 'photo' } : {}),
+                });
+              }
+            } catch (e) {
+              console.warn('[navigateAfterLogin] Failed to restore UserProfile', e);
+            }
+          }
+
           // Restore elder profile if available
           if (detail?.elderProfile) {
             const ep = detail.elderProfile;

@@ -199,7 +199,7 @@ function UpgradeCard({ onPress }: { onPress: () => void }) {
     <View style={styles.upgradeCard}>
       <Text style={styles.upgradeSectionLabel}>🔒 更多记录功能</Text>
       <View style={styles.upgradeIconRow}>
-        {[{ e: '✨', l: '打卡' }, { e: '💊', l: '用药' }, { e: '📔', l: '日记' }].map(t => (
+        {[{ e: '✨', l: '打卡' }, { e: '💊', l: '用药' }].map(t => (
           <View key={t.l} style={styles.upgradeIconItem}>
             <View style={styles.upgradeIconBox}>
               <Text style={{ fontSize: 22, opacity: 0.35 }}>{t.e}</Text>
@@ -208,7 +208,7 @@ function UpgradeCard({ onPress }: { onPress: () => void }) {
           </View>
         ))}
       </View>
-      <Text style={styles.upgradeDesc}>打卡、用药、日记是主要照顾者的专属功能。{'\n'}创建自己的家庭档案，即可解锁完整记录能力。</Text>
+      <Text style={styles.upgradeDesc}>打卡和用药记录是主要照顾者的专属功能。{'\n'}创建自己的家庭档案，即可解锁完整记录能力。</Text>
       <TouchableOpacity style={styles.upgradeBtn} onPress={onPress} activeOpacity={0.85}>
         <LinearGradient
           colors={[Gradients.purple[0], AppColors.purple.strong, Gradients.purple[1]]}
