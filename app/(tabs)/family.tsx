@@ -15,7 +15,7 @@ import {
   getProfile, getFamilyProfile, getUserProfile,
   FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
-  getActiveRoomIdCache,
+  getActiveRoomIdCache, getActiveMembership,
 } from '@/lib/storage';
 import { cloudDeleteAnnouncement, cloudToggleReaction, cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
@@ -415,13 +415,16 @@ export default function FamilyScreen() {
   async function loadData() {
     setLoading(true);
     const activeRoomId = getActiveRoomIdCache();
-    const [rLocal, m, localAnns, creatorFlag, cloudAnns] = await Promise.all([
+    const [rLocal, m, localAnns, creatorFlag, cloudAnns, activeMem] = await Promise.all([
       getFamilyRoom(),
       getCurrentMember(),
       getFamilyAnnouncements(),
       getCurrentUserIsCreator(),
       cloudGetAnnouncements(undefined, 50).catch(() => [] as any[]),
+      getActiveMembership(),
     ]);
+    // myMemberId is the authoritative member row id for the current user
+    const myMemberId = activeMem?.myMemberId ?? m?.id;
     let r = rLocal;
     if (activeRoomId) {
       try {
@@ -446,7 +449,8 @@ export default function FamilyScreen() {
               photoUri,
               joinedAt: x.joinedAt ?? new Date().toISOString(),
               isCreator: x.isCreator ?? false,
-              isCurrentUser: String(x.userId) === String(m?.id),
+              // Compare member row id (not user id) to correctly identify current user
+              isCurrentUser: String(x.id) === String(myMemberId),
               relationship: x.relationship,
             };
           });
