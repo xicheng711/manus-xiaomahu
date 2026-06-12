@@ -698,9 +698,11 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: stri
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync diary entry to server, and expose the serverDiaryId promise
   const serverIdPromise = cloudSyncDiary(entry).then(res => {
-    if (res?.id) {
-      updateDiaryEntry(entry.id, { serverDiaryId: res.id }, rid ?? undefined);
-      return res.id as number;
+    // Server returns { success: true, diaryId: number }
+    const serverId = res?.diaryId ?? res?.id;
+    if (serverId) {
+      updateDiaryEntry(entry.id, { serverDiaryId: serverId }, rid ?? undefined);
+      return serverId as number;
     }
     return null;
   }).catch(() => null);

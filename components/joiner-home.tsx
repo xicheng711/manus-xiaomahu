@@ -341,6 +341,7 @@ export function JoinerHomeScreen() {
   const { memberships, activeMembership, switchFamily } = useFamilyContext();
   const [elderNickname, setElderNickname] = useState('家人');
   const [elderEmoji, setElderEmoji] = useState('🌸');
+  const [elderPhotoUri, setElderPhotoUri] = useState<string | null>(null);
   const [caregiverName, setCaregiverName] = useState('');
   const [latestCheckIn, setLatestCheckIn] = useState<DailyCheckIn | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
@@ -366,6 +367,10 @@ export function JoinerHomeScreen() {
   const loadData = useCallback(async () => {
     if (activeMembership) {
       setElderNickname(activeMembership.room.elderName || '家人');
+      // 被照顾者头像：优先使用 elderPhotoUri（自定义上传的照片）
+      if (activeMembership.room.elderPhotoUri) {
+        setElderPhotoUri(activeMembership.room.elderPhotoUri);
+      }
       // FamilyMember.role 只有 caregiver/family/nurse，没有 elder；用 isCreator 找主照顾者
       const elderMember = activeMembership.room.members.find(m => m.isCreator);
       if (elderMember?.emoji) setElderEmoji(elderMember.emoji);
@@ -414,6 +419,7 @@ export function JoinerHomeScreen() {
         ? cloudDiaries as DiaryEntry[]
         : await getDiaryEntries();
       if (cloudProfile?.nickname) setElderNickname(cloudProfile.nickname);
+      if (cloudProfile?.elderPhotoUri) setElderPhotoUri(cloudProfile.elderPhotoUri);
       if (cloudProfile?.caregiverName) {
         creatorName = cloudProfile.caregiverName;
         setCaregiverName(cloudProfile.caregiverName);
@@ -627,12 +633,20 @@ export function JoinerHomeScreen() {
             {/* Header */}
             <View style={styles.elderHeaderRow}>
               <View style={styles.elderAvatarNew}>
-                <LinearGradient
-                  colors={Gradients.peach}
-                  style={styles.elderAvatarGrad}
-                >
-                  <Text style={{ fontSize: 28 }}>{elderEmoji}</Text>
-                </LinearGradient>
+                {elderPhotoUri ? (
+                  <Image
+                    source={{ uri: elderPhotoUri }}
+                    style={[styles.elderAvatarGrad, { borderRadius: 28 }]}
+                    onError={() => setElderPhotoUri(null)}
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={Gradients.peach}
+                    style={styles.elderAvatarGrad}
+                  >
+                    <Text style={{ fontSize: 28 }}>{elderEmoji}</Text>
+                  </LinearGradient>
+                )}
                 <View style={[styles.statusIndicator, { backgroundColor: latestCheckIn ? AppColors.green.primary : AppColors.border.soft }]} />
               </View>
               <View style={{ flex: 1 }}>

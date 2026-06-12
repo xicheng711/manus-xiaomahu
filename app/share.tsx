@@ -257,9 +257,9 @@ function AnimatedBadge({ emoji, label, value, color, delay }: { emoji: string; l
   );
 }
 
-function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEmoji, historyDate }: {
+function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEmoji, elderPhotoUri, historyDate }: {
   briefing: any; checkIn: DailyCheckIn;
-  elderNickname: string; caregiverName: string; elderEmoji: string; historyDate?: string;
+  elderNickname: string; caregiverName: string; elderEmoji: string; elderPhotoUri?: string | null; historyDate?: string;
 }) {
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -318,7 +318,11 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
       <View style={cardStyles.elderSection}>
         <View style={cardStyles.elderInfo}>
           <View style={cardStyles.elderAvatarWrap}>
-            <Text style={cardStyles.elderEmoji}>{elderEmoji}</Text>
+            {elderPhotoUri ? (
+              <Image source={{ uri: elderPhotoUri }} style={{ width: 50, height: 50, borderRadius: 25 }} />
+            ) : (
+              <Text style={cardStyles.elderEmoji}>{elderEmoji}</Text>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={cardStyles.elderName}>{elderNickname}</Text>
@@ -645,6 +649,7 @@ export default function ShareScreen() {
   const [error, setError] = useState<string | null>(null);
   const [elderNickname, setElderNickname] = useState('家人');
   const [elderEmoji, setElderEmoji] = useState('🐯');
+  const [elderPhotoUri, setElderPhotoUri] = useState<string | null>(null);
   const [caregiverName, setCaregiverName] = useState('照顾者');
   const [shareText, setShareText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -726,9 +731,11 @@ export default function ShareScreen() {
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
+      const photoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
+      if (photoUri) setElderPhotoUri(photoUri);
 
       let ci = await getCheckInByDate(dateStr, familyId);
       // Joiner 本地可能没有历史打卡数据，从云端拉取
@@ -859,9 +866,11 @@ export default function ShareScreen() {
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
+      const photoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
+      if (photoUri) setElderPhotoUri(photoUri);
 
       let today = await getTodayCheckIn(familyId);
       let yesterday = await getYesterdayCheckIn(familyId);
@@ -947,9 +956,11 @@ export default function ShareScreen() {
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
+      const photoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
+      if (photoUri) setElderPhotoUri(photoUri);
       setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
       setTodayCi(today);
       setYesterdayCi(yesterday);
@@ -1211,6 +1222,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                 elderNickname={elderNickname}
                 caregiverName={caregiverName}
                 elderEmoji={elderEmoji}
+                elderPhotoUri={elderPhotoUri}
                 historyDate={params.date}
               />
             </View>

@@ -387,7 +387,7 @@ export default function FamilyScreen() {
   const [isCreator, setIsCreator] = useState(true);
   const [codeCopied, setCodeCopied] = useState(false);
 
-  const { activeMembership } = useFamilyContext();
+  const { activeMembership, refresh } = useFamilyContext();
   const familyId = activeMembership?.familyId;
 
   const loadDataCallback = useCallback(() => {
@@ -714,6 +714,8 @@ export default function FamilyScreen() {
                   if (cloudUrl) {
                     await updateFamilyMemberPhoto(m.id, cloudUrl);
                     loadData();
+                    // Refresh FamilyContext so other screens see the updated avatar
+                    refresh();
                   }
                 }).catch(() => {});
               }

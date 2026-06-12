@@ -147,6 +147,8 @@ export default function ProfileScreen() {
         if (cloudUrl) {
           setCurrentMember(prev => prev ? { ...prev, photoUri: cloudUrl } : prev);
         }
+        // Refresh FamilyContext so other screens see the new avatar
+        refresh();
       }).catch(() => {});
       return;
     }
@@ -185,8 +187,10 @@ export default function ProfileScreen() {
         });
         // Also sync to member profile so joiner can see it
         if (roomId) {
-          cloudUpdateMemberProfile({ roomId, photoUri: cloudUrl }).catch(() => {});
+          await cloudUpdateMemberProfile({ roomId, photoUri: cloudUrl });
         }
+        // Refresh FamilyContext so other screens (home, family) see the new avatar
+        refresh();
       }).catch(() => {});
     } else {
       // elder photo
@@ -225,11 +229,13 @@ export default function ProfileScreen() {
         });
         // Also sync elder photo to server
         if (roomId) {
-          cloudUpdateElderProfile({ elderPhotoUri: cloudUrl, elderAvatarType: 'photo' }, roomId).catch(() => {});
+          await cloudUpdateElderProfile({ elderPhotoUri: cloudUrl, elderAvatarType: 'photo' }, roomId);
         }
+        // Refresh FamilyContext so other screens (home, family) see the new avatar
+        refresh();
       }).catch(() => {});
     }
-  }, [userProfile, familyProfile, activeMembership, currentMember]);
+  }, [userProfile, familyProfile, activeMembership, currentMember, refresh]);
 
   useFocusEffect(useCallback(() => {
     const loadProfiles = async () => {

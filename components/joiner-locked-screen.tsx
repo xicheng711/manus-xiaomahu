@@ -55,7 +55,7 @@ export function JoinerLockedScreen({ icon, title, description }: Props) {
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>💡 这是怎么回事？</Text>
           <Text style={styles.infoText}>
-            您目前是以「家庭成员」身份加入的。打卡、用药记录和日记是主要照顾者（创建者）的专属功能。
+            您目前是以「家庭成员」身份加入的。打卡和用药记录是主要照顾者（创建者）的专属功能，您可以在首页查看最新数据。
           </Text>
         </View>
 

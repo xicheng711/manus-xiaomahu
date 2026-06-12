@@ -524,7 +524,8 @@ function CreatorHomeScreen() {
       caregiverPhotoUri ??
       memberPhotoUriVal ??
       null;
-    if (resolvedPhotoUri) { setMemberPhotoUri(resolvedPhotoUri); setPhotoLoadError(false); }
+    setMemberPhotoUri(resolvedPhotoUri);
+    if (resolvedPhotoUri) { setPhotoLoadError(false); }
     setCaregiverName(cgName);
     // 传入当前城市名：城市未变化时跳过天气网络请求
     const currentCity = familyProfile?.city || legacyProfile?.city || '';
