@@ -16,6 +16,7 @@ import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 import { useWeather } from '@/lib/weather-context';
 import { useFamilyContext } from '@/lib/family-context';
+import { cloudGetCheckIns, cloudGetBriefings } from '@/lib/cloud-sync';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -729,7 +730,12 @@ export default function ShareScreen() {
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
 
-      const ci = await getCheckInByDate(dateStr, familyId);
+      let ci = await getCheckInByDate(dateStr, familyId);
+      // Joiner 本地可能没有历史打卡数据，从云端拉取
+      if (!ci && isJoiner) {
+        const cloudCIs = await cloudGetCheckIns();
+        ci = (cloudCIs as any[])?.find((c: any) => c.date === dateStr) ?? null;
+      }
       if (!ci) {
         setError(`${dateStr} 无打卡记录`);
         setLoading(false);
@@ -773,8 +779,15 @@ export default function ShareScreen() {
     // 立即显示 loading，防止前置检查期间 UI 短暂显示旧 error 或空白（闪屏来源）
     setLoading(true);
     // ── 最前置 early return：未完成打卡不走任何生成/缓存流程 ──
+    // Joiner 本地没有打卡数据，需要从云端拉取
     try {
-      const earlyCheckIn = await getTodayCheckIn(familyId);
+      let earlyCheckIn = await getTodayCheckIn(familyId);
+      if (!earlyCheckIn && isJoiner) {
+        // Joiner: 从云端拉取今日打卡
+        const cloudCIs = await cloudGetCheckIns();
+        const todayKey = new Date().toISOString().slice(0, 10);
+        earlyCheckIn = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
+      }
       if (!earlyCheckIn?.morningDone) {
         setLoading(false);
         setBriefing(null);
@@ -850,8 +863,17 @@ export default function ShareScreen() {
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
 
-      const today = await getTodayCheckIn(familyId);
-      const yesterday = await getYesterdayCheckIn(familyId);
+      let today = await getTodayCheckIn(familyId);
+      let yesterday = await getYesterdayCheckIn(familyId);
+      // Joiner 本地可能没有打卡数据，从云端拉取
+      if (!today && isJoiner) {
+        const cloudCIs = await cloudGetCheckIns();
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const yd = new Date(); yd.setDate(yd.getDate() - 1);
+        const yKey = yd.toISOString().slice(0, 10);
+        today = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
+        yesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey) ?? null;
+      }
       setTodayCi(today);
       setYesterdayCi(yesterday);
 
@@ -905,14 +927,23 @@ export default function ShareScreen() {
 
   async function loadSupplementaryData() {
     try {
-      const [userProfile, familyProfile, legacyProfile, weekly, today, yesterday] = await Promise.all([
+      const [userProfile, familyProfile, legacyProfile, weekly] = await Promise.all([
         getUserProfile(),
         getFamilyProfile(familyId),
         getProfile(),
         getWeeklySleepData(7, familyId),
-        getTodayCheckIn(),
-        getYesterdayCheckIn(),
       ]);
+      let today = await getTodayCheckIn();
+      let yesterday = await getYesterdayCheckIn();
+      // Joiner 本地可能没有打卡数据，从云端拉取
+      if (!today && isJoiner) {
+        const cloudCIs = await cloudGetCheckIns();
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const yd = new Date(); yd.setDate(yd.getDate() - 1);
+        const yKey = yd.toISOString().slice(0, 10);
+        today = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
+        yesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey) ?? null;
+      }
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';

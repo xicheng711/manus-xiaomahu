@@ -332,8 +332,61 @@ function DiaryScreenContent() {
   }, [familyId]));
 
   async function loadEntries() {
-    const e = await getDiaryEntries(familyId);
-    setEntries(e);
+    // 先显示本地缓存
+    const local = await getDiaryEntries(familyId);
+    if (local.length > 0) setEntries(local);
+    // 从云端拉取所有人的日记（主照顾者 + joiner），确保多设备同步
+    try {
+      const cloudEntries = await cloudGetDiaries();
+      if (cloudEntries && cloudEntries.length > 0) {
+        // 将云端日记转换为本地格式并合并
+        const merged = mergeCloudDiaries(local, cloudEntries);
+        setEntries(merged);
+        // 同时写入本地缓存，下次打开时立即可见
+        const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+        const key = familyId ? `diary_entries:${familyId}` : 'diary_entries';
+        await AsyncStorage.setItem(key, JSON.stringify(merged));
+      }
+    } catch (e) {
+      console.warn('[Diary] cloudGetDiaries failed, using local only:', e);
+    }
+  }
+
+  /** 合并云端日记到本地：以 serverDiaryId 去重，云端优先 */
+  function mergeCloudDiaries(local: DiaryEntry[], cloud: any[]): DiaryEntry[] {
+    const merged = [...local];
+    const localServerIds = new Set(local.filter(d => d.serverDiaryId).map(d => d.serverDiaryId));
+    for (const c of cloud) {
+      if (localServerIds.has(c.id)) continue; // 已存在
+      // 云端日记转换为本地格式
+      merged.push({
+        id: `cloud_${c.id}`,
+        serverDiaryId: c.id,
+        date: c.date,
+        content: c.content || '',
+        moodEmoji: c.moodEmoji || '😊',
+        moodLabel: c.moodLabel,
+        moodScore: c.moodScore,
+        tags: c.tags,
+        createdAt: c.createdAt,
+        caregiverMoodEmoji: c.caregiverMoodEmoji,
+        caregiverMoodLabel: c.caregiverMoodLabel,
+        authorName: c.authorName || c.author?.name,
+        aiReply: c.aiReply,
+        aiEmoji: c.aiEmoji,
+        aiTip: c.aiTip,
+        conversation: c.conversation,
+        conversationFinished: c.conversationFinished ?? true,
+        localTimeStr: c.localTimeStr,
+      });
+    }
+    // 按日期降序排列
+    merged.sort((a, b) => {
+      const da = a.createdAt || a.date;
+      const db = b.createdAt || b.date;
+      return db.localeCompare(da);
+    });
+    return merged;
   }
 
   function openDetail(entryId: string) {
