@@ -215,6 +215,7 @@ export default function OnboardingScreen() {
   const [joinerPhotoUri, setJoinerPhotoUri] = useState<string | undefined>(undefined);
   const [joinerAvatarType, setJoinerAvatarType] = useState<'photo' | 'emoji'>('emoji');
   const [joinerRelationship, setJoinerRelationship] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function pickJoinerPhoto() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -456,6 +457,8 @@ export default function OnboardingScreen() {
   }
 
   async function handleJoinerFinish() {
+    if (isSubmitting) return; // 防止重复点击
+    setIsSubmitting(true);
     // 注意：不在这里做本地 memberships 前置检查，因为用户可能已经重新设置了本地数据
     // 但服务器上仍然有记录。服务器端 joinRoom 会幂等处理（已是成员时返回成功）。
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -481,7 +484,8 @@ export default function OnboardingScreen() {
     });
     if (!result) {
       // Cloud join failed — show error and stay on onboarding
-      Alert.alert('加入失败', '邀请码无效或已过期，请确认后重试。');
+      setIsSubmitting(false);
+      Alert.alert('加入失败', '网络连接失败，请检查网络后重试。');
       return;
     }
     // 保存 joiner 自己的用户信息（头像、名字）到本地，先读取再合并避免覆盖其他字段
@@ -492,6 +496,7 @@ export default function OnboardingScreen() {
       caregiverPhotoUri: finalJoinerPhotoUri,
       caregiverAvatarType: joinerAvatarType === 'photo' ? 'photo' : 'zodiac',
     });
+    setIsSubmitting(false);
     await refresh();
     router.replace('/(tabs)/family');
   }
@@ -1293,11 +1298,13 @@ export default function OnboardingScreen() {
                         : '下一步 →';
           return (
             <TouchableOpacity
-              style={[styles.nextBtn, !canNext && styles.nextBtnDisabled]}
+              style={[styles.nextBtn, (!canNext || isSubmitting) && styles.nextBtnDisabled]}
               onPress={onPress}
-              disabled={!canNext}
+              disabled={!canNext || isSubmitting}
             >
-              <Text style={styles.nextBtnText}>{label}</Text>
+              <Text style={styles.nextBtnText}>
+                {isSubmitting && (isCreatorDone || isJoinerDone) ? '处理中...' : label}
+              </Text>
             </TouchableOpacity>
           );
         })()}
