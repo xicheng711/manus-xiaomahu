@@ -244,6 +244,7 @@ export const familyRouter = router({
       );
 
       return {
+        success: true,
         roomId: room.id,
         roomCode: room?.roomCode,
         elderName: room.elderName,
