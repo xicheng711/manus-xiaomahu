@@ -735,7 +735,7 @@ export default function ShareScreen() {
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
-      if (photoUri) setElderPhotoUri(photoUri);
+      setElderPhotoUri(photoUri);
 
       let ci = await getCheckInByDate(dateStr, familyId);
       // Joiner 本地可能没有历史打卡数据，从云端拉取
@@ -870,7 +870,7 @@ export default function ShareScreen() {
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
-      if (photoUri) setElderPhotoUri(photoUri);
+      setElderPhotoUri(photoUri);
 
       let today = await getTodayCheckIn(familyId);
       let yesterday = await getYesterdayCheckIn(familyId);
@@ -960,7 +960,7 @@ export default function ShareScreen() {
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
-      if (photoUri) setElderPhotoUri(photoUri);
+      setElderPhotoUri(photoUri);
       setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
       setTodayCi(today);
       setYesterdayCi(yesterday);

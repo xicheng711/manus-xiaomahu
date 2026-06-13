@@ -368,9 +368,7 @@ export function JoinerHomeScreen() {
     if (activeMembership) {
       setElderNickname(activeMembership.room.elderName || '家人');
       // 被照顾者头像：优先使用 elderPhotoUri（自定义上传的照片）
-      if (activeMembership.room.elderPhotoUri) {
-        setElderPhotoUri(activeMembership.room.elderPhotoUri);
-      }
+      setElderPhotoUri(activeMembership.room.elderPhotoUri || null);
       // FamilyMember.role 只有 caregiver/family/nurse，没有 elder；用 isCreator 找主照顾者
       const elderMember = activeMembership.room.members.find(m => m.isCreator);
       if (elderMember?.emoji) setElderEmoji(elderMember.emoji);
