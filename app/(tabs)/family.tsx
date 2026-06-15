@@ -449,7 +449,6 @@ export default function FamilyScreen() {
               photoUri,
               joinedAt: x.joinedAt ?? new Date().toISOString(),
               isCreator: x.isCreator ?? false,
-              // Compare member row id (not user id) to correctly identify current user
               isCurrentUser: String(x.id) === String(myMemberId),
               relationship: x.relationship,
             };
@@ -467,6 +466,23 @@ export default function FamilyScreen() {
         }
       } catch (e) {
         console.warn("[Family] getRoomDetail failed", e);
+      }
+    }
+    // 对当前用户的头像补充 caregiverPhotoUri fallback（无论从服务器还是本地加载）
+    if (r?.members) {
+      const up = await getUserProfile();
+      const lp = await getProfile();
+      const cgPhoto = up?.caregiverPhotoUri || lp?.caregiverPhotoUri || null;
+      if (cgPhoto) {
+        r = {
+          ...r,
+          members: r.members.map((mem: any) => {
+            if (String(mem.id) === String(myMemberId) && !mem.photoUri) {
+              return { ...mem, photoUri: cgPhoto };
+            }
+            return mem;
+          }),
+        };
       }
     }
     setRoom(r);
