@@ -353,6 +353,29 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
   );
 }
 
+// ─── Member Avatar Chip (with image error fallback) ─────────────────────────────
+
+function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; isCurrentUser: boolean; onPress: () => void }) {
+  const [imgError, setImgError] = useState(false);
+  return (
+    <TouchableOpacity
+      style={styles.memberChip}
+      onPress={onPress}
+      activeOpacity={isCurrentUser ? 0.7 : 1}
+    >
+      <View style={[styles.memberAvatar, { backgroundColor: m.color + '22', borderColor: m.color + '99' }]}>
+        {m.photoUri && !imgError ? (
+          <Image source={{ uri: m.photoUri }} style={styles.memberAvatarImg} onError={() => setImgError(true)} />
+        ) : (
+          <Text style={styles.memberAvatarText}>{m.emoji}</Text>
+        )}
+      </View>
+      <Text style={styles.memberName}>{m.name}</Text>
+      <Text style={styles.memberRole}>{m.roleLabel}</Text>
+    </TouchableOpacity>
+  );
+}
+
 // ─── Main Family Screen ────────────────────────────────────────────────────────
 
 export default function FamilyScreen() {
@@ -477,7 +500,9 @@ export default function FamilyScreen() {
         r = {
           ...r,
           members: r.members.map((mem: any) => {
-            if (String(mem.id) === String(myMemberId) && !mem.photoUri) {
+            // 匹配当前用户：通过 myMemberId 或 isCurrentUser 标记
+            const isMe = String(mem.id) === String(myMemberId) || mem.isCurrentUser;
+            if (isMe && !mem.photoUri) {
               return { ...mem, photoUri: cgPhoto };
             }
             return mem;
@@ -711,27 +736,16 @@ export default function FamilyScreen() {
       {/* ── Members row ── */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.membersScroll} contentContainerStyle={styles.membersContent}>
         {room.members.map(m => (
-          <TouchableOpacity
+          <MemberAvatarChip
             key={m.id}
-            style={styles.memberChip}
+            member={m}
+            isCurrentUser={currentMember?.id === m.id}
             onPress={() => {
-              // 只有当前用户点击自己的头像时跳转到 profile 页编辑
               if (currentMember && currentMember.id === m.id) {
                 router.push('/profile' as any);
               }
             }}
-            activeOpacity={currentMember?.id === m.id ? 0.7 : 1}
-          >
-            <View style={[styles.memberAvatar, { backgroundColor: m.color + '22', borderColor: m.color + '99' }]}>
-              {m.photoUri ? (
-                <Image source={{ uri: m.photoUri }} style={styles.memberAvatarImg} />
-              ) : (
-                <Text style={styles.memberAvatarText}>{m.emoji}</Text>
-              )}
-            </View>
-            <Text style={styles.memberName}>{m.name}</Text>
-            <Text style={styles.memberRole}>{m.roleLabel}</Text>
-          </TouchableOpacity>
+          />
         ))}
         <TouchableOpacity style={styles.addMemberChip} onPress={() => setShowInviteModal(true)}>
           <View style={styles.addMemberBtn}>
