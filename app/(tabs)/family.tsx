@@ -457,9 +457,9 @@ export default function FamilyScreen() {
           const localMembersMap = new Map((rLocal?.members ?? []).map((lm: any) => [String(lm.id), lm]));
           const serverMembers = (detail.members ?? []).map((x: any) => {
             const localMember = localMembersMap.get(String(x.id));
-            // Only use server photoUri if it's a valid https:// URL (not a local file:// path)
-            // Fall back to local photoUri (could be a temporary local URI during upload)
-            const serverPhotoUri = x.photoUri && x.photoUri.startsWith('https://') ? x.photoUri : null;
+            // 接受任何非空 photoUri（包括 http://、自定义域名等），不强制要求 https://
+            // 本地 file:// URI 不应存在于服务器，所以直接优先用服务器返回的地址
+            const serverPhotoUri = x.photoUri || null;
             const localPhotoUri = localMember?.photoUri || undefined;
             const photoUri = serverPhotoUri || localPhotoUri;
             return {
@@ -502,7 +502,8 @@ export default function FamilyScreen() {
           members: r.members.map((mem: any) => {
             // 匹配当前用户：通过 myMemberId 或 isCurrentUser 标记
             const isMe = String(mem.id) === String(myMemberId) || mem.isCurrentUser;
-            if (isMe && !mem.photoUri) {
+            // 用 !mem.photoUri || mem.photoUri === '' 确保空字符串也触发 fallback
+            if (isMe && (!mem.photoUri || mem.photoUri === '')) {
               return { ...mem, photoUri: cgPhoto };
             }
             return mem;

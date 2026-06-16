@@ -109,9 +109,8 @@ async function navigateAfterLogin(router: Router) {
               const { getUserProfile, saveUserProfile } = await import('@/lib/storage');
               const existing = await getUserProfile();
               const updatedName = myMember.name || existing?.caregiverName;
-              const updatedPhoto = (myMember.photoUri && myMember.photoUri.startsWith('https://'))
-                ? myMember.photoUri
-                : existing?.caregiverPhotoUri;
+              // 接受任何非空 photoUri（包括 http://、自定义域名等），不强制要求 https://
+              const updatedPhoto = myMember.photoUri || existing?.caregiverPhotoUri;
               if (updatedName || updatedPhoto) {
                 await saveUserProfile({
                   ...existing,

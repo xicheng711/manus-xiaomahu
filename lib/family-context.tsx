@@ -130,7 +130,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             });
             const updatedRoom = {
               ...membership.room,
-              elderPhotoUri: detail.room?.elderPhotoUri && detail.room.elderPhotoUri.startsWith('https://') ? detail.room.elderPhotoUri : membership.room.elderPhotoUri,
+              elderPhotoUri: detail.room?.elderPhotoUri || membership.room.elderPhotoUri,
               members: serverMembers.length > 0 ? serverMembers : membership.room.members,
             };
             const updatedMembership = {
@@ -215,19 +215,31 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
           await refresh();
           return;
         }
-        const serverMembers: FamilyMember[] = (detail.members ?? []).map((m: any) => ({
-          id: String(m.id),
-          name: m.name,
-          role: m.role ?? 'family',
-          roleLabel: m.roleLabel ?? m.role ?? '家人',
-          emoji: m.emoji ?? '👤',
-          color: m.color ?? '#888',
-          photoUri: m.photoUri,
-          joinedAt: m.joinedAt ?? new Date().toISOString(),
-          isCreator: m.isCreator ?? false,
-          isCurrentUser: false,
-          relationship: m.relationship,
-        }));
+        // 提前读取当前用户的本地头像，用于 fallback
+        const [_swUp, _swLp] = await Promise.all([
+          getUserProfile().catch(() => null),
+          getProfile().catch(() => null),
+        ]);
+        const swLocalCaregiverPhoto = _swUp?.caregiverPhotoUri || _swLp?.caregiverPhotoUri || null;
+        const serverMembers: FamilyMember[] = (detail.members ?? []).map((m: any) => {
+          const isCurrentUser = String(m.id) === String(target.myMemberId);
+          const localMemberPhoto = target.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined;
+          // 三层 fallback：服务器 URL → 本地已保存的旧 URL → 当前用户的 caregiverPhotoUri
+          const photoUri = m.photoUri || localMemberPhoto || (isCurrentUser ? swLocalCaregiverPhoto ?? undefined : undefined);
+          return {
+            id: String(m.id),
+            name: m.name,
+            role: m.role ?? 'family',
+            roleLabel: m.roleLabel ?? m.role ?? '家人',
+            emoji: m.emoji ?? '👤',
+            color: m.color ?? '#888',
+            photoUri,
+            joinedAt: m.joinedAt ?? new Date().toISOString(),
+            isCreator: m.isCreator ?? false,
+            isCurrentUser,
+            relationship: m.relationship,
+          };
+        });
         const updatedRoom = {
           id: String(serverRoomId),
           roomCode: detail.room.roomCode ?? target.room.roomCode,

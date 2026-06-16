@@ -356,17 +356,18 @@ function DiaryScreenContent() {
   function mergeCloudDiaries(local: DiaryEntry[], cloud: any[]): DiaryEntry[] {
     const merged = [...local];
     const localServerIds = new Set(local.filter(d => d.serverDiaryId).map(d => d.serverDiaryId));
-    // 同时按 date+authorName 去重，防止 serverDiaryId 未写入时重复
-    const localDateAuthorKeys = new Set(
-      local.map(d => `${d.date}__${d.authorName ?? ''}`.toLowerCase())
-    );
     for (const c of cloud) {
       if (localServerIds.has(c.id)) continue; // 已存在（通过 serverDiaryId 匹配）
-      // 如果本地已有同一天同一作者的日记，更新 serverDiaryId 而不是新建
-      const dateAuthorKey = `${c.date}__${(c.authorName || c.author?.name) ?? ''}`.toLowerCase();
-      const existingIdx = merged.findIndex(
-        d => `${d.date}__${d.authorName ?? ''}`.toLowerCase() === dateAuthorKey && !d.serverDiaryId
-      );
+      const cloudAuthorName = (c.authorName || c.author?.name || '').toLowerCase();
+      const cloudDate = c.date;
+      // 策略：先尝试按 date+authorName 匹配（包括 authorName 为空的情况）
+      const existingIdx = merged.findIndex(d => {
+        if (d.serverDiaryId) return false; // 已有 serverDiaryId 的不覆盖
+        if (d.date !== cloudDate) return false;
+        const localAuthor = (d.authorName || '').toLowerCase();
+        // 匹配条件：两者 authorName 都为空（主照顾者本人的日记），或两者相同
+        return localAuthor === cloudAuthorName;
+      });
       if (existingIdx >= 0) {
         // 补充 serverDiaryId 到已有条目，不新建
         merged[existingIdx] = { ...merged[existingIdx], serverDiaryId: c.id };
