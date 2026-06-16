@@ -16,6 +16,8 @@ import {
   clearScopedFamilyData,
   setActiveRoomIdCache,
   addOrUpdateMembership,
+  getUserProfile,
+  getProfile,
 } from './storage';
 import {
   setCloudSyncState,
@@ -94,6 +96,12 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
           }
         }
         // 同步每个家庭的成员头像（从服务器拉取 https:// URL）
+        // 提前读取当前用户的本地头像，用于 fallback
+        const [_up, _lp] = await Promise.all([
+          getUserProfile().catch(() => null),
+          getProfile().catch(() => null),
+        ]);
+        const localCaregiverPhoto = _up?.caregiverPhotoUri || _lp?.caregiverPhotoUri || null;
         for (const sr of serverRooms) {
           try {
             const roomId = String(sr.roomId);
@@ -101,19 +109,25 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             if (!membership) continue;
             const detail = await cloudGetRoomDetail(parseInt(roomId));
             if (!detail?.members) continue;
-            const serverMembers: import('./storage').FamilyMember[] = detail.members.map((m: any) => ({
-              id: String(m.id),
-              name: m.name,
-              role: m.role ?? 'family',
-              roleLabel: m.roleLabel ?? m.role ?? '家人',
-              emoji: m.emoji ?? '👤',
-              color: m.color ?? '#888',
-              photoUri: m.photoUri && m.photoUri.startsWith('https://') ? m.photoUri : (membership.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined),
-              joinedAt: m.joinedAt ?? new Date().toISOString(),
-              isCreator: m.isCreator ?? false,
-              isCurrentUser: String(m.id) === String(membership.myMemberId),
-              relationship: m.relationship,
-            }));
+            const serverMembers: import('./storage').FamilyMember[] = detail.members.map((m: any) => {
+              const isCurrentUser = String(m.id) === String(membership.myMemberId);
+              const localMemberPhoto = membership.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined;
+              // 优先用服务器 URL，其次用本地已保存的旧 URL，最后对当前用户用本地 caregiverPhotoUri
+              const photoUri = m.photoUri || localMemberPhoto || (isCurrentUser ? localCaregiverPhoto ?? undefined : undefined);
+              return {
+                id: String(m.id),
+                name: m.name,
+                role: m.role ?? 'family',
+                roleLabel: m.roleLabel ?? m.role ?? '家人',
+                emoji: m.emoji ?? '👤',
+                color: m.color ?? '#888',
+                photoUri,
+                joinedAt: m.joinedAt ?? new Date().toISOString(),
+                isCreator: m.isCreator ?? false,
+                isCurrentUser,
+                relationship: m.relationship,
+              };
+            });
             const updatedRoom = {
               ...membership.room,
               elderPhotoUri: detail.room?.elderPhotoUri && detail.room.elderPhotoUri.startsWith('https://') ? detail.room.elderPhotoUri : membership.room.elderPhotoUri,
@@ -122,7 +136,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             const updatedMembership = {
               ...membership,
               room: updatedRoom,
-              memberPhotoUri: sr.memberPhotoUri && sr.memberPhotoUri.startsWith('https://') ? sr.memberPhotoUri : membership.memberPhotoUri,
+              memberPhotoUri: sr.memberPhotoUri || membership.memberPhotoUri,
             };
             await saveFamilyRoom(updatedRoom);
             await addOrUpdateMembership(updatedMembership);
