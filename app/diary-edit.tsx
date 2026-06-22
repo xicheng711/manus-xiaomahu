@@ -280,12 +280,50 @@ export default function DiaryEditScreen() {
     if (!entry) {
       try {
         const cloudEntries = await cloudGetDiaries();
-        // 云端 id 是数字，本地传入的 id 可能是字符串形式的数字
+        // 云端 id 是数字，本地传入的 id 可能是 "cloud_123" 或纯数字字符串
+        // 剥离 cloud_ 前缀后再比较
+        const numericId = String(id).replace(/^cloud_/, '');
         const matched = cloudEntries.find(
-          (e: any) => String(e.id) === String(id)
+          (e: any) => String(e.id) === numericId
         );
         if (matched) {
-          entry = matched as unknown as DiaryEntry;
+          // 将云端日记规范化为本地格式，并写入本地存储，确保后续操作能正常进行
+          const localId = `cloud_${matched.id}`;
+          const normalized: any = {
+            id: localId,
+            serverDiaryId: matched.id,
+            date: matched.date,
+            content: matched.content || '',
+            moodEmoji: matched.moodEmoji || '😊',
+            moodLabel: matched.moodLabel,
+            moodScore: matched.moodScore,
+            tags: matched.tags,
+            createdAt: matched.createdAt,
+            caregiverMoodEmoji: matched.caregiverMoodEmoji,
+            caregiverMoodLabel: matched.caregiverMoodLabel,
+            authorName: matched.authorName || (matched as any).author?.name,
+            aiReply: matched.aiReply,
+            aiEmoji: matched.aiEmoji,
+            aiTip: matched.aiTip,
+            conversation: matched.conversation,
+            conversationFinished: matched.conversationFinished ?? true,
+            localTimeStr: matched.localTimeStr,
+          };
+          // 写入本地缓存（如果本地还没有这条）
+          try {
+            const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+            const existingLocal = await getDiaryEntries(familyId);
+            const alreadyExists = existingLocal.some(d => d.id === localId || d.serverDiaryId === matched.id);
+            if (!alreadyExists) {
+              const storageKey = familyId ? `diary_entries:${familyId}` : 'diary_entries';
+              await AsyncStorage.setItem(storageKey, JSON.stringify([normalized, ...existingLocal]));
+            }
+          } catch (saveErr) {
+            console.warn('[DiaryEdit] failed to cache cloud entry locally:', saveErr);
+          }
+          // 更新 entryId 为本地格式
+          setEntryId(localId);
+          entry = normalized as DiaryEntry;
         }
       } catch (e) {
         console.warn('[DiaryEdit] cloudGetDiaries fallback failed:', e);

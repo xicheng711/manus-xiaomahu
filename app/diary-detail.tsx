@@ -62,10 +62,12 @@ export default function DiaryDetailScreen() {
     if (id) {
       let e: DiaryEntry | null = await getDiaryEntryById(id);
       // readOnly 模式（joiner 查看）：本地找不到时从云端拉取
-      if (!e && isReadOnly) {
+      if (!e) {
         try {
           const cloudEntries = await cloudGetDiaries();
-          const matched = cloudEntries.find((ce: any) => String(ce.id) === String(id));
+          // 剥离 cloud_ 前缀后再与云端数字 id 比较
+          const numericId = String(id).replace(/^cloud_/, '');
+          const matched = cloudEntries.find((ce: any) => String(ce.id) === numericId);
           if (matched) e = matched as unknown as DiaryEntry;
         } catch (err) {
           console.warn('[DiaryDetail] cloud fallback failed:', err);
