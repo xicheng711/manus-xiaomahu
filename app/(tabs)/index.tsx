@@ -511,8 +511,9 @@ function CreatorHomeScreen() {
     const member = await getCurrentMember();
     // 头像加载：主动从云端拉取最新 room detail，确保头像是最新的
     let resolvedPhotoUri: string | null = null;
+    let serverHasPhoto = false;
+    const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : null;
     try {
-      const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : null;
       if (roomId && !isNaN(roomId)) {
         const detail = await cloudGetRoomDetail(roomId);
         if (detail?.members) {
@@ -521,6 +522,7 @@ function CreatorHomeScreen() {
           );
           if (freshMember?.photoUri && !freshMember.photoUri.startsWith('file://')) {
             resolvedPhotoUri = freshMember.photoUri;
+            serverHasPhoto = true;
           }
         }
       }
@@ -528,6 +530,7 @@ function CreatorHomeScreen() {
       console.warn('[Home] cloudGetRoomDetail for avatar failed:', e);
     }
     // 降级顺序：云端最新 > activeMembership 缓存 > caregiverPhotoUri > member.photoUri
+    // 允许 file:// 路径作为最后的 fallback（本地照片在同一设备上可以正常显示）
     if (!resolvedPhotoUri) {
       const cachedMember = activeMembership?.room?.members?.find(
         (m: any) => m.isCurrentUser || (member?.id && String(m.id) === String(member.id))
@@ -535,11 +538,18 @@ function CreatorHomeScreen() {
       const cachedPhotoUri = cachedMember?.photoUri;
       const caregiverPhotoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
       const memberPhotoUriVal = member?.photoUri;
+      // 优先用非 file:// 的 URL（云端 URL）
       resolvedPhotoUri =
         (cachedPhotoUri && !cachedPhotoUri.startsWith('file://') ? cachedPhotoUri : null) ??
         (caregiverPhotoUri && !caregiverPhotoUri.startsWith('file://') ? caregiverPhotoUri : null) ??
         (memberPhotoUriVal && !memberPhotoUriVal.startsWith('file://') ? memberPhotoUriVal : null) ??
-        null;
+        // 如果没有云端 URL，允许 file:// 本地路径作为 fallback
+        cachedPhotoUri ?? caregiverPhotoUri ?? memberPhotoUriVal ?? null;
+    }
+    // 如果服务器端没有头像但本地有非 file:// 的 URL，自动同步到服务器（修复旧版上传失败的情况）
+    if (!serverHasPhoto && resolvedPhotoUri && !resolvedPhotoUri.startsWith('file://') && roomId && !isNaN(roomId)) {
+      const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
+      cloudUpdateMemberProfile({ roomId, photoUri: resolvedPhotoUri }).catch(() => {});
     }
     setMemberPhotoUri(resolvedPhotoUri);
     if (resolvedPhotoUri) { setPhotoLoadError(false); }

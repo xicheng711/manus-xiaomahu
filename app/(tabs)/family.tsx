@@ -497,6 +497,7 @@ export default function FamilyScreen() {
       const lp = await getProfile();
       const cgPhoto = up?.caregiverPhotoUri || lp?.caregiverPhotoUri || null;
       if (cgPhoto) {
+        let needsServerSync = false;
         r = {
           ...r,
           members: r.members.map((mem: any) => {
@@ -504,11 +505,17 @@ export default function FamilyScreen() {
             const isMe = String(mem.id) === String(myMemberId) || mem.isCurrentUser;
             // 用 !mem.photoUri || mem.photoUri === '' 确保空字符串也触发 fallback
             if (isMe && (!mem.photoUri || mem.photoUri === '')) {
+              needsServerSync = true;
               return { ...mem, photoUri: cgPhoto };
             }
             return mem;
           }),
         };
+        // 如果服务器端没有头像但本地有，自动同步到服务器（修复旧版上传失败的情况）
+        if (needsServerSync && cgPhoto && !cgPhoto.startsWith('file://') && activeRoomId) {
+          const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
+          cloudUpdateMemberProfile({ roomId: Number(activeRoomId), photoUri: cgPhoto }).catch(() => {});
+        }
       }
     }
     setRoom(r);

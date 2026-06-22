@@ -60,49 +60,65 @@ const DIARY_CHAT_SYSTEM = `你是"小马虎"，一个陪伴照顾者的朋友。
 - 用中文，口语化`;
 
 // 支持多轮对话的 chat 函数（直接返回文本，不需要 JSON）
+// 内置 fallback：先尝试 qwen-plus，失败后尝试 qwen-turbo
 async function callQwenChat(
   messages: Array<{role: 'system' | 'user' | 'assistant', content: string}>,
   retries = 2,
   maxTokens = 300
 ): Promise<string> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const result = await invokeLLM({ messages, maxTokens });
-      const raw = (result.choices?.[0]?.message?.content as string) ?? '';
-      return raw.trim();
-    } catch (e) {
-      console.error(`callQwenChat attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
-      if (attempt === retries) throw e;
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+  const models = ['qwen-plus', 'qwen-turbo'];
+  let lastError: any = null;
+  for (const model of models) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const result = await invokeLLM({ messages, maxTokens, model });
+        const raw = (result.choices?.[0]?.message?.content as string) ?? '';
+        if (raw.trim()) return raw.trim();
+      } catch (e) {
+        lastError = e;
+        console.error(`callQwenChat [${model}] attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        }
+      }
     }
+    console.warn(`callQwenChat: ${model} all attempts failed, trying next model...`);
   }
-  return '';
+  throw lastError || new Error('All LLM models failed');
 }
 
 async function callQwen(prompt: string, systemPrompt: string, retries = 2, maxTokens = 2000): Promise<string> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const result = await invokeLLM({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        maxTokens,
-      });
-      const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
+  const models = ['qwen-plus', 'qwen-turbo'];
+  let lastError: any = null;
+  for (const model of models) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        return extractJSON(raw);
+        const result = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ],
+          maxTokens,
+          model,
+        });
+        const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
+        try {
+          return extractJSON(raw);
+        } catch (e) {
+          console.warn(`Qwen [${model}] JSON parse attempt ${attempt + 1} failed, raw length: ${raw.length}, raw: ${raw.slice(0, 200)}`);
+          if (attempt === retries) { lastError = e; break; }
+        }
       } catch (e) {
-        console.warn(`Qwen JSON parse attempt ${attempt + 1} failed, raw length: ${raw.length}, raw: ${raw.slice(0, 200)}`);
-        if (attempt === retries) throw e;
+        lastError = e;
+        console.error(`Qwen [${model}] API call attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        }
       }
-    } catch (e) {
-      console.error(`Qwen API call attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
-      if (attempt === retries) throw e;
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
     }
+    console.warn(`callQwen: ${model} all attempts failed, trying next model...`);
   }
-  return "{}";
+  throw lastError || new Error('All LLM models failed');
 }
 
 async function getWeatherForCity(city: string): Promise<{ temp: number; description: string; icon: string; isHot: boolean; isCold: boolean; isRainy: boolean } | null> {
@@ -466,7 +482,7 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
         console.error("Diary reply error:", e instanceof Error ? e.message : e);
         return {
           success: false,
-          reply: `今天的记录收到了，${caregiverName}辛苦了。`,
+          reply: `抱歉，小马虎现在有点忙不过来，记录已保存。稍后我会回复您的 📝`,
           emoji: "💛",
         };
       }
@@ -529,7 +545,7 @@ ${checkIn.notes ? `- 照顾者备注：${checkIn.notes}` : ""}
         return { success: true, reply: reply || '嗯嗯~' };
       } catch (e) {
         console.error('followUpDiary error:', e instanceof Error ? e.message : e);
-        return { success: false, reply: '嗯，有事随时说~' };
+        return { success: false, reply: '抱歉，小马虎现在有点忙不过来，请稍后再试试吧。您的记录已经保存好了 📝' };
       }
     }),
   weeklyEcho: publicProcedure
