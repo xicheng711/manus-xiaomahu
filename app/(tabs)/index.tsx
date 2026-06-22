@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
+import { cloudGetRoomDetail } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiacFromDate } from '@/lib/zodiac';
 import { TrendChart } from '@/components/trend-chart';
@@ -508,22 +509,38 @@ function CreatorHomeScreen() {
     // 3. member.photoUri (from getCurrentMember) — set by member upload
     // Use whichever is a valid https:// URL, or fall back to any non-null value
     const member = await getCurrentMember();
-    // 从 activeMembership.room.members 中找当前用户的云端头像
-    const cloudMember = activeMembership?.room?.members?.find(
-      (m: any) => m.isCurrentUser || (member?.id && String(m.id) === String(member.id))
-    );
-    const cloudMemberPhotoUri = cloudMember?.photoUri && cloudMember.photoUri.startsWith('https://')
-      ? cloudMember.photoUri : null;
-    const caregiverPhotoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
-    const memberPhotoUriVal = member?.photoUri;
-    // Prefer https:// URLs, then any available URI
-    const resolvedPhotoUri =
-      cloudMemberPhotoUri ??
-      (caregiverPhotoUri?.startsWith('https://') ? caregiverPhotoUri : null) ??
-      (memberPhotoUriVal?.startsWith('https://') ? memberPhotoUriVal : null) ??
-      caregiverPhotoUri ??
-      memberPhotoUriVal ??
-      null;
+    // 头像加载：主动从云端拉取最新 room detail，确保头像是最新的
+    let resolvedPhotoUri: string | null = null;
+    try {
+      const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : null;
+      if (roomId && !isNaN(roomId)) {
+        const detail = await cloudGetRoomDetail(roomId);
+        if (detail?.members) {
+          const freshMember = detail.members.find(
+            (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(activeMembership?.myMemberId)
+          );
+          if (freshMember?.photoUri && !freshMember.photoUri.startsWith('file://')) {
+            resolvedPhotoUri = freshMember.photoUri;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Home] cloudGetRoomDetail for avatar failed:', e);
+    }
+    // 降级顺序：云端最新 > activeMembership 缓存 > caregiverPhotoUri > member.photoUri
+    if (!resolvedPhotoUri) {
+      const cachedMember = activeMembership?.room?.members?.find(
+        (m: any) => m.isCurrentUser || (member?.id && String(m.id) === String(member.id))
+      );
+      const cachedPhotoUri = cachedMember?.photoUri;
+      const caregiverPhotoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
+      const memberPhotoUriVal = member?.photoUri;
+      resolvedPhotoUri =
+        (cachedPhotoUri && !cachedPhotoUri.startsWith('file://') ? cachedPhotoUri : null) ??
+        (caregiverPhotoUri && !caregiverPhotoUri.startsWith('file://') ? caregiverPhotoUri : null) ??
+        (memberPhotoUriVal && !memberPhotoUriVal.startsWith('file://') ? memberPhotoUriVal : null) ??
+        null;
+    }
     setMemberPhotoUri(resolvedPhotoUri);
     if (resolvedPhotoUri) { setPhotoLoadError(false); }
     setCaregiverName(cgName);

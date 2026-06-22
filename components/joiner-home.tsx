@@ -18,7 +18,7 @@ import {
   upsertCheckIn,
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember,
 } from '@/lib/storage';
-import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements } from '@/lib/cloud-sync';
+import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements, cloudGetRoomDetail } from '@/lib/cloud-sync';
 import { TrendChart } from '@/components/trend-chart';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { SHADOWS } from '@/lib/animations';
@@ -381,18 +381,39 @@ export function JoinerHomeScreen() {
     }
     const member = await getCurrentMember();
     setCurrentMember(member);
-    // 头像优先级：云端 member.photoUri（S3 URL）> 本地 member.photoUri > profile 照片 > emoji
-    // 从 activeMembership.room.members 中找当前用户的云端 photoUri
-    const cloudMember = activeMembership?.room?.members?.find(
-      (m: any) => m.isCurrentUser || String(m.id) === String(member?.id)
-    );
-    const cloudPhotoUri = cloudMember?.photoUri || null;
-    if (cloudPhotoUri) {
-      setMemberPhotoUri(cloudPhotoUri);
-      setPhotoLoadError(false);
-      setZodiacEmoji('');
-    } else if (member?.photoUri) {
-      setMemberPhotoUri(member.photoUri);
+    // 头像优先级：主动从云端拉取最新 room detail，确保头像是最新的
+    // 而不是依赖可能过期的 activeMembership 缓存
+    let resolvedMemberPhotoUri: string | null = null;
+    try {
+      const familyId = activeMembership?.familyId;
+      const roomId = familyId ? parseInt(familyId) : null;
+      if (roomId && !isNaN(roomId)) {
+        const detail = await cloudGetRoomDetail(roomId);
+        if (detail?.members) {
+          const freshMember = detail.members.find(
+            (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(activeMembership?.myMemberId)
+          );
+          if (freshMember?.photoUri) {
+            resolvedMemberPhotoUri = freshMember.photoUri;
+          }
+          // 同时更新被照者头像（主照顾者上传后 Joiner 能看到）
+          if (detail.room?.elderPhotoUri) {
+            setElderPhotoUri(detail.room.elderPhotoUri);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[JoinerHome] cloudGetRoomDetail for avatar failed:', e);
+    }
+    // 降级顺序：云端最新 > activeMembership 缓存 > 本地 member.photoUri
+    if (!resolvedMemberPhotoUri) {
+      const cachedMember = activeMembership?.room?.members?.find(
+        (m: any) => m.isCurrentUser || String(m.id) === String(member?.id)
+      );
+      resolvedMemberPhotoUri = cachedMember?.photoUri || member?.photoUri || null;
+    }
+    if (resolvedMemberPhotoUri) {
+      setMemberPhotoUri(resolvedMemberPhotoUri);
       setPhotoLoadError(false);
       setZodiacEmoji('');
     } else {

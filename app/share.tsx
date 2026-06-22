@@ -16,7 +16,7 @@ import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 import { useWeather } from '@/lib/weather-context';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetCheckIns, cloudGetBriefings } from '@/lib/cloud-sync';
+import { cloudGetCheckIns, cloudGetBriefings, cloudGetRoomDetail } from '@/lib/cloud-sync';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -731,11 +731,19 @@ export default function ShareScreen() {
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
-      const photoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      // 主动从云端拉取最新被照者头像
+      let elderPhotoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      try {
+        const roomId = familyId ? parseInt(familyId) : null;
+        if (roomId && !isNaN(roomId)) {
+          const detail = await cloudGetRoomDetail(roomId);
+          if (detail?.room?.elderPhotoUri) elderPhotoUri = detail.room.elderPhotoUri;
+        }
+      } catch (e) { /* 网络不可用时降级到本地缓存 */ }
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
-      setElderPhotoUri(photoUri);
+      setElderPhotoUri(elderPhotoUri);
 
       let ci = await getCheckInByDate(dateStr, familyId);
       // Joiner 本地可能没有历史打卡数据，从云端拉取
@@ -866,11 +874,19 @@ export default function ShareScreen() {
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
-      const photoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      // 主动从云端拉取最新被照者头像
+      let elderPhotoUri2 = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      try {
+        const roomId2 = familyId ? parseInt(familyId) : null;
+        if (roomId2 && !isNaN(roomId2)) {
+          const detail2 = await cloudGetRoomDetail(roomId2);
+          if (detail2?.room?.elderPhotoUri) elderPhotoUri2 = detail2.room.elderPhotoUri;
+        }
+      } catch (e) { /* 网络不可用时降级到本地缓存 */ }
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
-      setElderPhotoUri(photoUri);
+      setElderPhotoUri(elderPhotoUri2);
 
       let today = await getTodayCheckIn(familyId);
       let yesterday = await getYesterdayCheckIn(familyId);
@@ -956,11 +972,19 @@ export default function ShareScreen() {
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
-      const photoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      // 主动从云端拉取最新被照者头像
+      let photoUri3 = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      try {
+        const roomId3 = familyId ? parseInt(familyId) : null;
+        if (roomId3 && !isNaN(roomId3)) {
+          const detail3 = await cloudGetRoomDetail(roomId3);
+          if (detail3?.room?.elderPhotoUri) photoUri3 = detail3.room.elderPhotoUri;
+        }
+      } catch (e) { /* 网络不可用时降级到本地缓存 */ }
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
-      setElderPhotoUri(photoUri);
+      setElderPhotoUri(photoUri3);
       setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
       setTodayCi(today);
       setYesterdayCi(yesterday);
