@@ -202,15 +202,12 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
+// 强制使用阿里云 DashScope API（通义千问），不走 Forge 代理
 const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+  "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
-const resolveApiKey = () =>
-  ENV.dashscopeApiKey && ENV.dashscopeApiKey.trim().length > 0
-    ? ENV.dashscopeApiKey
-    : ENV.forgeApiKey;
+// 强制使用 DASHSCOPE_API_KEY，不 fallback 到 forgeApiKey
+const resolveApiKey = () => ENV.dashscopeApiKey;
 
 const assertApiKey = () => {
   if (!resolveApiKey()) {
@@ -273,7 +270,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: params.model || "qwen-plus",
+    model: params.model || "qwen3.7-plus",
     messages: messages.map(normalizeMessage),
   };
 

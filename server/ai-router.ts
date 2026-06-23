@@ -60,13 +60,13 @@ const DIARY_CHAT_SYSTEM = `你是"小马虎"，一个陪伴照顾者的朋友。
 - 用中文，口语化`;
 
 // 支持多轮对话的 chat 函数（直接返回文本，不需要 JSON）
-// 内置 fallback：先尝试 qwen-plus，失败后尝试 qwen-turbo
+// 统一使用阿里云通义千问 qwen3.7-plus
 async function callQwenChat(
   messages: Array<{role: 'system' | 'user' | 'assistant', content: string}>,
   retries = 2,
   maxTokens = 300
 ): Promise<string> {
-  const models = ['qwen-plus', 'qwen-turbo'];
+  const models = ['qwen3.7-plus'];
   let lastError: any = null;
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -88,7 +88,8 @@ async function callQwenChat(
 }
 
 async function callQwen(prompt: string, systemPrompt: string, retries = 2, maxTokens = 2000): Promise<string> {
-  const models = ['qwen-plus', 'qwen-turbo'];
+  // 统一使用阿里云通义千问 qwen3.7-plus
+  const models = ['qwen3.7-plus'];
   let lastError: any = null;
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
