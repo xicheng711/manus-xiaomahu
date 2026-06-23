@@ -64,6 +64,7 @@ export type InvokeParams = {
   output_schema?: OutputSchema;
   responseFormat?: ResponseFormat;
   response_format?: ResponseFormat;
+  extra_body?: Record<string, unknown>;
 };
 
 export type ToolCall = {
@@ -295,6 +296,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   if (normalizedResponseFormat) {
     payload.response_format = normalizedResponseFormat;
+  }
+
+  // 展开额外参数（如 enable_thinking）
+  if (params.extra_body) {
+    Object.assign(payload, params.extra_body);
   }
 
   const response = await fetch(resolveApiUrl(), {

@@ -71,7 +71,7 @@ async function callQwenChat(
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const result = await invokeLLM({ messages, maxTokens, model });
+        const result = await invokeLLM({ messages, maxTokens, model, extra_body: { enable_thinking: false } });
         const raw = (result.choices?.[0]?.message?.content as string) ?? '';
         if (raw.trim()) return raw.trim();
       } catch (e) {
@@ -101,6 +101,7 @@ async function callQwen(prompt: string, systemPrompt: string, retries = 2, maxTo
           ],
           maxTokens,
           model,
+          extra_body: { enable_thinking: false },
         });
         const raw = (result.choices?.[0]?.message?.content as string) ?? "{}";
         try {
