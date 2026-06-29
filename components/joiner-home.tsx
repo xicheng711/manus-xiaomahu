@@ -747,14 +747,22 @@ export function JoinerHomeScreen() {
             {/* 操作按钮：根据打卡状态显示不同内容 */}
             {latestCheckIn?.eveningDone ? (
               <TouchableOpacity
-                style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.peach.primary, alignItems: 'center' }}
+                style={styles.briefingBtn}
                 onPress={() => router.push('/share' as any)}
+                activeOpacity={0.85}
               >
-                <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }}>📋 查看今日简报</Text>
+                <LinearGradient
+                  colors={['#4CAF82', '#3A9E6E', '#2E8B5A']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.briefingBtnGradient}
+                >
+                  <Text style={styles.briefingBtnText}>📋 查看今日简报</Text>
+                  <Text style={styles.briefingBtnArrow}>›</Text>
+                </LinearGradient>
               </TouchableOpacity>
             ) : (
-              <View style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: AppColors.bg.secondary, alignItems: 'center' }}>
-                <Text style={{ fontSize: 13, color: AppColors.text.tertiary }}>
+              <View style={styles.briefingBtnDisabled}>
+                <Text style={styles.briefingBtnDisabledText}>
                   {latestCheckIn?.morningDone
                     ? '☕️ 等待晚间打卡完成后可查看简报'
                     : '🌙 今日暂无打卡记录'}
@@ -898,10 +906,24 @@ const styles = StyleSheet.create({
   tipBannerInner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
-    borderWidth: 1, borderColor: AppColors.peach.primary,
+    borderWidth: 1, borderColor: AppColors.green.primary + '80',
   },
   tipIcon: { fontSize: 20 },
-  tipText: { fontSize: 13, color: AppColors.peach.primary, fontWeight: '600', flex: 1, lineHeight: 19 },
+  tipText: { fontSize: 13, color: AppColors.green.strong, fontWeight: '600', flex: 1, lineHeight: 19 },
+
+  briefingBtn: { marginTop: 14, borderRadius: 14, overflow: 'hidden', ...SHADOWS.sm },
+  briefingBtnGradient: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 13, paddingHorizontal: 20, gap: 6,
+  },
+  briefingBtnText: { fontSize: 14, color: '#fff', fontWeight: '700', letterSpacing: 0.2 },
+  briefingBtnArrow: { fontSize: 18, color: 'rgba(255,255,255,0.85)', fontWeight: '300', marginLeft: 2 },
+  briefingBtnDisabled: {
+    marginTop: 14, paddingVertical: 12, borderRadius: 14,
+    backgroundColor: AppColors.bg.secondary, alignItems: 'center',
+    borderWidth: 1, borderColor: AppColors.border.soft,
+  },
+  briefingBtnDisabledText: { fontSize: 13, color: AppColors.text.tertiary, fontWeight: '500' },
 
   elderCardNew: {
     borderRadius: 20, marginBottom: 16, overflow: 'hidden',

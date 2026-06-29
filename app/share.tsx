@@ -960,15 +960,18 @@ export default function ShareScreen() {
       ]);
       let today = await getTodayCheckIn();
       let yesterday = await getYesterdayCheckIn();
-      // Joiner 本地可能没有打卡数据，从云端拉取
-      if (!today && isJoiner) {
-        const cloudCIs = await cloudGetCheckIns();
+
+      // Joiner：从云端拉取近7天打卡数据，用于填充周趋势图
+      let cloudCIsForWeekly: any[] = [];
+      if (isJoiner) {
+        cloudCIsForWeekly = (await cloudGetCheckIns(undefined, 30)) as any[];
         const todayKey = new Date().toISOString().slice(0, 10);
         const yd = new Date(); yd.setDate(yd.getDate() - 1);
         const yKey = yd.toISOString().slice(0, 10);
-        today = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
-        yesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey) ?? null;
+        if (!today) today = cloudCIsForWeekly.find((ci: any) => ci.date === todayKey) ?? null;
+        if (!yesterday) yesterday = cloudCIsForWeekly.find((ci: any) => ci.date === yKey) ?? null;
       }
+
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
@@ -985,7 +988,28 @@ export default function ShareScreen() {
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
       setElderPhotoUri(photoUri3);
-      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
+
+      // Joiner：用云端打卡数据构建近7天趋势（覆盖本地空数据）
+      if (isJoiner && cloudCIsForWeekly.length > 0) {
+        const today7 = new Date();
+        const joinerWeekly = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(today7);
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          const ci = cloudCIsForWeekly.find((c: any) => c.date === dateStr);
+          return {
+            date: dateStr,
+            sleepHours: ci?.sleepHours ?? 0,
+            awakeHours: ci?.awakeHours ?? 0,
+            nightWakings: ci?.nightWakings ?? 0,
+            napMinutes: ci?.napMinutes ?? (ci?.daytimeNap ? 30 : 0),
+          };
+        });
+        setWeeklyData(joinerWeekly);
+      } else {
+        setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
+      }
+
       setTodayCi(today);
       setYesterdayCi(yesterday);
     } catch {}

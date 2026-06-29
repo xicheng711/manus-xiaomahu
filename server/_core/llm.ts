@@ -203,8 +203,9 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-// 强制使用阿里云 DashScope API（通义千问），不走 Forge 代理
+// 强制使用阿里云工作空间 API（通义千问），不走 Forge 代理
 const resolveApiUrl = () =>
+  process.env.DASHSCOPE_API_URL ||
   "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
 // 强制使用 DASHSCOPE_API_KEY，不 fallback 到 forgeApiKey

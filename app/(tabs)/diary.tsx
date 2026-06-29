@@ -10,7 +10,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries } from '@/lib/cloud-sync';
+import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -337,10 +337,11 @@ function DiaryScreenContent() {
     if (local.length > 0) setEntries(local);
     // 从云端拉取所有人的日记（主照顾者 + joiner），确保多设备同步
     try {
-      const cloudEntries = await cloudGetDiaries();
+      const [cloudEntries, syncState] = await Promise.all([cloudGetDiaries(), getCloudSyncState()]);
+      const currentUserId = syncState.userId;
       if (cloudEntries && cloudEntries.length > 0) {
         // 将云端日记转换为本地格式并合并
-        const merged = mergeCloudDiaries(local, cloudEntries);
+        const merged = mergeCloudDiaries(local, cloudEntries, currentUserId);
         setEntries(merged);
         // 同时写入本地缓存，下次打开时立即可见
         const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
@@ -353,20 +354,26 @@ function DiaryScreenContent() {
   }
 
   /** 合并云端日记到本地：以 serverDiaryId 去重，云端优先 */
-  function mergeCloudDiaries(local: DiaryEntry[], cloud: any[]): DiaryEntry[] {
+  function mergeCloudDiaries(local: DiaryEntry[], cloud: any[], currentUserId?: number | null): DiaryEntry[] {
     const merged = [...local];
     const localServerIds = new Set(local.filter(d => d.serverDiaryId).map(d => d.serverDiaryId));
     for (const c of cloud) {
       if (localServerIds.has(c.id)) continue; // 已存在（通过 serverDiaryId 匹配）
       const cloudAuthorName = (c.authorName || c.author?.name || '').toLowerCase();
+      const cloudAuthorUserId = c.authorUserId; // 服务端返回的作者 userId
       const cloudDate = c.date;
-      // 策略：先尝试按 date+authorName 匹配（包括 authorName 为空的情况）
+      // 策略：匹配本地已有条目（避免重复添加）
+      // 条件 1：authorName 非空且相同
+      // 条件 2：authorName 为空，但云端 authorUserId 与当前用户匹配（主照顾者自己的老数据）
       const existingIdx = merged.findIndex(d => {
         if (d.serverDiaryId) return false; // 已有 serverDiaryId 的不覆盖
         if (d.date !== cloudDate) return false;
         const localAuthor = (d.authorName || '').toLowerCase();
-        // 匹配条件：两者 authorName 都为空（主照顾者本人的日记），或两者相同
-        return localAuthor === cloudAuthorName;
+        // 条件 1：两者 authorName 都非空且相同
+        if (cloudAuthorName && localAuthor && localAuthor === cloudAuthorName) return true;
+        // 条件 2：本地 authorName 为空（老数据），且云端作者是当前用户
+        if (!localAuthor && currentUserId && cloudAuthorUserId === currentUserId) return true;
+        return false;
       });
       if (existingIdx >= 0) {
         // 补充 serverDiaryId 到已有条目，不新建

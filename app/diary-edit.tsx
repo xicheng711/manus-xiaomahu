@@ -15,7 +15,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
-  getTodayCheckIn, DailyCheckIn, waitForServerDiaryId,
+  getTodayCheckIn, DailyCheckIn, waitForServerDiaryId, getCurrentMember,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, cloudSyncDiary } from '@/lib/cloud-sync';
@@ -259,13 +259,14 @@ export default function DiaryEditScreen() {
   }, [familyId]);
 
   async function loadProfile() {
-    const [userProfile, familyProfile, legacyProfile, entries, checkIn] = await Promise.all([
-      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(familyId), getTodayCheckIn(familyId),
+    const [userProfile, familyProfile, legacyProfile, entries, checkIn, currentMember] = await Promise.all([
+      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(familyId), getTodayCheckIn(familyId), getCurrentMember(),
     ]);
     // Joiner 和主照顾者都可以写日记、有 AI 对话、可删除，不再区分只读模式
     // family-scoped 优先，fallback 到 legacy
     setElderNickname(familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人');
-    setCaregiverName(userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者');
+    // 优先使用当前家庭成员名（Joiner 没有 caregiverName，用 member.name 确保 authorName 正确）
+    setCaregiverName(currentMember?.name || userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者');
     setCaregiverPhotoUri(userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri || null);
     setCaregiverZodiacEmoji(userProfile?.caregiverZodiacEmoji || legacyProfile?.caregiverZodiacEmoji || '😊');
     setDiaryCount(entries.length);
