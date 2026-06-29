@@ -8,7 +8,7 @@ import {
   setActiveFamilyId, setActiveRoomIdCache,
   FamilyMembership, FamilyRoom,
 } from '@/lib/storage';
-import { cloudGetMyRooms, cloudGetRoomDetail } from '@/lib/cloud-sync';
+import { cloudGetMyRooms, cloudGetRoomDetail, setCloudSyncState } from '@/lib/cloud-sync';
 
 const API_BASE = getApiBaseUrl();
 
@@ -150,6 +150,20 @@ async function navigateAfterLogin(router: Router) {
       const firstRoomId = String(serverRooms[0].roomId);
       await setActiveFamilyId(firstRoomId);
       setActiveRoomIdCache(firstRoomId);
+
+      // 登录成功后保存 userId 到 CloudSyncState，为日记合并等功能提供精确的用户识别
+      try {
+        const userInfo = await Auth.getUserInfo();
+        if (userInfo?.id) {
+          await setCloudSyncState({ userId: userInfo.id });
+        }
+      } catch {}
+
+      // 登录成功后重新注册 push token，确保 Joiner 和主照顾者都能收到服务器推送通知
+      try {
+        const { registerPushToken } = await import('@/lib/notifications');
+        registerPushToken().catch(() => {});
+      } catch {}
 
       // Navigate to main app — data is restored
       router.replace('/(tabs)' as any);
