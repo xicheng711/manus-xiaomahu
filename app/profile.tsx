@@ -42,6 +42,8 @@ export default function ProfileScreen() {
   const [notifLoading, setNotifLoading] = useState(false);
   const [permDenied, setPermDenied] = useState(false);
 
+  const [photoUploading, setPhotoUploading] = useState(false);
+
   // Inline edit state
   const [editingCaregiverName, setEditingCaregiverName] = useState(false);
   const [caregiverNameDraft, setCaregiverNameDraft] = useState('');
@@ -135,9 +137,11 @@ export default function ProfileScreen() {
       const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
       const optimisticMember = currentMember ? { ...currentMember, photoUri: localUri } : null;
       if (optimisticMember) setCurrentMember(optimisticMember);
-      // 2. Upload to S3 in background
+      // 2. Upload to OSS in background
+      setPhotoUploading(true);
       cloudUploadPhoto(localUri, 'member', roomId).then(async (cloudUrl) => {
-        const finalUri = cloudUrl ?? localUri; // fallback to local if upload fails
+        setPhotoUploading(false);
+        const finalUri = cloudUrl ?? localUri;
         // 3. Update local storage with final URI
         const { updateFamilyMemberPhoto } = await import('@/lib/storage');
         if (currentMember?.id) {
@@ -150,10 +154,16 @@ export default function ProfileScreen() {
           if (roomId) {
             await cloudUpdateMemberProfile({ roomId, photoUri: cloudUrl }).catch(() => {});
           }
+        } else {
+          Alert.alert('头像上传失败', '照片未能同步到云端，家人暂时看不到您的头像。请检查网络后重试。');
         }
         // Refresh FamilyContext so other screens see the new avatar
         refresh();
-      }).catch(() => {});
+      }).catch((err) => {
+        setPhotoUploading(false);
+        console.error('[Profile] member photo upload error:', err);
+        Alert.alert('头像上传失败', '照片未能同步到云端，请检查网络后重试。');
+      });
       return;
     }
 
@@ -171,10 +181,15 @@ export default function ProfileScreen() {
         saveProfile(updated);
         return updated;
       });
-      // 2. Upload to S3 and update with cloud URL
+      // 2. Upload to OSS and update with cloud URL
       const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
+      setPhotoUploading(true);
       cloudUploadPhoto(localUri, 'member', roomId).then(async (cloudUrl) => {
-        if (!cloudUrl) return;
+        setPhotoUploading(false);
+        if (!cloudUrl) {
+          Alert.alert('头像上传失败', '照片未能同步到云端，家人暂时看不到您的头像。请检查网络后重试。');
+          return;
+        }
         // Update local storage with cloud URL — read fresh value to avoid stale closure
         const freshUp = await getUserProfile();
         const up2 = await saveUserProfile({
@@ -195,7 +210,11 @@ export default function ProfileScreen() {
         }
         // Refresh FamilyContext so other screens (home, family) see the new avatar
         refresh();
-      }).catch(() => {});
+      }).catch((err) => {
+        setPhotoUploading(false);
+        console.error('[Profile] caregiver photo upload error:', err);
+        Alert.alert('头像上传失败', '照片未能同步到云端，请检查网络后重试。');
+      });
     } else {
       // elder photo
       // 1. Save local URI immediately
@@ -213,10 +232,15 @@ export default function ProfileScreen() {
         saveProfile(updated);
         return updated;
       });
-      // 2. Upload to S3 and update with cloud URL
+      // 2. Upload to OSS and update with cloud URL
       const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
+      setPhotoUploading(true);
       cloudUploadPhoto(localUri, 'elder', roomId).then(async (cloudUrl) => {
-        if (!cloudUrl) return;
+        setPhotoUploading(false);
+        if (!cloudUrl) {
+          Alert.alert('头像上传失败', '照片未能同步到云端，家人暂时看不到被照者的头像。请检查网络后重试。');
+          return;
+        }
         if (activeMembership?.familyId) {
           const fp2 = await saveFamilyProfile({
             ...(familyProfile ?? {}),
@@ -237,7 +261,11 @@ export default function ProfileScreen() {
         }
         // Refresh FamilyContext so other screens (home, family) see the new avatar
         refresh();
-      }).catch(() => {});
+      }).catch((err) => {
+        setPhotoUploading(false);
+        console.error('[Profile] elder photo upload error:', err);
+        Alert.alert('头像上传失败', '照片未能同步到云端，请检查网络后重试。');
+      });
     }
   }, [userProfile, familyProfile, activeMembership, currentMember, refresh]);
 
@@ -576,12 +604,17 @@ export default function ProfileScreen() {
                 <Text style={styles.cardEmoji}>🧑</Text>
               )
             )}
+            {photoUploading && (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 40, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator color="#fff" size="small" />
+              </View>
+            )}
             {isJoiner ? (
-              <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('member')}>
+              <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('member')} disabled={photoUploading}>
                 <Text style={styles.cameraChipText}>📷</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('caregiver')}>
+              <TouchableOpacity style={styles.cameraChip} onPress={() => pickPhoto('caregiver')} disabled={photoUploading}>
                 <Text style={styles.cameraChipText}>📷</Text>
               </TouchableOpacity>
             )}

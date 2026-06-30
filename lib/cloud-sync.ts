@@ -576,12 +576,42 @@ export async function cloudUploadPhoto(
 ): Promise<string | null> {
   try {
     const client = getClient();
-    // Read file as base64 using expo-file-system
     const FileSystem = require('expo-file-system');
-    const base64 = await FileSystem.readAsStringAsync(localUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const mimeType = localUri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+
+    // iOS 沙盒兼容：将图片复制到 App 缓存目录再读取，避免临时路径权限问题
+    let readableUri = localUri;
+    try {
+      const cacheDir = FileSystem.cacheDirectory;
+      if (cacheDir && !localUri.startsWith(cacheDir)) {
+        const ext = localUri.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+        const destUri = `${cacheDir}upload_avatar_${Date.now()}.${ext}`;
+        await FileSystem.copyAsync({ from: localUri, to: destUri });
+        readableUri = destUri;
+        console.log('[CloudSync] Copied photo to cache:', destUri);
+      }
+    } catch (copyErr) {
+      console.warn('[CloudSync] copyAsync failed, using original URI:', copyErr);
+      readableUri = localUri;
+    }
+
+    // 读取为 base64
+    let base64: string;
+    try {
+      base64 = await FileSystem.readAsStringAsync(readableUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    } catch (readErr) {
+      console.error('[CloudSync] readAsStringAsync failed:', readErr, 'uri:', readableUri);
+      return null;
+    }
+
+    if (!base64 || base64.length < 100) {
+      console.error('[CloudSync] base64 is empty or too short, aborting upload. uri:', readableUri);
+      return null;
+    }
+
+    console.log(`[CloudSync] Uploading photo scope=${scope} roomId=${roomId} base64Len=${base64.length}`);
+    const mimeType = readableUri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
     const result = await client.family.uploadPhoto.mutate({
       base64,
       mimeType,
@@ -589,11 +619,13 @@ export async function cloudUploadPhoto(
       roomId,
     });
     if (result?.success && result.url) {
+      console.log('[CloudSync] Upload success, url:', result.url);
       return result.url;
     }
+    console.warn('[CloudSync] Upload returned no URL, result:', result);
     return null;
   } catch (e) {
-    console.warn('[CloudSync] uploadPhoto failed:', e);
+    console.error('[CloudSync] uploadPhoto failed:', e);
     return null;
   }
 }
