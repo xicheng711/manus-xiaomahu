@@ -84,9 +84,12 @@ function buildFeed(
   }
 
   // 对日记去重：先按 id 去重，再按「日期+内容前20字」去重（应对服务端历史重复写入的数据）
+  // 同时过滤未完成的日记对话（conversationFinished === false 的不显示）
   const seenDiaryIds = new Set<string>();
   const seenDiaryContent = new Set<string>();
   const uniqueDiaries = diaries.filter(d => {
+    // 过滤未完成的日记对话（conversationFinished 明确为 false 时跳过）
+    if (d.conversationFinished === false) return false;
     if (!d.id || seenDiaryIds.has(String(d.id))) return false;
     seenDiaryIds.add(String(d.id));
     // 内容去重：相同日期+相同内容开头的日记只显示一条
@@ -102,7 +105,7 @@ function buildFeed(
       icon: '📔', color: AppColors.peach.primary, bg: AppColors.peach.soft, tag: '护理日记',
       title: d.content.length > 20 ? d.content.slice(0, 20) + '…' : d.content,
       detail: d.tags && d.tags.length ? d.tags.slice(0, 3).join(' · ') : `${d.moodEmoji || '😊'} ${d.moodLabel || ''}`,
-      author: caregiverName || '照顾者',
+      author: d.authorName || caregiverName || '照顾者',  // 优先用日记自带的 authorName
       sortKey: new Date(d.date).getTime(),  // Sort by date field (YYYY-MM-DD) instead of createdAt (UTC)
     });
   });
