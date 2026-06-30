@@ -32,6 +32,7 @@ import * as Sharing from 'expo-sharing';
 import { FamilySkeleton } from '@/components/skeleton-loader';
 import { cloudGetAnnouncements, cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
+import { getZodiac } from '@/lib/zodiac';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -354,9 +355,21 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
 }
 
 // ─── Member Avatar Chip (with image error fallback) ─────────────────────────────
+// 判断字符串是否为纯 emoji（不含普通文字）
+function isPureEmoji(str: string): boolean {
+  if (!str) return false;
+  // 移除所有 emoji 相关字符后，若剩余为空则为纯 emoji
+  const withoutEmoji = str.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA9F}\u{200D}\u{FE0F}\u{20E3}]/gu, '');
+  return withoutEmoji.trim().length === 0;
+}
 
 function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; isCurrentUser: boolean; onPress: () => void }) {
   const [imgError, setImgError] = useState(false);
+  // 计算生肖：有 birthYear 时显示生肖 emoji，否则用注册时的 emoji
+  const zodiacInfo = m.birthYear ? getZodiac(m.birthYear) : null;
+  const displayEmoji = zodiacInfo ? zodiacInfo.emoji : (m.emoji || '👤');
+  // 名字是纯 emoji 时（如主照顾者名字是 🐑），用大字号显示
+  const nameIsPureEmoji = isPureEmoji(m.name);
   return (
     <TouchableOpacity
       style={styles.memberChip}
@@ -367,10 +380,15 @@ function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; 
         {m.photoUri && !imgError ? (
           <Image source={{ uri: m.photoUri }} style={styles.memberAvatarImg} onError={() => setImgError(true)} />
         ) : (
-          <Text style={styles.memberAvatarText}>{m.emoji}</Text>
+          <Text style={styles.memberAvatarText}>{displayEmoji}</Text>
         )}
       </View>
-      <Text style={styles.memberName}>{m.name}</Text>
+      {nameIsPureEmoji ? (
+        // 名字是纯 emoji 时，直接用大字号显示
+        <Text style={[styles.memberName, { fontSize: 18, lineHeight: 22 }]}>{m.name}</Text>
+      ) : (
+        <Text style={styles.memberName} numberOfLines={1}>{m.name}</Text>
+      )}
       <Text style={styles.memberRole}>{m.roleLabel}</Text>
     </TouchableOpacity>
   );
@@ -474,6 +492,7 @@ export default function FamilyScreen() {
               isCreator: x.isCreator ?? false,
               isCurrentUser: String(x.id) === String(myMemberId),
               relationship: x.relationship,
+              birthYear: x.birthYear ?? null,
             };
           });
           r = {
@@ -491,31 +510,45 @@ export default function FamilyScreen() {
         console.warn("[Family] getRoomDetail failed", e);
       }
     }
-    // 对当前用户的头像补充 caregiverPhotoUri fallback（无论从服务器还是本地加载）
+    // 对当前用户的头像和出生年份补充 fallback（无论从服务器还是本地加载）
     if (r?.members) {
       const up = await getUserProfile();
       const lp = await getProfile();
       const cgPhoto = up?.caregiverPhotoUri || lp?.caregiverPhotoUri || null;
-      if (cgPhoto) {
-        let needsServerSync = false;
-        r = {
-          ...r,
-          members: r.members.map((mem: any) => {
-            // 匹配当前用户：通过 myMemberId 或 isCurrentUser 标记
-            const isMe = String(mem.id) === String(myMemberId) || mem.isCurrentUser;
-            // 用 !mem.photoUri || mem.photoUri === '' 确保空字符串也触发 fallback
-            if (isMe && (!mem.photoUri || mem.photoUri === '')) {
+      // caregiverBirthYear 是字符串 'YYYY'，转为数字
+      const cgBirthYearStr = up?.caregiverBirthYear || lp?.caregiverBirthYear || null;
+      const cgBirthYear = cgBirthYearStr ? parseInt(cgBirthYearStr, 10) : null;
+      let needsServerSync = false;
+      let needsBirthYearSync = false;
+      r = {
+        ...r,
+        members: r.members.map((mem: any) => {
+          // 匹配当前用户：通过 myMemberId 或 isCurrentUser 标记
+          const isMe = String(mem.id) === String(myMemberId) || mem.isCurrentUser;
+          if (isMe) {
+            let updated = { ...mem };
+            // 头像 fallback：服务器没有头像但本地有
+            if (cgPhoto && (!mem.photoUri || mem.photoUri === '')) {
               needsServerSync = true;
-              return { ...mem, photoUri: cgPhoto };
+              updated = { ...updated, photoUri: cgPhoto };
             }
-            return mem;
-          }),
-        };
-        // 如果服务器端没有头像但本地有，自动同步到服务器（修复旧版上传失败的情况）
-        if (needsServerSync && cgPhoto && !cgPhoto.startsWith('file://') && activeRoomId) {
-          const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
-          cloudUpdateMemberProfile({ roomId: Number(activeRoomId), photoUri: cgPhoto }).catch(() => {});
-        }
+            // birthYear fallback：服务器没有 birthYear 但本地有
+            if (cgBirthYear && !isNaN(cgBirthYear) && !mem.birthYear) {
+              needsBirthYearSync = true;
+              updated = { ...updated, birthYear: cgBirthYear };
+            }
+            return updated;
+          }
+          return mem;
+        }),
+      };
+      // 如果服务器端没有头像但本地有，自动同步到服务器
+      if ((needsServerSync || needsBirthYearSync) && activeRoomId) {
+        const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
+        const syncData: any = { roomId: Number(activeRoomId) };
+        if (needsServerSync && cgPhoto && !cgPhoto.startsWith('file://')) syncData.photoUri = cgPhoto;
+        if (needsBirthYearSync && cgBirthYear) syncData.birthYear = cgBirthYear;
+        cloudUpdateMemberProfile(syncData).catch(() => {});
       }
     }
     setRoom(r);

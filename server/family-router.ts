@@ -113,6 +113,7 @@ export const familyRouter = router({
       memberEmoji: z.string(),
       memberColor: z.string(),
       memberPhotoUri: z.string().optional(),
+      memberBirthYear: z.number().optional(),
       // Elder profile
       elderProfile: z.object({
         name: z.string(),
@@ -156,6 +157,7 @@ export const familyRouter = router({
         emoji: input.memberEmoji,
         color: input.memberColor,
         photoUri: input.memberPhotoUri ?? null,
+        birthYear: input.memberBirthYear ?? null,
         isCreator: true,
       });
 
@@ -190,6 +192,7 @@ export const familyRouter = router({
       memberEmoji: z.string(),
       memberColor: z.string(),
       memberPhotoUri: z.string().optional(),
+      memberBirthYear: z.number().optional(),
       relationship: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -229,6 +232,7 @@ export const familyRouter = router({
         emoji: input.memberEmoji,
         color: input.memberColor,
         photoUri: input.memberPhotoUri ?? null,
+        birthYear: input.memberBirthYear ?? null,
         relationship: input.relationship ?? null,
         isCreator: false,
       });
@@ -757,6 +761,7 @@ export const familyRouter = router({
       name: z.string().optional(),
       emoji: z.string().optional(),
       photoUri: z.string().optional(),
+      birthYear: z.number().optional(),
       relationship: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -766,6 +771,7 @@ export const familyRouter = router({
         name: input.name,
         emoji: input.emoji,
         photoUri: input.photoUri,
+        birthYear: input.birthYear,
         relationship: input.relationship,
       });
       return { success: true };

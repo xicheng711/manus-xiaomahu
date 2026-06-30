@@ -122,6 +122,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
                 emoji: m.emoji ?? '👤',
                 color: m.color ?? '#888',
                 photoUri,
+                birthYear: m.birthYear ?? undefined,
                 joinedAt: m.joinedAt ?? new Date().toISOString(),
                 isCreator: m.isCreator ?? false,
                 isCurrentUser,

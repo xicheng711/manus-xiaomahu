@@ -80,6 +80,7 @@ export async function cloudCreateRoom(params: {
   memberEmoji: string;
   memberColor: string;
   memberPhotoUri?: string;
+  memberBirthYear?: number;
   elderProfile?: any;
 }) {
   try {
@@ -104,6 +105,7 @@ export async function cloudJoinRoom(params: {
   memberEmoji: string;
   memberColor: string;
   memberPhotoUri?: string;
+  memberBirthYear?: number;
   relationship?: string;
 }) {
   try {
@@ -169,6 +171,7 @@ export async function cloudUpdateMemberProfile(params: {
   name?: string;
   emoji?: string;
   photoUri?: string;
+  birthYear?: number;
   relationship?: string;
 }) {
   try {

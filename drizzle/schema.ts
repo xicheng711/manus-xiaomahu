@@ -46,6 +46,7 @@ export const familyMembers = mysqlTable("family_members", {
   emoji: varchar("emoji", { length: 20 }).notNull(),
   color: varchar("color", { length: 20 }).notNull(),
   photoUri: text("photoUri"),
+  birthYear: int("birthYear"),
   relationship: varchar("relationship", { length: 50 }),
   isCreator: boolean("isCreator").default(false).notNull(),
   joinedAt: timestamp("joinedAt").defaultNow().notNull(),

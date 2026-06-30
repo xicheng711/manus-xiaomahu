@@ -207,6 +207,7 @@ export interface FamilyMember {
   emoji: string;       // 头像 emoji
   color: string;       // 主题色
   photoUri?: string;   // 真实照片 URI
+  birthYear?: number;   // 出生年份，用于计算生肖
   joinedAt: string;
   isCurrentUser?: boolean;
   isCreator?: boolean;       // true = 创建者（管理员），false/undefined = 加入者（只读）
@@ -843,6 +844,7 @@ export async function createFamilyRoom(
       memberEmoji: firstMember.emoji,
       memberColor: firstMember.color,
       memberPhotoUri: firstMember.photoUri,
+      memberBirthYear: firstMember.birthYear,
       // Pass full elder profile so cloud room is complete from creation instant
       elderProfile: existingFamilyProfile ? {
         name: existingFamilyProfile.name ?? elderName,
@@ -917,6 +919,7 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
       memberEmoji: member.emoji,
       memberColor: member.color,
       memberPhotoUri: member.photoUri,
+      memberBirthYear: member.birthYear,
       relationship: member.relationship,
     });
 
@@ -940,6 +943,7 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
             isCreator: m.isCreator ?? false,
             isCurrentUser: false, // Will be set correctly below via myMemberId lookup
             relationship: m.relationship,
+            birthYear: m.birthYear ?? undefined,
           }));
           fullRoom = {
             id: String(cloudResult.roomId),
