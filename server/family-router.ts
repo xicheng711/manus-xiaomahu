@@ -441,17 +441,19 @@ export const familyRouter = router({
         localTimeStr: input.localTimeStr ?? null,
       });
 
-      // Notify family members about the new diary entry
-      const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
-      const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
-      await notifyRoomMembers(
-        input.roomId,
-        userId,
-        `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
-        diaryPreview || '点击查看他写了什么',
-        { type: 'diary', screen: 'diary' },
-        'syncDiary',
-      );
+      // 只有对话结束（日记正式保存）时才发推送通知，避免对话中途就发出通知
+      if (input.conversationFinished === true) {
+        const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
+        const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
+        await notifyRoomMembers(
+          input.roomId,
+          userId,
+          `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
+          diaryPreview || '点击查看完整日记',
+          { type: 'diary', screen: 'diary' },
+          'syncDiary',
+        );
+      }
 
       return { success: true, diaryId: entry.id };
     }),

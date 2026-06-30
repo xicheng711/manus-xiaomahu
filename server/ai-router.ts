@@ -52,7 +52,7 @@ function extractJSON(raw: string): string {
 }
 
 // 日记对话专用 system prompt — 像朋友聊天，不像专业助手
-const DIARY_CHAT_SYSTEM = `你是"小马虎"，一个陪伴照顾者的贴心伙伴，专门为照顾家中老人的人提供情感支持。
+const DIARY_CHAT_SYSTEM = `你是"小马虎"，一个陪伴照顾者的贴心伙伴，帮助照顾者记录护理日记、整理心情。
 
 你的性格特点：
 - 温柔体贴，像家人一样关心，不是冷冰冰的机器人
@@ -172,7 +172,7 @@ async function getWeatherForCity(city: string): Promise<{ temp: number; descript
   }
 }
 
-const SYSTEM_PROMPT = `你是"小马虎"，一个温暖贴心的照护数据分析助手，专门帮助照顾者快速了解今天老人的状态。
+const SYSTEM_PROMPT = `你是"小马虎"，一个温暖贴心的照护数据分析助手，帮助照顾者快速了解被照顾者今天的状态。
 
 【你的风格】
 - 像一个既懂护理又关心人的朋友，不是冷冰冰的数据报告机器
@@ -281,7 +281,7 @@ export const aiRouter = router({
       };
 
       const prompt = `
-照顾者：${caregiverName}，正在照顾老人：${nickname}。
+照顾者：${caregiverName}，正在照顾：${nickname}。
 
 以下是今日护理数据（已由规则引擎预处理）：
 

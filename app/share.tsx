@@ -224,24 +224,30 @@ const slStyles = StyleSheet.create({
 // ─── Score Ring (animated) ───────────────────────────────────────────────────
 
 // ─── Data Badge ──────────────────────────────────────────────────────────────
-function DataBadge({ emoji, label, value, color }: { emoji: string; label: string; value: string; color: string }) {
-  return (
-    <View style={[badgeStyles.badge, { backgroundColor: color + '14', borderColor: color + '25' }]}>
+function DataBadge({ emoji, label, value, color, onPress, highlighted }: { emoji: string; label: string; value: string; color: string; onPress?: () => void; highlighted?: boolean }) {
+  const inner = (
+    <View style={[badgeStyles.badge, { backgroundColor: color + '14', borderColor: highlighted ? color + '80' : color + '25', borderWidth: highlighted ? 1.5 : 1 }]}>
       <Text style={badgeStyles.emoji}>{emoji}</Text>
       <Text style={badgeStyles.value}>{value}</Text>
       <Text style={[badgeStyles.label, { color: color }]}>{label}</Text>
+      {onPress && <Text style={[badgeStyles.tapHint, { color: color }]}>点击查看</Text>}
     </View>
   );
+  if (onPress) {
+    return <TouchableOpacity onPress={onPress} activeOpacity={0.75}>{inner}</TouchableOpacity>;
+  }
+  return inner;
 }
 const badgeStyles = StyleSheet.create({
   badge: { flex: 1, borderRadius: 18, padding: 14, alignItems: 'center', gap: 4, minWidth: 70, borderWidth: 1 },
   emoji: { fontSize: 22 },
   value: { fontSize: 14, fontWeight: '800', color: AppColors.text.primary },
   label: { fontSize: 11, fontWeight: '600' },
+  tapHint: { fontSize: 10, fontWeight: '500', marginTop: 1, opacity: 0.7 },
 });
 
 // ─── Beautiful Briefing Card ─────────────────────────────────────────────────
-function AnimatedBadge({ emoji, label, value, color, delay }: { emoji: string; label: string; value: string; color: string; delay: number }) {
+function AnimatedBadge({ emoji, label, value, color, delay, onPress, highlighted }: { emoji: string; label: string; value: string; color: string; delay: number; onPress?: () => void; highlighted?: boolean }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(16)).current;
   useEffect(() => {
@@ -252,7 +258,7 @@ function AnimatedBadge({ emoji, label, value, color, delay }: { emoji: string; l
   }, []);
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-      <DataBadge emoji={emoji} label={label} value={value} color={color} />
+      <DataBadge emoji={emoji} label={label} value={value} color={color} onPress={onPress} highlighted={highlighted} />
     </Animated.View>
   );
 }
@@ -263,6 +269,7 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
 }) {
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [expandedMeal, setExpandedMeal] = React.useState(false);
   React.useEffect(() => {
     Animated.parallel([
       Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, damping: 16, stiffness: 100 }),
@@ -293,9 +300,10 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
     : '未记录';
 
   // 饮食来自晚间打卡
+  const hasMealNotes = hasEvening && checkIn.mealNotes && checkIn.mealNotes.trim().length > 0;
   const mealValue = hasEvening
-    ? (checkIn.mealNotes && checkIn.mealNotes.trim()
-        ? (checkIn.mealNotes.length > 6 ? checkIn.mealNotes.slice(0, 6) + '…' : checkIn.mealNotes)
+    ? (hasMealNotes
+        ? (checkIn.mealNotes!.length > 6 ? checkIn.mealNotes!.slice(0, 6) + '…' : checkIn.mealNotes!)
         : (checkIn.mealOption ? checkIn.mealOption : '已记录'))
     : '未记录';
 
@@ -338,8 +346,19 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
       </View>
       <View style={cardStyles.dataGrid}>
         <AnimatedBadge emoji="💊" label="用药" value={medLabel} color={AppColors.purple.strong} delay={200} />
-        <AnimatedBadge emoji="🍽️" label="饮食" value={mealValue} color={AppColors.coral.primary} delay={300} />
+        <AnimatedBadge
+          emoji="🍽️" label="饮食" value={mealValue} color={AppColors.coral.primary} delay={300}
+          onPress={hasMealNotes ? () => setExpandedMeal(v => !v) : undefined}
+          highlighted={expandedMeal}
+        />
       </View>
+      {/* ── Meal Notes Expanded ── */}
+      {expandedMeal && hasMealNotes && (
+        <View style={cardStyles.mealExpanded}>
+          <Text style={cardStyles.mealExpandedTitle}>🍽️ 饮食详情</Text>
+          <Text style={cardStyles.mealExpandedText}>{checkIn.mealNotes}</Text>
+        </View>
+      )}
 
       {/* ── Footer ── */}
       <View style={cardStyles.footer}>
@@ -388,10 +407,71 @@ const cardStyles = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#EDE4DF', paddingTop: 14, paddingBottom: 18, paddingHorizontal: 22 },
   footerLeft: { fontSize: 12, color: AppColors.text.tertiary },
   footerRight: { fontSize: 12, color: AppColors.green.muted, fontWeight: '600' },
+  mealExpanded: {
+    marginHorizontal: 22, marginBottom: 12, backgroundColor: '#FFF5EE',
+    borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#FDDCCC',
+  },
+  mealExpandedTitle: { fontSize: 13, fontWeight: '700', color: '#C2410C', marginBottom: 6 },
+  mealExpandedText: { fontSize: 14, color: '#7C3A1E', lineHeight: 22 },
 });
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 const CHART_W = SW - 80;
+
+// ─── Check-in Notes Section ─────────────────────────────────────────────────
+function CheckInNotesSection({ checkIn }: { checkIn: DailyCheckIn }) {
+  const morningNotes = checkIn.morningNotes?.trim();
+  const eveningNotes = checkIn.eveningNotes?.trim();
+  const hasMorning = checkIn.morningDone === true;
+  const hasEvening = checkIn.eveningDone === true;
+
+  // 只有至少一个打卡完成才显示本区域
+  if (!hasMorning && !hasEvening) return null;
+
+  return (
+    <View style={notesStyles.card}>
+      <Text style={notesStyles.sectionTitle}>📝 打卡补充备注</Text>
+      {hasMorning && (
+        <View style={notesStyles.noteRow}>
+          <View style={notesStyles.noteHeader}>
+            <View style={[notesStyles.noteDot, { backgroundColor: '#6EE7B7' }]} />
+            <Text style={notesStyles.noteLabel}>🌅 早间补充</Text>
+          </View>
+          <Text style={notesStyles.noteText}>
+            {morningNotes && morningNotes.length > 0 ? morningNotes : '无'}
+          </Text>
+        </View>
+      )}
+      {hasMorning && hasEvening && <View style={notesStyles.divider} />}
+      {hasEvening && (
+        <View style={notesStyles.noteRow}>
+          <View style={notesStyles.noteHeader}>
+            <View style={[notesStyles.noteDot, { backgroundColor: '#FCA5A5' }]} />
+            <Text style={notesStyles.noteLabel}>🌙 晚间补充</Text>
+          </View>
+          <Text style={notesStyles.noteText}>
+            {eveningNotes && eveningNotes.length > 0 ? eveningNotes : '无'}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const notesStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#FBF7F4', borderRadius: 20, padding: 18, marginBottom: 16,
+    shadowColor: '#8B7B75', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+    borderWidth: 1, borderColor: '#EDE4DF',
+  },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, marginBottom: 14 },
+  noteRow: { gap: 6 },
+  noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  noteDot: { width: 8, height: 8, borderRadius: 4 },
+  noteLabel: { fontSize: 13, fontWeight: '700', color: AppColors.text.secondary },
+  noteText: { fontSize: 14, color: AppColors.text.primary, lineHeight: 22, paddingLeft: 14 },
+  divider: { height: 1, backgroundColor: '#EDE4DF', marginVertical: 12 },
+});
 
 function SleepDetailSection({ checkIn }: { checkIn: DailyCheckIn }) {
   const segments = checkIn.sleepSegments ?? [];
@@ -1328,6 +1408,9 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                 <Text style={styles.backfillSuccessText}>{backfillNotice}</Text>
               </View>
             )}
+
+            {/* ── Check-in Notes (morning + evening supplement) ── */}
+            <CheckInNotesSection checkIn={checkIn} />
 
             {/* ── Last Night Sleep Detail (Donut + Timeline) ── */}
             <SleepDetailSection checkIn={checkIn} />

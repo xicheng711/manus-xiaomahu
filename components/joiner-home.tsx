@@ -812,7 +812,7 @@ export function JoinerHomeScreen() {
           />
         )}
 
-        {feed.length === 0 && (
+        {feed.length === 0 && !latestCheckIn && (
           <View style={styles.emptyFeed}>
             <Text style={styles.emptyFeedEmoji}>📋</Text>
             <Text style={styles.emptyFeedTitle}>今日暂无更新</Text>

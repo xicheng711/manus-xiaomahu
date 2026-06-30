@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator } from '@/lib/storage';
@@ -323,6 +323,15 @@ function DiaryScreenContent() {
       ])
     ).start();
   }, []);
+
+  const { refresh: refreshParam } = useLocalSearchParams<{ refresh?: string }>();
+  // 通知点击时传入 refresh 参数，触发强制刷新
+  useEffect(() => {
+    if (refreshParam) {
+      loadEntries();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshParam]);
 
   useFocusEffect(useCallback(() => {
     loadEntries();

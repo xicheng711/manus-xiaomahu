@@ -56,24 +56,25 @@ export default function RootLayout() {
   // Handle push notification tap: navigate to the relevant screen
   useEffect(() => {
     if (Platform.OS === "web") return;
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as any;
       if (!data?.screen) return;
       // Small delay to ensure the navigator is ready
       setTimeout(() => {
         try {
+          // 传入 refresh=1 参数，让目标页面在 useFocusEffect 里检测到并自动刷新最新数据
           switch (data.screen) {
             case "diary":
-              router.push("/(tabs)/diary" as any);
+              router.push({ pathname: "/(tabs)/diary", params: { refresh: Date.now() } } as any);
               break;
             case "family":
-              router.push("/(tabs)/family" as any);
+              router.push({ pathname: "/(tabs)/family", params: { refresh: Date.now() } } as any);
               break;
             case "checkin":
-              router.push("/(tabs)/checkin" as any);
+              router.push({ pathname: "/(tabs)/checkin", params: { refresh: Date.now() } } as any);
               break;
             case "medication":
-              router.push("/(tabs)/medication" as any);
+              router.push({ pathname: "/(tabs)/medication", params: { refresh: Date.now() } } as any);
               break;
             default:
               break;

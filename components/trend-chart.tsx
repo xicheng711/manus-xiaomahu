@@ -728,7 +728,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
             <Text style={styles.sectionIcon}>🌡️</Text>
           </View>
           <View style={styles.sectionHeaderText}>
-            <Text style={styles.sectionTitle}>{caregiverName}的心情指数</Text>
+            <Text style={styles.sectionTitle}>{(caregiverName && /[\u4e00-\u9fa5a-zA-Z0-9]/.test(caregiverName)) ? caregiverName : '照顾者'}的心情指数</Text>
             <Text style={styles.sectionSubtitle}>照顾好自己，才能更好地照顾家人 💜</Text>
           </View>
         </View>
