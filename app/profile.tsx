@@ -25,7 +25,7 @@ import {
 } from '@/lib/notifications';
 import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
-import { cloudUploadPhoto, cloudUpdateMemberProfile, cloudUpdateElderProfile } from '@/lib/cloud-sync';
+import { cloudUploadPhoto, cloudUpdateMemberProfile, cloudUpdateElderProfile, cloudGetElderProfile } from '@/lib/cloud-sync';
 import { clearAllLocalData } from '@/lib/storage';
 import { removeSessionToken, clearUserInfo } from '@/lib/_core/auth';
 
@@ -43,6 +43,8 @@ export default function ProfileScreen() {
   const [permDenied, setPermDenied] = useState(false);
 
   const [photoUploading, setPhotoUploading] = useState(false);
+  // joiner 端：从云端拉取的被照顾者生肖 emoji
+  const [cloudElderZodiacEmoji, setCloudElderZodiacEmoji] = useState<string | null>(null);
 
   // Inline edit state
   const [editingCaregiverName, setEditingCaregiverName] = useState(false);
@@ -274,16 +276,21 @@ export default function ProfileScreen() {
       setLoading(true);
       try {
         // Load all three in parallel: legacy (compat shim), user-scoped, family-scoped, plus currentMember for joiner
-        const [legacyP, up, fp, cm] = await Promise.all([
+        const isJoinerRole = activeMembership != null && activeMembership.role !== 'creator';
+        const [legacyP, up, fp, cm, cloudElderP] = await Promise.all([
           getProfile(),
           getUserProfile(),
           activeMembership?.familyId ? getFamilyProfile(activeMembership.familyId) : Promise.resolve(null),
           getCurrentMember(),
+          // joiner 端额外拉取被照顾者档案（获取 zodiacEmoji）
+          isJoinerRole ? cloudGetElderProfile().catch(() => null) : Promise.resolve(null),
         ]);
         setProfile(legacyP);
         setUserProfile(up);
         setFamilyProfile(fp);
         setCurrentMember(cm);
+        // joiner 端：保存被照顾者生肖 emoji
+        if (cloudElderP?.zodiacEmoji) setCloudElderZodiacEmoji(cloudElderP.zodiacEmoji);
         // Seed draft fields from authoritative scoped sources
         setCaregiverNameDraft(up?.caregiverName || legacyP?.caregiverName || '');
         setElderNicknameDraft(fp?.nickname || legacyP?.nickname || legacyP?.name || '');
@@ -657,13 +664,15 @@ export default function ProfileScreen() {
               activeMembership?.room?.elderPhotoUri ? (
                 <Image source={{ uri: activeMembership.room.elderPhotoUri }} style={styles.avatarPhoto} />
               ) : (
-                <Text style={styles.cardEmoji}>{activeMembership?.room?.elderEmoji || '👵'}</Text>
+                // 优先用生肖 emoji，其次用 room.elderEmoji，最后 fallback 到 👵
+                <Text style={styles.cardEmoji}>{cloudElderZodiacEmoji || activeMembership?.room?.elderEmoji || '👵'}</Text>
               )
             ) : (
               (familyProfile?.elderPhotoUri || profile?.photoUri) ? (
                 <Image source={{ uri: familyProfile?.elderPhotoUri || profile?.photoUri }} style={styles.avatarPhoto} />
               ) : (
-                <Text style={styles.cardEmoji}>👵</Text>
+                // 优先用生肖 emoji，其次 fallback 到 👵
+                <Text style={styles.cardEmoji}>{familyProfile?.zodiacEmoji || profile?.zodiacEmoji || '👵'}</Text>
               )
             )}
             {!isJoiner && (

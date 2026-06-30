@@ -442,6 +442,8 @@ export function JoinerHomeScreen() {
         : await getDiaryEntries();
       if (cloudProfile?.nickname) setElderNickname(cloudProfile.nickname);
       if (cloudProfile?.elderPhotoUri) setElderPhotoUri(cloudProfile.elderPhotoUri);
+      // 被照顾者没有照片时，用 zodiacEmoji 显示生肖 emoji
+      if (cloudProfile?.zodiacEmoji && !cloudProfile?.elderPhotoUri) setElderEmoji(cloudProfile.zodiacEmoji);
       if (cloudProfile?.caregiverName) {
         creatorName = cloudProfile.caregiverName;
         setCaregiverName(cloudProfile.caregiverName);
