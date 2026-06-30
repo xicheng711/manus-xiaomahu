@@ -12,6 +12,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
 import { getSessionToken } from '@/lib/_core/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -952,6 +953,11 @@ function CheckinScreenContent() {
     }
     await upsertCheckIn(data, familyId);
     // 注意：upsertCheckIn 内部已经调用了 cloudSyncCheckIn，无需重复调用
+    // 打卡修改后清除当天简报缓存，确保首页摘要和简报页都能显示最新数据
+    try {
+      const cacheKey = familyId ? `share_briefing_cache_v1:${familyId}` : 'share_briefing_cache_v1';
+      await AsyncStorage.removeItem(cacheKey);
+    } catch { /* 静默失败 */ }
     // 立即刷新 checkIn 状态，确保返回 landing 时显示最新状态
     const refreshed = backfillDate ? await getCheckInByDate(backfillDate, familyId) : await getTodayCheckIn(familyId);
     if (refreshed) setCheckIn(refreshed);
