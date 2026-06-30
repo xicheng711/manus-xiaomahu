@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json } from "drizzle-orm/mysql-core";
+import { int, float, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json } from "drizzle-orm/mysql-core";
 
 // ─── Users (existing) ────────────────────────────────────────────────────────
 
@@ -85,7 +85,7 @@ export const checkIns = mysqlTable("check_ins", {
   authorUserId: int("authorUserId").notNull(),
   date: varchar("date", { length: 10 }).notNull(),         // YYYY-MM-DD
   // Morning check-in
-  sleepHours: int("sleepHours"),
+  sleepHours: float("sleepHours"),
   sleepQuality: mysqlEnum("sleepQuality", ["poor", "fair", "good"]),
   sleepInput: json("sleepInput"),
   sleepScore: int("sleepScore"),

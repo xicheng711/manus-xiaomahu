@@ -677,6 +677,8 @@ export default function ShareScreen() {
 
   const params = useLocalSearchParams<{ refresh?: string; date?: string }>();
   const loadedRef = useRef(false);
+  const errorRef = useRef<string | null>(null); // 用 ref 追踪 error，避免 useFocusEffect 依赖 error state 导致死循环
+  const silentRefreshedRef = useRef(false); // 防止重复静默刷新
   // 切换家庭时重置 loadedRef，确保新家庭的简报被重新加载
   const prevFamilyIdRef = useRef(familyId);
   useEffect(() => {
@@ -686,7 +688,7 @@ export default function ShareScreen() {
       // 清除旧家庭的内存缓存（新家庭的缓存由 loadAndGenerate 自行加载）
       setBriefing(null);
       setShareText('');
-      setError(null);
+      setError(null); errorRef.current = null;
     }
   }, [familyId]);
   // params 处理：历史日期模式或强制刷新，由 useEffect 单独处理
@@ -708,18 +710,20 @@ export default function ShareScreen() {
   useFocusEffect(useCallback(() => {
     if (!loadedRef.current) {
       loadedRef.current = true;
+      silentRefreshedRef.current = false;
       loadAndGenerate(false);
-    } else if (error) {
-      // 之前是错误状态，用户可能已完成打卡，静默刷新（不清缓存，避免闪烁）
-      // 只有 Joiner 的打卡未完成错误才重试，且不触发全屏 loading
+    } else if (errorRef.current && !silentRefreshedRef.current) {
+      // 之前是错误状态（打卡未完成），用户可能已完成打卡，静默刷新一次
+      // 用 silentRefreshedRef 防止重复触发，避免死循环
+      silentRefreshedRef.current = true;
       loadAndGenerateSilent();
-    } else {
+    } else if (!errorRef.current) {
       recheckBackfill();
     }
-  }, [error]));
+  }, []));
 
   async function loadHistoryDate(dateStr: string) {
-    setError(null);
+    setError(null); errorRef.current = null;
     setLoading(true);
     try {
       const [userProfile, familyProfile, legacyProfile] = await Promise.all([
@@ -751,7 +755,7 @@ export default function ShareScreen() {
         ci = (cloudCIs as any[])?.find((c: any) => c.date === dateStr) ?? null;
       }
       if (!ci) {
-        setError(`${dateStr} 无打卡记录`);
+        setError(`${dateStr} 无打卡记录`); errorRef.current = `${dateStr} 无打卡记录`;
         setLoading(false);
       loadingRef.current = false;
         return;
@@ -770,7 +774,7 @@ export default function ShareScreen() {
       setBriefing(fallback);
       setShareText(fallback.shareText);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败');
+      setError(e instanceof Error ? e.message : '加载失败'); errorRef.current = e instanceof Error ? e.message : '加载失败';
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -809,7 +813,7 @@ export default function ShareScreen() {
   async function loadAndGenerate(forceRefresh = false) {
     if (loadingRef.current) return;
     loadingRef.current = true;
-    setError(null);
+    setError(null); errorRef.current = null;
     // 立即显示 loading，防止前置检查期间 UI 短暂显示旧 error 或空白（闪屏来源）
     setLoading(true);
     // ── 最前置 early return：未完成打卡不走任何生成/缓存流程 ──
@@ -826,7 +830,7 @@ export default function ShareScreen() {
         setLoading(false);
         setBriefing(null);
         setShareText('');
-        setError('完成今日打卡，就能看到今日记录');
+        setError('完成今日打卡，就能看到今日记录'); errorRef.current = '完成今日打卡，就能看到今日记录';
         loadingRef.current = false;
         return;
       }
@@ -834,7 +838,7 @@ export default function ShareScreen() {
         setLoading(false);
         setBriefing(null);
         setShareText('');
-        setError('早间打卡已完成，完成晚间打卡后就能看到今日记录');
+        setError('早间打卡已完成，完成晚间打卡后就能看到今日记录'); errorRef.current = '早间打卡已完成，完成晚间打卡后就能看到今日记录';
         loadingRef.current = false;
         return;
       }
@@ -843,7 +847,7 @@ export default function ShareScreen() {
       setLoading(false);
       setBriefing(null);
       setShareText('');
-      setError('完成今日打卡，就能看到今日记录');
+      setError('完成今日打卡，就能看到今日记录'); errorRef.current = '完成今日打卡，就能看到今日记录';
       loadingRef.current = false;
       return;
     }
@@ -927,7 +931,7 @@ export default function ShareScreen() {
       const hasTodayMorning = today?.morningDone;
 
       if (!hasTodayEvening) {
-        setError('完成晚间打卡后，就能看到今日完整简报了！');
+        setError('完成晚间打卡后，就能看到今日完整简报了！'); errorRef.current = '完成晚间打卡后，就能看到今日完整简报了！';
         setLoading(false);
       loadingRef.current = false;
         return;
@@ -962,7 +966,7 @@ export default function ShareScreen() {
       loadSupplementaryData();
       await doGenerate(nickname, caregiver, ci, null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败');
+      setError(e instanceof Error ? e.message : '加载失败'); errorRef.current = e instanceof Error ? e.message : '加载失败';
     } finally {
       setLoading(false);
       loadingRef.current = false;
