@@ -372,9 +372,9 @@ export function JoinerHomeScreen() {
       setElderNickname(activeMembership.room.elderName || '家人');
       // 被照顾者头像：优先使用 elderPhotoUri（自定义上传的照片）
       setElderPhotoUri(activeMembership.room.elderPhotoUri || null);
-      // FamilyMember.role 只有 caregiver/family/nurse，没有 elder；用 isCreator 找主照顾者
-      const elderMember = activeMembership.room.members.find(m => m.isCreator);
-      if (elderMember?.emoji) setElderEmoji(elderMember.emoji);
+      // 注意：被照顾者 emoji 应从 cloudGetElderProfile().zodiacEmoji 获取
+      // 不要用 isCreator 成员（主照顾者）的 emoji 作为被照顾者头像
+      // elderEmoji 会在下面 cloudGetElderProfile 返回后正确设置
     }
     const profile = await getProfile();
     if (profile) {
