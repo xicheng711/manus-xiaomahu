@@ -28,7 +28,7 @@ async function sendExpoPushNotifications(
   body: string,
   data?: Record<string, unknown>,
 ) {
-  const validTokens = pushTokens.filter(t => t && t.startsWith('ExponentPushToken['));
+  const validTokens = pushTokens.filter(t => t && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[')));
   if (validTokens.length === 0) return;
   try {
     const messages = validTokens.map(to => ({
@@ -237,8 +237,8 @@ export const familyRouter = router({
       await notifyRoomMembers(
         room.id,
         userId,
-        `🎉 新成员加入了！`,
-        `${input.memberEmoji} ${input.memberName} 加入了你们的家庭空间`,
+        `🎉 ${input.memberName}加入了家庭！`,
+        `${input.memberEmoji} ${input.memberName} 现在也能看到大家的照护记录了，一起加油吧 💕`,
         { type: 'new_member', screen: 'family', memberName: input.memberName },
         'joinRoom',
       );
@@ -350,8 +350,8 @@ export const familyRouter = router({
       await notifyRoomMembers(
         input.roomId,
         userId,
-        `✅ ${actorMember?.name || '照顾者'}完成了${period}打卡`,
-        input.morningNotes || input.eveningNotes || '点击查看今日照护记录',
+        `${actorMember?.name || '照顾者'}完成了${period}打卡 ✅`,
+        input.morningNotes || input.eveningNotes || '点击查看今日照护记录，辛苦了！💕',
         { type: 'checkin', screen: 'home' },
         'syncCheckIn',
       );
@@ -447,8 +447,8 @@ export const familyRouter = router({
       await notifyRoomMembers(
         input.roomId,
         userId,
-        `📖 ${diaryActorMember?.name || '照顾者'}写了一篇日记`,
-        diaryPreview,
+        `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
+        diaryPreview || '点击查看他写了什么',
         { type: 'diary', screen: 'diary' },
         'syncDiary',
       );
@@ -497,7 +497,7 @@ export const familyRouter = router({
       await notifyRoomMembers(
         input.roomId,
         userId,
-        `${member.emoji} ${member.name} 发布了家庭公告`,
+        `${member.emoji} ${member.name} 有新消息要告诉你`,
         announcementPreview,
         { type: 'announcement', screen: 'family' },
         'postAnnouncement',
@@ -731,8 +731,8 @@ export const familyRouter = router({
         await notifyRoomMembers(
           input.roomId,
           userId,
-          '公告收到新表情 📣',
-          `${senderName} 对公告回复了 ${input.emoji}`,
+          `${senderName} 对你的公告回应了 ${input.emoji}`,
+          '点击查看家庭动态',
           { type: 'reaction', announcementId: input.announcementId, roomId: input.roomId },
           'toggleReaction',
         );

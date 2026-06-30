@@ -337,7 +337,7 @@ function DiaryScreenContent() {
     if (local.length > 0) setEntries(local);
     // 从云端拉取所有人的日记（主照顾者 + joiner），确保多设备同步
     try {
-      const [cloudEntries, syncState] = await Promise.all([cloudGetDiaries(), getCloudSyncState()]);
+      const [cloudEntries, syncState] = await Promise.all([cloudGetDiaries(familyId ? Number(familyId) : undefined), getCloudSyncState()]);
       const currentUserId = syncState.userId;
       if (cloudEntries && cloudEntries.length > 0) {
         // 将云端日记转换为本地格式并合并
@@ -839,7 +839,7 @@ function JoinerDiaryReadOnly() {
   useEffect(() => { fadeInUp(headerFade, headerSlide, { duration: 500 }); }, []);
   useFocusEffect(useCallback(() => {
     // joiner 视角：优先从云端拉取主照顾者的日记
-    cloudGetDiaries().then(cloudEntries => {
+    cloudGetDiaries(familyId ? Number(familyId) : undefined).then(cloudEntries => {
       if (cloudEntries && cloudEntries.length > 0) {
         setEntries(cloudEntries as DiaryEntry[]);
       } else {

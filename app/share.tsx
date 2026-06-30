@@ -710,10 +710,9 @@ export default function ShareScreen() {
       loadedRef.current = true;
       loadAndGenerate(false);
     } else if (error) {
-      // 之前是错误状态（晚间打卡未完成），用户可能已经去完成打卡了，强制刷新
-      _briefingCacheMap.delete(getCacheKey(familyId));
-      AsyncStorage.removeItem(getCacheKey(familyId)).catch(() => {});
-      loadAndGenerate(true);
+      // 之前是错误状态，用户可能已完成打卡，静默刷新（不清缓存，避免闪烁）
+      // 只有 Joiner 的打卡未完成错误才重试，且不触发全屏 loading
+      loadAndGenerateSilent();
     } else {
       recheckBackfill();
     }
@@ -787,6 +786,26 @@ export default function ShareScreen() {
     } catch {}
   }
 
+  // 静默刷新：不触发全屏 loading，只在打卡已完成时更新内容（防止闪烁）
+  async function loadAndGenerateSilent() {
+    if (loadingRef.current) return;
+    try {
+      let checkIn = await getTodayCheckIn(familyId);
+      if (!checkIn && isJoiner) {
+        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
+        const todayKey = new Date().toISOString().slice(0, 10);
+        checkIn = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
+      }
+      // 如果打卡已完成，则强制刷新内容
+      if (checkIn?.morningDone && checkIn?.eveningDone) {
+        _briefingCacheMap.delete(getCacheKey(familyId));
+        AsyncStorage.removeItem(getCacheKey(familyId)).catch(() => {});
+        loadAndGenerate(true);
+      }
+      // 否则不做任何事，保持当前错误提示不闪烁
+    } catch { /* 静默失败 */ }
+  }
+
   async function loadAndGenerate(forceRefresh = false) {
     if (loadingRef.current) return;
     loadingRef.current = true;
@@ -798,8 +817,8 @@ export default function ShareScreen() {
     try {
       let earlyCheckIn = await getTodayCheckIn(familyId);
       if (!earlyCheckIn && isJoiner) {
-        // Joiner: 从云端拉取今日打卡
-        const cloudCIs = await cloudGetCheckIns();
+        // Joiner: 从云端拉取今日打卡，明确传入 familyId 避免读到错误的 room
+        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
         const todayKey = new Date().toISOString().slice(0, 10);
         earlyCheckIn = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
       }
@@ -890,9 +909,9 @@ export default function ShareScreen() {
 
       let today = await getTodayCheckIn(familyId);
       let yesterday = await getYesterdayCheckIn(familyId);
-      // Joiner 本地可能没有打卡数据，从云端拉取
+      // Joiner 本地可能没有打卡数据，从云端拉取（明确传 familyId）
       if (!today && isJoiner) {
-        const cloudCIs = await cloudGetCheckIns();
+        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
         const todayKey = new Date().toISOString().slice(0, 10);
         const yd = new Date(); yd.setDate(yd.getDate() - 1);
         const yKey = yd.toISOString().slice(0, 10);

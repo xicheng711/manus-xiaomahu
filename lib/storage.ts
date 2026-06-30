@@ -697,7 +697,7 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: stri
   all.unshift(entry);
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync diary entry to server, and expose the serverDiaryId promise
-  const serverIdPromise = cloudSyncDiary(entry).then(res => {
+  const serverIdPromise = cloudSyncDiary(entry, undefined, rid).then(res => {
     // Server returns { success: true, diaryId: number }
     const serverId = res?.diaryId ?? res?.id;
     if (serverId) {
@@ -731,7 +731,7 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
     const syncEntry = all[idx];
     if (syncEntry.serverDiaryId) {
       // serverDiaryId already known — update existing cloud record (no push notification)
-      cloudSyncDiary(syncEntry, syncEntry.serverDiaryId).catch(() => {});
+      cloudSyncDiary(syncEntry, syncEntry.serverDiaryId, rid).catch(() => {});
     } else {
       // serverDiaryId not yet available (saveDiaryEntry's async .then() may still be in flight)
       // Wait up to 5 seconds for serverDiaryId to be written, then sync once
@@ -744,7 +744,7 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
         }
         if (latestEntry?.serverDiaryId) {
           // Now we have serverDiaryId — update existing cloud record (no push notification)
-          cloudSyncDiary(latestEntry, latestEntry.serverDiaryId).catch(() => {});
+          cloudSyncDiary(latestEntry, latestEntry.serverDiaryId, rid).catch(() => {});
         }
         // If still no serverDiaryId after 5s, skip sync to avoid duplicate cloud entry
       })();

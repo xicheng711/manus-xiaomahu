@@ -280,7 +280,7 @@ export default function DiaryEditScreen() {
     // 注意：不能依赖 isReadOnly 状态（因为 loadProfile 是异步的，可能还没执行完）
     if (!entry) {
       try {
-        const cloudEntries = await cloudGetDiaries();
+        const cloudEntries = await cloudGetDiaries(familyId ? Number(familyId) : undefined);
         // 云端 id 是数字，本地传入的 id 可能是 "cloud_123" 或纯数字字符串
         // 剥离 cloud_ 前缀后再比较
         const numericId = String(id).replace(/^cloud_/, '');
@@ -450,7 +450,7 @@ export default function DiaryEditScreen() {
     waitForServerDiaryId(savedEntry.id).then(async (serverDiaryId) => {
       if (serverDiaryId) {
         const fullEntry = { ...savedEntry, aiReply: aiText, conversation: conv2 };
-        cloudSyncDiary(fullEntry, serverDiaryId).catch(() => {});
+        cloudSyncDiary(fullEntry, serverDiaryId, familyId).catch(() => {});
       }
     });
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);

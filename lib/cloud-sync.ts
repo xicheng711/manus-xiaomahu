@@ -260,8 +260,8 @@ export async function cloudGetCheckIns(roomId?: number, limit = 30) {
 // ─── Diary Sync ──────────────────────────────────────────────────────────────
 
 /** Sync a diary entry to the server */
-export async function cloudSyncDiary(diary: any, serverDiaryId?: number) {
-  const roomId = await getActiveRoomId();
+export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explicitRoomId?: number | string | null) {
+  const roomId = explicitRoomId ? Number(explicitRoomId) : await getActiveRoomId();
   if (!roomId) return null;
   try {
     const client = getClient();

@@ -146,6 +146,10 @@ export default function ProfileScreen() {
         // 4. Also update currentMember state with cloud URL
         if (cloudUrl) {
           setCurrentMember(prev => prev ? { ...prev, photoUri: cloudUrl } : prev);
+          // 5. Sync cloud URL back to server member record so other family members can see it
+          if (roomId) {
+            await cloudUpdateMemberProfile({ roomId, photoUri: cloudUrl }).catch(() => {});
+          }
         }
         // Refresh FamilyContext so other screens see the new avatar
         refresh();
