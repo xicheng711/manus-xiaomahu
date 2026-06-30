@@ -45,6 +45,8 @@ export default function ProfileScreen() {
   const [photoUploading, setPhotoUploading] = useState(false);
   // joiner 端：从云端拉取的被照顾者生肖 emoji
   const [cloudElderZodiacEmoji, setCloudElderZodiacEmoji] = useState<string | null>(null);
+  const [elderPhotoError, setElderPhotoError] = useState(false);
+  const [selfPhotoError, setSelfPhotoError] = useState(false);
 
   // Inline edit state
   const [editingCaregiverName, setEditingCaregiverName] = useState(false);
@@ -599,16 +601,24 @@ export default function ProfileScreen() {
         <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
           <View style={styles.avatarWrap}>
             {isJoiner ? (
-              currentMember?.photoUri ? (
-                <Image source={{ uri: currentMember.photoUri }} style={styles.avatarPhoto} />
+              (currentMember?.photoUri && !selfPhotoError) ? (
+                <Image
+                  source={{ uri: currentMember.photoUri }}
+                  style={styles.avatarPhoto}
+                  onError={() => setSelfPhotoError(true)}
+                />
               ) : (
                 <Text style={styles.cardEmoji}>{currentMember?.emoji || '🧑'}</Text>
               )
             ) : (
-              (userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri) ? (
-                <Image source={{ uri: userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri }} style={styles.avatarPhoto} />
+              ((userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri) && !selfPhotoError) ? (
+                <Image
+                  source={{ uri: (userProfile?.caregiverPhotoUri || profile?.caregiverPhotoUri)! }}
+                  style={styles.avatarPhoto}
+                  onError={() => setSelfPhotoError(true)}
+                />
               ) : (
-                <Text style={styles.cardEmoji}>🧑</Text>
+                <Text style={styles.cardEmoji}>{userProfile?.caregiverZodiacEmoji || profile?.caregiverZodiacEmoji || '🧑'}</Text>
               )
             )}
             {photoUploading && (
@@ -661,15 +671,23 @@ export default function ProfileScreen() {
         <View style={[styles.card, { backgroundColor: AppColors.bg.secondary }]}>
           <View style={styles.avatarWrap}>
             {isJoiner ? (
-              activeMembership?.room?.elderPhotoUri ? (
-                <Image source={{ uri: activeMembership.room.elderPhotoUri }} style={styles.avatarPhoto} />
+              (activeMembership?.room?.elderPhotoUri && !elderPhotoError) ? (
+                <Image
+                  source={{ uri: activeMembership.room.elderPhotoUri }}
+                  style={styles.avatarPhoto}
+                  onError={() => setElderPhotoError(true)}
+                />
               ) : (
                 // 优先用生肖 emoji，其次用 room.elderEmoji，最后 fallback 到 👵
                 <Text style={styles.cardEmoji}>{cloudElderZodiacEmoji || activeMembership?.room?.elderEmoji || '👵'}</Text>
               )
             ) : (
-              (familyProfile?.elderPhotoUri || profile?.photoUri) ? (
-                <Image source={{ uri: familyProfile?.elderPhotoUri || profile?.photoUri }} style={styles.avatarPhoto} />
+              ((familyProfile?.elderPhotoUri || profile?.photoUri) && !elderPhotoError) ? (
+                <Image
+                  source={{ uri: (familyProfile?.elderPhotoUri || profile?.photoUri)! }}
+                  style={styles.avatarPhoto}
+                  onError={() => setElderPhotoError(true)}
+                />
               ) : (
                 // 优先用生肖 emoji，其次 fallback 到 👵
                 <Text style={styles.cardEmoji}>{familyProfile?.zodiacEmoji || profile?.zodiacEmoji || '👵'}</Text>
