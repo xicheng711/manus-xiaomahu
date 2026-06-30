@@ -6,7 +6,7 @@ import { useRef, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Platform, Animated, ActivityIndicator,
-  Easing, KeyboardAvoidingView, Dimensions, Modal, Keyboard, Image,
+  Easing, KeyboardAvoidingView, Dimensions, Modal, Keyboard, Image, Alert,
 } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
