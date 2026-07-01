@@ -423,6 +423,19 @@ export const familyRouter = router({
           conversationFinished: input.conversationFinished ?? false,
           localTimeStr: input.localTimeStr ?? null,
         });
+        // 对话结束时发送通知（更新路径同样需要发通知）
+        if (input.conversationFinished === true) {
+          const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
+          const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
+          await notifyRoomMembers(
+            input.roomId,
+            userId,
+            `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
+            diaryPreview || '点击查看完整日记',
+            { type: 'diary', screen: 'diary' },
+            'syncDiary-update',
+          );
+        }
         return { success: true, diaryId: input.serverDiaryId };
       }
 

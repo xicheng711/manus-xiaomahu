@@ -515,7 +515,19 @@ export default function DiaryEditScreen() {
   }
 
   async function handleEndAndSave() {
-    if (entryId) await updateDiaryEntry(entryId, { conversationFinished: true });
+    if (entryId) {
+      await updateDiaryEntry(entryId, { conversationFinished: true });
+      // 同步到云端，conversationFinished=true 会触发服务器发送通知给家人
+      const updatedEntry = entryRef.current;
+      if (updatedEntry && familyId) {
+        const serverDiaryId = updatedEntry.serverDiaryId;
+        cloudSyncDiary(
+          { ...updatedEntry, conversationFinished: true },
+          serverDiaryId,
+          familyId,
+        ).catch(() => {});
+      }
+    }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/(tabs)/diary' as any);
   }

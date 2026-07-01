@@ -831,7 +831,7 @@ export default function ShareScreen() {
       let ci = await getCheckInByDate(dateStr, familyId);
       // Joiner 本地可能没有历史打卡数据，从云端拉取
       if (!ci && isJoiner) {
-        const cloudCIs = await cloudGetCheckIns();
+        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
         ci = (cloudCIs as any[])?.find((c: any) => c.date === dateStr) ?? null;
       }
       if (!ci) {
@@ -1067,7 +1067,7 @@ export default function ShareScreen() {
       // Joiner：从云端拉取近7天打卡数据，用于填充周趋势图
       let cloudCIsForWeekly: any[] = [];
       if (isJoiner) {
-        cloudCIsForWeekly = (await cloudGetCheckIns(undefined, 30)) as any[];
+        cloudCIsForWeekly = (await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30)) as any[];
         const todayKey = new Date().toISOString().slice(0, 10);
         const yd = new Date(); yd.setDate(yd.getDate() - 1);
         const yKey = yd.toISOString().slice(0, 10);

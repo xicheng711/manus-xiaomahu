@@ -76,6 +76,9 @@ export default function RootLayout() {
             case "medication":
               router.push({ pathname: "/(tabs)/medication", params: { refresh: Date.now() } } as any);
               break;
+            case "home":
+              router.push({ pathname: "/(tabs)/index", params: { refresh: Date.now() } } as any);
+              break;
             default:
               break;
           }
