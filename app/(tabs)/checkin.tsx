@@ -2469,7 +2469,7 @@ function JoinerCheckinView() {
     const todayDate = new Date();
     const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
     import('@/lib/cloud-sync').then(({ cloudGetCheckIns }) => {
-      cloudGetCheckIns(undefined, 30).then((cloudCIs: any[]) => {
+      cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30).then((cloudCIs: any[]) => {
         if (cloudCIs && cloudCIs.length > 0) {
           const todayCi = cloudCIs.find((ci: any) => ci.date === todayKey) ?? null;
           setCheckIn(todayCi);

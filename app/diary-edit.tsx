@@ -516,17 +516,9 @@ export default function DiaryEditScreen() {
 
   async function handleEndAndSave() {
     if (entryId) {
+      // updateDiaryEntry 内部检测到 conversationFinished=true 时会自动调用 cloudSyncDiary
+      // cloudSyncDiary 携带 conversationFinished=true 发到服务器，服务器再发推送通知给家人
       await updateDiaryEntry(entryId, { conversationFinished: true });
-      // 同步到云端，conversationFinished=true 会触发服务器发送通知给家人
-      const updatedEntry = entryRef.current;
-      if (updatedEntry && familyId) {
-        const serverDiaryId = updatedEntry.serverDiaryId;
-        cloudSyncDiary(
-          { ...updatedEntry, conversationFinished: true },
-          serverDiaryId,
-          familyId,
-        ).catch(() => {});
-      }
     }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/(tabs)/diary' as any);

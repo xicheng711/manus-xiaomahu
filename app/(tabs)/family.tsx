@@ -568,8 +568,8 @@ export default function FamilyScreen() {
     if (!creatorFlag) {
       // Joiner: pull from cloud
       const [cloudCIs, cloudDiaries, cloudProfile] = await Promise.all([
-        cloudGetCheckIns().catch(() => []),
-        cloudGetDiaries().catch(() => []),
+        cloudGetCheckIns(familyId ? Number(familyId) : undefined).catch(() => []),
+        cloudGetDiaries(familyId ? Number(familyId) : undefined).catch(() => []),
         cloudGetElderProfile().catch(() => null),
       ]);
       allCheckIns = (cloudCIs as any[]) ?? [];
