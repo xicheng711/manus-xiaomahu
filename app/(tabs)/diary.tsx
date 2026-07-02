@@ -364,32 +364,60 @@ function DiaryScreenContent() {
 
   /** 合并云端日记到本地：以 serverDiaryId 去重，云端优先 */
   function mergeCloudDiaries(local: DiaryEntry[], cloud: any[], currentUserId?: number | null): DiaryEntry[] {
+    // 以 serverDiaryId 为主键建立本地条目索引
+    const localByServerId = new Map<number, number>(); // serverDiaryId -> index in merged
     const merged = [...local];
-    const localServerIds = new Set(local.filter(d => d.serverDiaryId).map(d => d.serverDiaryId));
+    merged.forEach((d, i) => { if (d.serverDiaryId) localByServerId.set(d.serverDiaryId, i); });
+
     for (const c of cloud) {
-      if (localServerIds.has(c.id)) continue; // 已存在（通过 serverDiaryId 匹配）
+      const existingIdx = localByServerId.get(c.id);
+      if (existingIdx !== undefined) {
+        // 已存在匹配条目：用云端最新数据更新本地（确保 conversation/aiReply 最新）
+        merged[existingIdx] = {
+          ...merged[existingIdx],
+          serverDiaryId: c.id,
+          content: c.content || merged[existingIdx].content,
+          aiReply: c.aiReply ?? merged[existingIdx].aiReply,
+          conversation: c.conversation ?? merged[existingIdx].conversation,
+          conversationFinished: c.conversationFinished ?? merged[existingIdx].conversationFinished,
+          authorName: c.authorName || c.author?.name || merged[existingIdx].authorName,
+          localTimeStr: c.localTimeStr ?? merged[existingIdx].localTimeStr,
+        };
+        continue;
+      }
+
       const cloudAuthorName = (c.authorName || c.author?.name || '').toLowerCase();
-      const cloudAuthorUserId = c.authorUserId; // 服务端返回的作者 userId
+      const cloudAuthorUserId = c.authorUserId;
       const cloudDate = c.date;
-      // 策略：匹配本地已有条目（避免重复添加）
-      // 条件 1：authorName 非空且相同
-      // 条件 2：authorName 为空，但云端 authorUserId 与当前用户匹配（主照顾者自己的老数据）
-      const existingIdx = merged.findIndex(d => {
-        if (d.serverDiaryId) return false; // 已有 serverDiaryId 的不覆盖
+
+      // 尝试匹配本地无 serverDiaryId 的同名作者同日期条目（避免重复）
+      // 注意：必须同时匹配日期和作者，避免不同 joiner 的日记被错误合并
+      const unlinkedIdx = merged.findIndex(d => {
+        if (d.serverDiaryId) return false; // 已有 serverDiaryId 的跳过
         if (d.date !== cloudDate) return false;
         const localAuthor = (d.authorName || '').toLowerCase();
-        // 条件 1：两者 authorName 都非空且相同
+        // 两者 authorName 都非空且相同（同一个人写的未同步条目）
         if (cloudAuthorName && localAuthor && localAuthor === cloudAuthorName) return true;
-        // 条件 2：本地 authorName 为空（老数据），且云端作者是当前用户
+        // 本地无 authorName（老数据），且云端作者是当前用户
         if (!localAuthor && currentUserId && cloudAuthorUserId === currentUserId) return true;
         return false;
       });
-      if (existingIdx >= 0) {
-        // 补充 serverDiaryId 到已有条目，不新建
-        merged[existingIdx] = { ...merged[existingIdx], serverDiaryId: c.id };
+      if (unlinkedIdx >= 0) {
+        // 将本地条目与云端关联，用云端数据补充
+        merged[unlinkedIdx] = {
+          ...merged[unlinkedIdx],
+          serverDiaryId: c.id,
+          aiReply: c.aiReply ?? merged[unlinkedIdx].aiReply,
+          conversation: c.conversation ?? merged[unlinkedIdx].conversation,
+          conversationFinished: c.conversationFinished ?? merged[unlinkedIdx].conversationFinished,
+          localTimeStr: c.localTimeStr ?? merged[unlinkedIdx].localTimeStr,
+        };
+        localByServerId.set(c.id, unlinkedIdx);
         continue;
       }
-      // 云端日记转换为本地格式
+
+      // 全新条目：云端日记转换为本地格式
+      const newIdx = merged.length;
       merged.push({
         id: `cloud_${c.id}`,
         serverDiaryId: c.id,
@@ -410,8 +438,9 @@ function DiaryScreenContent() {
         conversationFinished: c.conversationFinished ?? true,
         localTimeStr: c.localTimeStr,
       });
+      localByServerId.set(c.id, newIdx);
     }
-    // 按日期降序排列
+    // 按 createdAt 降序排列（同日期多条时按时间排）
     merged.sort((a, b) => {
       const da = a.createdAt || a.date;
       const db = b.createdAt || b.date;
@@ -845,18 +874,106 @@ function JoinerDiaryReadOnly() {
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
 
+  /** 合并云端日记到本地：以 serverDiaryId 为主键去重，云端数据优先 */
+  function mergeJoinerDiaries(local: DiaryEntry[], cloud: any[], currentUserId?: number | null): DiaryEntry[] {
+    const localByServerId = new Map<number, number>();
+    const merged = [...local];
+    merged.forEach((d, i) => { if (d.serverDiaryId) localByServerId.set(d.serverDiaryId, i); });
+    for (const c of cloud) {
+      const existingIdx = localByServerId.get(c.id);
+      if (existingIdx !== undefined) {
+        merged[existingIdx] = {
+          ...merged[existingIdx],
+          serverDiaryId: c.id,
+          content: c.content || merged[existingIdx].content,
+          aiReply: c.aiReply ?? merged[existingIdx].aiReply,
+          conversation: c.conversation ?? merged[existingIdx].conversation,
+          conversationFinished: c.conversationFinished ?? merged[existingIdx].conversationFinished,
+          authorName: c.authorName || c.author?.name || merged[existingIdx].authorName,
+          localTimeStr: c.localTimeStr ?? merged[existingIdx].localTimeStr,
+        };
+        continue;
+      }
+      const cloudAuthorName = (c.authorName || c.author?.name || '').toLowerCase();
+      const cloudAuthorUserId = c.authorUserId;
+      const cloudDate = c.date;
+      const unlinkedIdx = merged.findIndex(d => {
+        if (d.serverDiaryId) return false;
+        if (d.date !== cloudDate) return false;
+        const localAuthor = (d.authorName || '').toLowerCase();
+        if (cloudAuthorName && localAuthor && localAuthor === cloudAuthorName) return true;
+        if (!localAuthor && currentUserId && cloudAuthorUserId === currentUserId) return true;
+        return false;
+      });
+      if (unlinkedIdx >= 0) {
+        merged[unlinkedIdx] = {
+          ...merged[unlinkedIdx],
+          serverDiaryId: c.id,
+          aiReply: c.aiReply ?? merged[unlinkedIdx].aiReply,
+          conversation: c.conversation ?? merged[unlinkedIdx].conversation,
+          conversationFinished: c.conversationFinished ?? merged[unlinkedIdx].conversationFinished,
+          localTimeStr: c.localTimeStr ?? merged[unlinkedIdx].localTimeStr,
+        };
+        localByServerId.set(c.id, unlinkedIdx);
+        continue;
+      }
+      const newIdx = merged.length;
+      merged.push({
+        id: `cloud_${c.id}`,
+        serverDiaryId: c.id,
+        date: c.date,
+        content: c.content || '',
+        moodEmoji: c.moodEmoji || '😊',
+        moodLabel: c.moodLabel,
+        moodScore: c.moodScore,
+        tags: c.tags,
+        createdAt: c.createdAt,
+        caregiverMoodEmoji: c.caregiverMoodEmoji,
+        caregiverMoodLabel: c.caregiverMoodLabel,
+        authorName: c.authorName || c.author?.name,
+        aiReply: c.aiReply,
+        aiEmoji: c.aiEmoji,
+        aiTip: c.aiTip,
+        conversation: c.conversation,
+        conversationFinished: c.conversationFinished ?? true,
+        localTimeStr: c.localTimeStr,
+      });
+      localByServerId.set(c.id, newIdx);
+    }
+    merged.sort((a, b) => {
+      const da = a.createdAt || a.date;
+      const db = b.createdAt || b.date;
+      return db.localeCompare(da);
+    });
+    return merged;
+  }
+
   useEffect(() => { fadeInUp(headerFade, headerSlide, { duration: 500 }); }, []);
   useFocusEffect(useCallback(() => {
-    // joiner 视角：优先从云端拉取主照顾者的日记
-    cloudGetDiaries(familyId ? Number(familyId) : undefined).then(cloudEntries => {
-      if (cloudEntries && cloudEntries.length > 0) {
-        setEntries(cloudEntries as DiaryEntry[]);
-      } else {
-        getDiaryEntries().then(e => setEntries(e));
+    // joiner 视角：从云端拉取全家庭日记（主照顾者 + 所有 joiner）
+    async function loadJoinerEntries() {
+      const local = await getDiaryEntries(familyId);
+      try {
+        const [cloudEntries, syncState] = await Promise.all([
+          cloudGetDiaries(familyId ? Number(familyId) : undefined),
+          getCloudSyncState(),
+        ]);
+        if (cloudEntries && cloudEntries.length > 0) {
+          // 使用与主照顾者相同的合并逻辑，确保所有人的日记都显示
+          const merged = mergeJoinerDiaries(local, cloudEntries, syncState.userId);
+          setEntries(merged);
+          // 写入本地缓存
+          const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+          const key = familyId ? `diary_entries:${familyId}` : 'diary_entries';
+          await AsyncStorage.setItem(key, JSON.stringify(merged));
+        } else if (local.length > 0) {
+          setEntries(local);
+        }
+      } catch {
+        if (local.length > 0) setEntries(local);
       }
-    }).catch(() => {
-      getDiaryEntries().then(e => setEntries(e));
-    });
+    }
+    loadJoinerEntries();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyId]));
 
