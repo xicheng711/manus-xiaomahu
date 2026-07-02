@@ -435,12 +435,12 @@ export function JoinerHomeScreen() {
         cloudGetDiaries(roomIdNum, 50),
         cloudGetElderProfile(),
       ]);
-      checkIns = (cloudCheckIns && cloudCheckIns.length > 0)
+        checkIns = (cloudCheckIns && cloudCheckIns.length > 0)
         ? cloudCheckIns as DailyCheckIn[]
-        : await getAllCheckIns();
+        : await getAllCheckIns(activeFamilyId || undefined);
       diaries = (cloudDiaries && cloudDiaries.length > 0)
         ? cloudDiaries as DiaryEntry[]
-        : await getDiaryEntries();
+        : await getDiaryEntries(activeFamilyId || undefined);
       if (cloudProfile?.nickname) setElderNickname(cloudProfile.nickname);
       if (cloudProfile?.elderPhotoUri) setElderPhotoUri(cloudProfile.elderPhotoUri);
       // 被照顾者没有照片时，用 zodiacEmoji 显示生肖 emoji
