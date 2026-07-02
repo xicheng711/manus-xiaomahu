@@ -365,11 +365,16 @@ function isPureEmoji(str: string): boolean {
 
 function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; isCurrentUser: boolean; onPress: () => void }) {
   const [imgError, setImgError] = useState(false);
-  // 计算生肖：有 birthYear 时显示生肖 emoji，否则用注册时的 emoji
+  // 生肖：有 birthYear 时显示生肖 emoji，否则用注册时的 emoji
   const zodiacInfo = m.birthYear ? getZodiac(m.birthYear) : null;
   const displayEmoji = zodiacInfo ? zodiacInfo.emoji : (m.emoji || '👤');
-  // 名字是纯 emoji 时（如主照顾者名字是 🐑），用大字号显示
+  // 名字是纯 emoji 时（如主照顾者名字是 💑），用大字号显示
   const nameIsPureEmoji = isPureEmoji(m.name);
+  // 头像显示规则：
+  // - 主照顾者（isCreator=true）：有 birthYear 就显生肖 emoji，否则可以显示照片或 emoji
+  // - Joiner（isCreator=false/undefined）：只显示自选 emoji，不显示照片（避免旧照片干扰）
+  const isCreator = m.isCreator === true;
+  const showPhoto = isCreator && !!m.photoUri && !imgError && !zodiacInfo;
   return (
     <TouchableOpacity
       style={styles.memberChip}
@@ -377,7 +382,7 @@ function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; 
       activeOpacity={isCurrentUser ? 0.7 : 1}
     >
       <View style={[styles.memberAvatar, { backgroundColor: m.color + '22', borderColor: m.color + '99' }]}>
-        {m.photoUri && !imgError ? (
+        {showPhoto ? (
           <Image source={{ uri: m.photoUri }} style={styles.memberAvatarImg} onError={() => setImgError(true)} />
         ) : (
           <Text style={styles.memberAvatarText}>{displayEmoji}</Text>

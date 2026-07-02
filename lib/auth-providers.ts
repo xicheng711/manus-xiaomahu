@@ -109,8 +109,9 @@ async function navigateAfterLogin(router: Router) {
               const { getUserProfile, saveUserProfile } = await import('@/lib/storage');
               const existing = await getUserProfile();
               const updatedName = myMember.name || existing?.caregiverName;
-              // 接受任何非空 photoUri（包括 http://、自定义域名等），不强制要求 https://
-              const updatedPhoto = myMember.photoUri || existing?.caregiverPhotoUri;
+              // 只有主照顾者（isCreator=true）才恢复照片；joiner 不恢复照片，避免旧照片覆盖自选 emoji
+              const isCreatorMember = myMember.isCreator === true;
+              const updatedPhoto = isCreatorMember ? (myMember.photoUri || existing?.caregiverPhotoUri) : undefined;
               if (updatedName || updatedPhoto) {
                 await saveUserProfile({
                   ...existing,

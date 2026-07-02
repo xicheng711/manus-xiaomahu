@@ -112,8 +112,10 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             const serverMembers: import('./storage').FamilyMember[] = detail.members.map((m: any) => {
               const isCurrentUser = String(m.id) === String(membership.myMemberId);
               const localMemberPhoto = membership.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined;
-              // 优先用服务器 URL，其次用本地已保存的旧 URL，最后对当前用户用本地 caregiverPhotoUri
-              const photoUri = m.photoUri || localMemberPhoto || (isCurrentUser ? localCaregiverPhoto ?? undefined : undefined);
+              // 优先用服务器 URL，其次用本地已保存的旧 URL
+              // 注意：joiner 成员不从本地 caregiverPhotoUri fallback，避免旧照片覆盖自选 emoji
+              const isCreatorMember = m.isCreator === true;
+              const photoUri = m.photoUri || localMemberPhoto || (isCurrentUser && isCreatorMember ? localCaregiverPhoto ?? undefined : undefined);
               return {
                 id: String(m.id),
                 name: m.name,
@@ -225,8 +227,10 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
         const serverMembers: FamilyMember[] = (detail.members ?? []).map((m: any) => {
           const isCurrentUser = String(m.id) === String(target.myMemberId);
           const localMemberPhoto = target.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined;
-          // 三层 fallback：服务器 URL → 本地已保存的旧 URL → 当前用户的 caregiverPhotoUri
-          const photoUri = m.photoUri || localMemberPhoto || (isCurrentUser ? swLocalCaregiverPhoto ?? undefined : undefined);
+          // 两层 fallback：服务器 URL → 本地已保存的旧 URL
+          // 注意：joiner 成员不从本地 caregiverPhotoUri fallback，避免旧照片覆盖自选 emoji
+          const isCreatorMember = m.isCreator === true;
+          const photoUri = m.photoUri || localMemberPhoto || (isCurrentUser && isCreatorMember ? swLocalCaregiverPhoto ?? undefined : undefined);
           return {
             id: String(m.id),
             name: m.name,

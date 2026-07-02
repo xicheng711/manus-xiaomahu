@@ -24,6 +24,13 @@ import * as ImagePicker from 'expo-image-picker';
 const CREATOR_STEPS = ['欢迎', '角色', '被照顾者', '照顾者', '城市', '用药', '护理需求', '邀请码'];
 const JOINER_STEPS  = ['欢迎', '角色', '共享码', '确认', '身份'];
 
+// Joiner emoji 选项：分组展示（女性 / 男性 / 十二生肖 / 笑脸表情）
+const JOINER_EMOJI_GROUPS = [
+  { label: '女性', emojis: ['👩', '👧', '👵', '🧕', '👩‍🦰', '👩‍🦱', '👩‍🦳', '👩‍🦲'] },
+  { label: '男性', emojis: ['👨', '👦', '👴', '🧔', '👨‍🦰', '👨‍🦱', '👨‍🦳', '👨‍🦲'] },
+  { label: '十二生肖', emojis: ['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐑', '🐵', '🐔', '🐶', '🐷'] },
+  { label: '表情', emojis: ['😊', '🥰', '😄', '🤗', '😎', '🌸', '🌟', '💫', '🌈', '🍀', '🦋', '🌺'] },
+];
 const FAMILY_EMOJIS = ['👩', '👨', '👵', '👴', '👧', '👦', '🧑', '👩‍⚕️', '👨‍⚕️'];
 const FAMILY_ROLES = [
   { role: 'caregiver' as const, label: '主要照顾者' },
@@ -212,26 +219,11 @@ export default function OnboardingScreen() {
   const [joinerCodeError, setJoinerCodeError] = useState('');
   const [joinerName, setJoinerName] = useState('');
   const [joinerEmoji, setJoinerEmoji] = useState('👩');
-  const [joinerPhotoUri, setJoinerPhotoUri] = useState<string | undefined>(undefined);
-  const [joinerAvatarType, setJoinerAvatarType] = useState<'photo' | 'emoji'>('emoji');
+  // joiner 不再支持照片上传，只使用 emoji 头像
   const [joinerRelationship, setJoinerRelationship] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function pickJoinerPhoto() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setJoinerPhotoUri(result.assets[0].uri);
-      setJoinerAvatarType('photo');
-      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }
+
 
   // ── Legacy family step states (kept for compatibility) ────────
   const [familyMode, setFamilyMode] = useState<'choose' | 'join' | 'create' | 'skip'>('choose');
@@ -462,16 +454,7 @@ export default function OnboardingScreen() {
     // 注意：不在这里做本地 memberships 前置检查，因为用户可能已经重新设置了本地数据
     // 但服务器上仍然有记录。服务器端 joinRoom 会幂等处理（已是成员时返回成功）。
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // 先上传照片到 S3，确保其他设备可以访问
-    let finalJoinerPhotoUri = joinerPhotoUri;
-    if (joinerPhotoUri && joinerPhotoUri.startsWith('file://')) {
-      try {
-        const uploaded = await cloudUploadPhoto(joinerPhotoUri, 'member');
-        if (uploaded) finalJoinerPhotoUri = uploaded;
-      } catch (e) {
-        console.warn('[Onboarding] Failed to upload joiner photo, using local URI:', e);
-      }
-    }
+    // Joiner 不再上传照片，只使用自选 emoji 作为头像
     const rel = joinerRelationship.trim();
     const result = await joinFamilyRoom(joinerCode.trim(), {
       name: joinerName.trim() || '家人',
@@ -479,7 +462,7 @@ export default function OnboardingScreen() {
       roleLabel: rel || '家庭成员',
       emoji: joinerEmoji,
       color: '#A855F7',
-      photoUri: finalJoinerPhotoUri,
+      photoUri: undefined, // joiner 不使用照片头像
       relationship: rel || undefined,
     });
     if (!result) {
@@ -488,13 +471,13 @@ export default function OnboardingScreen() {
       Alert.alert('加入失败', '网络连接失败，请检查网络后重试。');
       return;
     }
-    // 保存 joiner 自己的用户信息（头像、名字）到本地，先读取再合并避免覆盖其他字段
+    // 保存 joiner 自己的用户信息（名字 + emoji）到本地
     const existingUserProfile = await getUserProfile();
     await saveUserProfile({
       ...existingUserProfile,
       caregiverName: joinerName.trim() || '家人',
-      caregiverPhotoUri: finalJoinerPhotoUri,
-      caregiverAvatarType: joinerAvatarType === 'photo' ? 'photo' : 'zodiac',
+      caregiverPhotoUri: undefined, // joiner 不保存照片 URI
+      caregiverAvatarType: 'zodiac', // 用 zodiac 类型表示 emoji模式
     });
     setIsSubmitting(false);
     await refresh();
@@ -1126,69 +1109,56 @@ export default function OnboardingScreen() {
         )}
 
         {/* ══════════════════════════════════════════════
-            JOINER PATH: Step 4 – Identity (name + avatar + photo)
+            JOINER PATH: Step 4 – Identity (name + emoji avatar)
             ══════════════════════════════════════════════ */}
         {step === 4 && userType === 'joiner' && (
           <View style={styles.stepContainer}>
-              {/* Avatar preview circle with upload tap */}
-              <TouchableOpacity onPress={pickJoinerPhoto} activeOpacity={0.82} style={styles.joinerAvatarWrap}>
-                <LinearGradient colors={['#F9A8D4', '#FB7185']} style={styles.joinerAvatarCircle}>
-                  {joinerPhotoUri ? (
-                    <Image source={{ uri: joinerPhotoUri }} style={styles.joinerAvatarPhoto} />
-                  ) : (
-                    <Text style={{ fontSize: 44 }}>{joinerEmoji}</Text>
-                  )}
-                </LinearGradient>
-                {/* Camera badge */}
-                <View style={styles.joinerCameraBadge}>
-                  <Text style={{ fontSize: 14 }}>📷</Text>
-                </View>
-              </TouchableOpacity>
-              <Text style={[styles.avatarHint, { marginTop: 8, marginBottom: 24 }]}>点击上传您的照片</Text>
-
-              <Text style={styles.title}>告诉我们您是谁</Text>
-              <Text style={[styles.subtitle, { marginBottom: 24 }]}>方便家庭成员认识您</Text>
-
-              {/* Name */}
-              <View style={[styles.inputGroup, { width: '100%' }]}>
-                <Text style={styles.label}>您的昵称</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="如：小红、大明..."
-                  value={joinerName}
-                  onChangeText={setJoinerName}
-                  placeholderTextColor="#9BA1A6"
-                />
+            {/* 已选 emoji 预览圆 */}
+            <View style={styles.joinerEmojiPreviewWrap}>
+              <LinearGradient colors={['#F9A8D4', '#C084FC', '#818CF8']} style={styles.joinerEmojiPreviewCircle}>
+                <Text style={{ fontSize: 52 }}>{joinerEmoji}</Text>
+              </LinearGradient>
+              <View style={styles.joinerEmojiPreviewBadge}>
+                <Text style={{ fontSize: 14 }}>✨</Text>
               </View>
+            </View>
 
-              {/* Emoji avatar grid (secondary option when no photo) */}
-              {!joinerPhotoUri && (
-                <View style={[styles.inputGroup, { width: '100%' }]}>
-                  <Text style={styles.label}>或选择一个表情头像</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                    {FAMILY_EMOJIS.map(e => (
+            <Text style={[styles.title, { marginTop: 16 }]}>告诉我们您是谁</Text>
+            <Text style={[styles.subtitle, { marginBottom: 20 }]}>选一个头像，让家人认识您</Text>
+
+            {/* 昵称输入 */}
+            <View style={[styles.inputGroup, { width: '100%' }]}>
+              <Text style={styles.label}>您的昵称</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="如：小红、大明、婷婷..."
+                value={joinerName}
+                onChangeText={setJoinerName}
+                placeholderTextColor="#9BA1A6"
+              />
+            </View>
+
+            {/* 分组 emoji 选择器 */}
+            <View style={{ width: '100%', gap: 14 }}>
+              {JOINER_EMOJI_GROUPS.map(group => (
+                <View key={group.label}>
+                  <Text style={styles.joinerEmojiGroupLabel}>{group.label}</Text>
+                  <View style={styles.joinerEmojiRow}>
+                    {group.emojis.map(e => (
                       <TouchableOpacity
                         key={e}
-                        style={[styles.familyEmojiBtn, joinerEmoji === e && joinerAvatarType === 'emoji' && styles.familyEmojiBtnActive]}
-                        onPress={() => { setJoinerEmoji(e); setJoinerAvatarType('emoji'); }}
+                        style={[styles.joinerEmojiBtn, joinerEmoji === e && styles.joinerEmojiBtnActive]}
+                        onPress={() => { setJoinerEmoji(e); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                        activeOpacity={0.7}
                       >
-                        <Text style={{ fontSize: 22 }}>{e}</Text>
+                        <Text style={{ fontSize: 24 }}>{e}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
                 </View>
-              )}
-
-              {/* Clear photo button if photo selected */}
-              {joinerPhotoUri && (
-                <TouchableOpacity
-                  onPress={() => { setJoinerPhotoUri(undefined); setJoinerAvatarType('emoji'); }}
-                  style={{ marginTop: 4, paddingVertical: 8 }}
-                >
-                  <Text style={{ color: '#FB7185', fontSize: 14, textAlign: 'center' }}>重新选择表情头像</Text>
-                </TouchableOpacity>
-              )}
+              ))}
             </View>
+          </View>
         )}
 
         {/* STEP 7: Invite Code + Done (Creator only) */}
@@ -1529,21 +1499,38 @@ const styles = StyleSheet.create({
   },
   btnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
-  // ── Joiner avatar upload (step 4) ────────────────────────────
-  joinerAvatarWrap: { position: 'relative', marginTop: 8, marginBottom: 4 },
-  joinerAvatarCircle: {
-    width: 100, height: 100, borderRadius: 50,
+  // ══ Joiner emoji 选择器 (step 4) ──────────────────────────────────────────
+  joinerEmojiPreviewWrap: { position: 'relative', marginTop: 8, marginBottom: 4, alignSelf: 'center' },
+  joinerEmojiPreviewCircle: {
+    width: 110, height: 110, borderRadius: 55,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#FB7185', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+    shadowColor: '#C084FC', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
-  joinerAvatarPhoto: { width: 100, height: 100, borderRadius: 50 },
-  joinerCameraBadge: {
-    position: 'absolute', bottom: 0, right: 0,
+  joinerEmojiPreviewBadge: {
+    position: 'absolute', bottom: 2, right: 2,
     width: 30, height: 30, borderRadius: 15,
     backgroundColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: '#FECDD3',
+    borderWidth: 1.5, borderColor: '#E9D5FF',
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3,
+  },
+  joinerEmojiGroupLabel: {
+    fontSize: 12, fontWeight: '700', color: AppColors.text.tertiary,
+    letterSpacing: 0.5, marginBottom: 8, paddingLeft: 2,
+  },
+  joinerEmojiRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+  },
+  joinerEmojiBtn: {
+    width: 46, height: 46, borderRadius: 14,
+    backgroundColor: AppColors.bg.secondary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'transparent',
+  },
+  joinerEmojiBtnActive: {
+    borderColor: AppColors.purple.strong,
+    backgroundColor: '#EDE9FE',
+    shadowColor: AppColors.purple.strong, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3,
   },
 
   // ── Role Selection (step 1) — Figma design ────────────────────

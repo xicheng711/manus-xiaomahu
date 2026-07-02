@@ -6,12 +6,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppColors, Gradients } from '@/lib/design-tokens';
+import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
-
-const WECHAT_GREEN = '#07C160';
-const WECHAT_GREEN_DARK = '#06AD56';
-const APPLE_BLACK = '#000000';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -19,7 +15,7 @@ export default function LoginScreen() {
   const [agreed, setAgreed] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
   const [alertMsg, setAlertMsg] = useState('');
-  const [loading, setLoading] = useState<'wechat' | 'apple' | null>(null);
+  const [loading, setLoading] = useState<'apple' | null>(null);
 
   const isWeb = Platform.OS === 'web';
   const logoScale = useRef(new Animated.Value(isWeb ? 1 : 0.8)).current;
@@ -64,30 +60,6 @@ export default function LoginScreen() {
       Animated.timing(checkScale, { toValue: 1, duration: 100, useNativeDriver: true }),
     ]).start();
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }
-
-  async function handleWeChatLogin() {
-    if (!agreed) {
-      showTip('请先阅读并勾选下方协议');
-      return;
-    }
-    if (loading) return;
-    setLoading('wechat');
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      if (Platform.OS === 'web') {
-        showTip('微信登录需要在手机 App 中使用');
-        return;
-      }
-      const { loginWithWeChat } = await import('@/lib/auth-providers');
-      await loginWithWeChat(router);
-    } catch (e: any) {
-      console.error('[Login] WeChat error:', e);
-      showTip(e?.message || '微信登录失败，请稍后重试');
-    } finally {
-      setLoading(null);
-    }
   }
 
   async function handleAppleLogin() {
@@ -152,18 +124,6 @@ export default function LoginScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.buttonSection, { opacity: contentFade, transform: [{ translateY: contentSlide }] }]}>
-          <TouchableOpacity
-            style={[styles.wechatBtn, loading === 'wechat' && styles.btnLoading]}
-            onPress={handleWeChatLogin}
-            activeOpacity={0.92}
-            disabled={!!loading}
-          >
-            <Text style={styles.wechatIcon}>💬</Text>
-            <Text style={styles.wechatText}>
-              {loading === 'wechat' ? '登录中...' : '微信登录'}
-            </Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.appleBtn, loading === 'apple' && styles.btnLoading]}
             onPress={handleAppleLogin}
@@ -236,7 +196,7 @@ const styles = StyleSheet.create({
   decorTopRight: { position: 'absolute', top: 60, right: -20 },
   decorBottomLeft: { position: 'absolute', bottom: 100, left: -10 },
 
-  logoSection: { alignItems: 'center', marginBottom: 36 },
+  logoSection: { alignItems: 'center', marginBottom: 48 },
   logoCircle: {
     width: 96, height: 96, borderRadius: 24,
     marginBottom: 16,
@@ -253,20 +213,10 @@ const styles = StyleSheet.create({
 
   buttonSection: { marginBottom: 24 },
 
-  wechatBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#07C160', borderRadius: 14,
-    paddingVertical: 14, paddingHorizontal: 20, marginBottom: 12,
-    shadowColor: '#07C160', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18, shadowRadius: 8, elevation: 4,
-  },
-  wechatIcon: { fontSize: 18, marginRight: 8 },
-  wechatText: { fontSize: 16, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
-
   appleBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#1C1C1E', borderRadius: 14,
-    paddingVertical: 14, paddingHorizontal: 20, marginBottom: 18,
+    paddingVertical: 16, paddingHorizontal: 20, marginBottom: 18,
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
   },
