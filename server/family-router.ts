@@ -477,7 +477,7 @@ export const familyRouter = router({
 
   /** Get diary entries for a room */
   getDiaries: protectedProcedure
-    .input(z.object({ roomId: z.number(), limit: z.number().default(30) }))
+    .input(z.object({ roomId: z.number(), limit: z.number().default(100) }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);

@@ -429,9 +429,10 @@ export function JoinerHomeScreen() {
     let diaries: DiaryEntry[] = [];
     let creatorName = profile?.caregiverName || '照顾者';
     try {
+      const roomIdNum = activeFamilyId ? parseInt(activeFamilyId) : undefined;
       const [cloudCheckIns, cloudDiaries, cloudProfile] = await Promise.all([
-        cloudGetCheckIns(undefined, 10),
-        cloudGetDiaries(undefined, 10),
+        cloudGetCheckIns(roomIdNum, 50),
+        cloudGetDiaries(roomIdNum, 50),
         cloudGetElderProfile(),
       ]);
       checkIns = (cloudCheckIns && cloudCheckIns.length > 0)

@@ -46,11 +46,15 @@ export default function RootLayout() {
 
   // Register push token for cross-device notifications (after cloud sync is ready)
   useEffect(() => {
-    // Delay to ensure cloud sync is initialized
-    const timer = setTimeout(() => {
+    // 延迟 3 秒第一次注册，确保 cloud sync 初始化完成
+    const timer1 = setTimeout(() => {
       registerPushToken().catch(() => {});
     }, 3000);
-    return () => clearTimeout(timer);
+    // 延迟 8 秒再注册一次，作为兼容保障（防止首次注册时用户还未登录）
+    const timer2 = setTimeout(() => {
+      registerPushToken().catch(() => {});
+    }, 8000);
+    return () => { clearTimeout(timer1); clearTimeout(timer2); };
   }, []);
 
   // Handle push notification tap: navigate to the relevant screen

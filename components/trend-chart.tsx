@@ -632,16 +632,23 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
     : `${period === 'year' ? yearLabel : periodLabel}暂无小睡记录`;
 
 
-  // 心情分数：优先用日记里的 caregiverMoodEmoji，已废弃的 caregiverMoodScore 作为兜底
-  const cgMoodDates = dateRange.filter(d => (diaryMoodMap[d] ?? (checkInMap.get(d)?.caregiverMoodScore ?? 0)) > 0);
+  // 心情分数：优先用晚间打卡的 moodScore（照顾者真实心情），其次用日记 caregiverMoodEmoji，最后兜底旧 caregiverMoodScore
+  function getMoodScore(d: string): number {
+    const ci = checkInMap.get(d);
+    if (ci?.moodScore && ci.moodScore > 0) return ci.moodScore;
+    if (diaryMoodMap[d] && diaryMoodMap[d] > 0) return diaryMoodMap[d];
+    if (ci?.caregiverMoodScore && ci.caregiverMoodScore > 0) return ci.caregiverMoodScore;
+    return 0;
+  }
+  const cgMoodDates = dateRange.filter(d => getMoodScore(d) > 0);
   const avgCaregiverMood = cgMoodDates.length > 0
-    ? cgMoodDates.reduce((s, d) => s + (diaryMoodMap[d] ?? checkInMap.get(d)?.caregiverMoodScore ?? 0), 0) / cgMoodDates.length : 0;
+    ? cgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / cgMoodDates.length : 0;
 
   const prevRange = getWeekRange(offset - 1);
   const prevDateRange = buildDateRange(prevRange.start, prevRange.end);
-  const prevCgMoodDates = prevDateRange.filter(d => (diaryMoodMap[d] ?? (checkInMap.get(d)?.caregiverMoodScore ?? 0)) > 0);
+  const prevCgMoodDates = prevDateRange.filter(d => getMoodScore(d) > 0);
   const prevAvgCaregiverMood = prevCgMoodDates.length > 0
-    ? prevCgMoodDates.reduce((s, d) => s + (diaryMoodMap[d] ?? checkInMap.get(d)?.caregiverMoodScore ?? 0), 0) / prevCgMoodDates.length : null;
+    ? prevCgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / prevCgMoodDates.length : null;
 
   return (
     <View style={styles.container}>

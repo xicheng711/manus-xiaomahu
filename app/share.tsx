@@ -991,16 +991,19 @@ export default function ShareScreen() {
       setElderEmoji(emoji);
       setElderPhotoUri(elderPhotoUri2);
 
-      let today = await getTodayCheckIn(familyId);
-      let yesterday = await getYesterdayCheckIn(familyId);
-      // Joiner 本地可能没有打卡数据，从云端拉取（明确传 familyId）
-      if (!today && isJoiner) {
-        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
+      let today = await getTodayCheckIn(familyId || undefined);
+      let yesterday = await getYesterdayCheckIn(familyId || undefined);
+      // Joiner 直接从云端拉取打卡数据（不依赖本地缓存，避免 room 错误导致空白）
+      if (isJoiner) {
+        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
         const todayKey = new Date().toISOString().slice(0, 10);
         const yd = new Date(); yd.setDate(yd.getDate() - 1);
         const yKey = yd.toISOString().slice(0, 10);
-        today = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
-        yesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey) ?? null;
+        const cloudToday = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
+        const cloudYesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey) ?? null;
+        // 云端数据优先（云端有 eveningDone 就用云端）
+        if (cloudToday) today = cloudToday;
+        if (cloudYesterday) yesterday = cloudYesterday;
       }
       setTodayCi(today);
       setYesterdayCi(yesterday);
@@ -1061,18 +1064,19 @@ export default function ShareScreen() {
         getProfile(),
         getWeeklySleepData(7, familyId),
       ]);
-      let today = await getTodayCheckIn();
-      let yesterday = await getYesterdayCheckIn();
+      let today = await getTodayCheckIn(familyId || undefined);
+      let yesterday = await getYesterdayCheckIn(familyId || undefined);
 
-      // Joiner：从云端拉取近7天打卡数据，用于填充周趋势图
+      // Joiner：从云端拉取近7天打卡数据，直接覆盖本地数据（避免本地 room 错误导致空白）
       let cloudCIsForWeekly: any[] = [];
       if (isJoiner) {
         cloudCIsForWeekly = (await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30)) as any[];
         const todayKey = new Date().toISOString().slice(0, 10);
         const yd = new Date(); yd.setDate(yd.getDate() - 1);
         const yKey = yd.toISOString().slice(0, 10);
-        if (!today) today = cloudCIsForWeekly.find((ci: any) => ci.date === todayKey) ?? null;
-        if (!yesterday) yesterday = cloudCIsForWeekly.find((ci: any) => ci.date === yKey) ?? null;
+        // Joiner 直接用云端数据（不依赖本地缓存）
+        today = cloudCIsForWeekly.find((ci: any) => ci.date === todayKey) ?? today;
+        yesterday = cloudCIsForWeekly.find((ci: any) => ci.date === yKey) ?? yesterday;
       }
 
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';

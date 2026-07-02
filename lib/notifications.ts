@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCurrentUserIsCreator, getFamilyProfile } from "./storage";
+import Constants from "expo-constants";
 
 const NOTIFICATION_PERM_KEY = "@xiaomahuNotifPerm";
 const MORNING_NOTIF_ID_KEY = "@xiaomahuMorningNotifId";
@@ -55,9 +56,12 @@ export async function registerPushToken(): Promise<string | null> {
   try {
     const hasPermission = await requestNotificationPermissions();
     if (!hasPermission) return null;
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: undefined, // uses the project ID from app.json automatically
-    });
+    // 明确传入 projectId，避免 undefined 导致 Expo push token 获取失败
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId ??
+      '36e30bf8-6e6c-4359-a1ce-fac45d5d24c6';
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
     if (token) {
       // Lazy import to avoid circular dependency

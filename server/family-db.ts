@@ -3,7 +3,7 @@
  * All family-related CRUD operations for cloud sync
  */
 
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import {
   familyRooms, InsertFamilyRoom,
@@ -161,7 +161,7 @@ export async function updateDiaryEntry(id: number, data: Partial<InsertDiaryEntr
   await db.update(diaryEntries).set(data).where(eq(diaryEntries.id, id));
 }
 
-export async function getDiaryEntriesByRoom(roomId: number, limit = 30) {
+export async function getDiaryEntriesByRoom(roomId: number, limit = 100) {
   const db = await getDb();
   if (!db) return [];
   const rows = await db
@@ -196,7 +196,7 @@ export async function getDiaryEntriesByRoom(roomId: number, limit = 30) {
       )
     )
     .where(eq(diaryEntries.roomId, roomId))
-    .orderBy(desc(diaryEntries.date))
+    .orderBy(desc(diaryEntries.date), desc(diaryEntries.createdAt), desc(diaryEntries.id))
     .limit(limit);
   return rows;
 }
