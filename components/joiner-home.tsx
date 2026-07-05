@@ -450,8 +450,8 @@ export function JoinerHomeScreen() {
         setCaregiverName(cloudProfile.caregiverName);
       }
     } catch {
-      checkIns = await getAllCheckIns();
-      diaries = await getDiaryEntries();
+      checkIns = await getAllCheckIns(activeFamilyId || undefined);
+      diaries = await getDiaryEntries(activeFamilyId || undefined);
     }
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest);
@@ -474,12 +474,13 @@ export function JoinerHomeScreen() {
     // 公告也从云端拉取，确保看到所有家庭成员发的公告
     let announcements: FamilyAnnouncement[] = [];
     try {
-      const cloudAnns = await cloudGetAnnouncements(undefined, 30);
+      const roomIdNum2 = activeFamilyId ? parseInt(activeFamilyId) : undefined;
+      const cloudAnns = await cloudGetAnnouncements(roomIdNum2, 30);
       announcements = (cloudAnns && cloudAnns.length > 0)
         ? cloudAnns as unknown as FamilyAnnouncement[]
-        : await getFamilyAnnouncements(30);
+        : await getFamilyAnnouncements(30, activeFamilyId || undefined);
     } catch {
-      announcements = await getFamilyAnnouncements(30);
+      announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
     }
     setLatestAnnounce(announcements[0] ?? null);
     // Filter to today-only data for the activity feed (avoid showing historical records as "today")
