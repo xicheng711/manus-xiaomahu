@@ -376,6 +376,16 @@ export default function ProfileScreen() {
         });
         setProfile(updated);
       }
+      // 同步名字到服务器 familyMembers 表，确保公告页显示最新名字
+      if (activeMembership?.familyId) {
+        const roomId = parseInt(activeMembership.familyId);
+        if (!isNaN(roomId) && updatedUp.caregiverName) {
+          cloudUpdateMemberProfile({
+            roomId,
+            name: updatedUp.caregiverName,
+          }).catch((e) => console.warn('[Profile] cloudUpdateMemberProfile name failed:', e));
+        }
+      }
     } else {
       const rawDate = draftElderBirthDate.trim() || familyProfile?.birthDate || profile?.birthDate || '';
       const birthYear = rawDate ? new Date(rawDate + 'T00:00:00').getFullYear() : new Date().getFullYear();

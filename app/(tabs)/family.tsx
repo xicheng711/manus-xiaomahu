@@ -557,7 +557,9 @@ export default function FamilyScreen() {
       }
     }
     setRoom(r);
-    setCurrentMemberState(m);
+    // 优先使用服务器返回的最新成员数据（包含最新名字），避免本地缓存名字过时
+    const serverMe = r?.members?.find((mem: any) => mem.isCurrentUser || String(mem.id) === String(myMemberId));
+    setCurrentMemberState(serverMe ?? m);
     // 优先使用云端公告（包含所有家庭成员发的），失败时降级读本地
     const a = (cloudAnns && cloudAnns.length > 0)
       ? cloudAnns as unknown as FamilyAnnouncement[]
