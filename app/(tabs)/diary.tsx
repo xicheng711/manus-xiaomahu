@@ -441,10 +441,16 @@ function DiaryScreenContent() {
       localByServerId.set(c.id, newIdx);
     }
     // 按 createdAt 降序排列（同日期多条时按时间排）
+    // 双键排序：先比 createdAt（完整时间戳），再比 localTimeStr（HH:MM），确保跨用户日记顺序正确
     merged.sort((a, b) => {
       const da = a.createdAt || a.date;
       const db = b.createdAt || b.date;
-      return db.localeCompare(da);
+      const cmp = db.localeCompare(da);
+      if (cmp !== 0) return cmp;
+      // 相同时间戳时，用 localTimeStr 作为第二排序键（降序）
+      const ta = a.localTimeStr || '00:00';
+      const tb = b.localTimeStr || '00:00';
+      return tb.localeCompare(ta);
     });
     return merged;
   }
@@ -943,7 +949,11 @@ function JoinerDiaryReadOnly() {
     merged.sort((a, b) => {
       const da = a.createdAt || a.date;
       const db = b.createdAt || b.date;
-      return db.localeCompare(da);
+      const cmp = db.localeCompare(da);
+      if (cmp !== 0) return cmp;
+      const ta = a.localTimeStr || '00:00';
+      const tb = b.localTimeStr || '00:00';
+      return tb.localeCompare(ta);
     });
     return merged;
   }

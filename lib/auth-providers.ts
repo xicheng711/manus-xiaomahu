@@ -8,7 +8,11 @@ import {
   setActiveFamilyId, setActiveRoomIdCache,
   FamilyMembership, FamilyRoom,
 } from '@/lib/storage';
-import { cloudGetMyRooms, cloudGetRoomDetail, setCloudSyncState } from '@/lib/cloud-sync';
+import {
+  cloudGetMyRooms, cloudGetRoomDetail, setCloudSyncState,
+  cloudGetCheckIns, cloudGetDiaries, cloudGetAnnouncements, cloudGetBriefings, cloudGetMedications,
+} from '@/lib/cloud-sync';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_BASE = getApiBaseUrl();
 
@@ -165,6 +169,142 @@ async function navigateAfterLogin(router: Router) {
         const { registerPushToken } = await import('@/lib/notifications');
         registerPushToken().catch(() => {});
       } catch {}
+
+      // 预拉取所有数据写入本地缓存，确保退出重新登录后数据立即可见
+      // 对每个 room 都拉取一次，但主要用 firstRoomId
+      try {
+        const firstRoomIdNum = serverRooms[0].roomId;
+        const roomIdStr = firstRoomId; // already set above
+
+        const [checkInsData, diariesData, announcementsData, briefingsData, medsData] = await Promise.all([
+          cloudGetCheckIns(firstRoomIdNum, 60),
+          cloudGetDiaries(firstRoomIdNum, 100),
+          cloudGetAnnouncements(firstRoomIdNum, 50),
+          cloudGetBriefings(firstRoomIdNum, 14),
+          cloudGetMedications(firstRoomIdNum),
+        ]);
+
+        // Helper: room-scoped key
+        const rk = (base: string) => roomIdStr ? `${base}:${roomIdStr}` : base;
+
+        // Write check-ins
+        if (Array.isArray(checkInsData) && checkInsData.length > 0) {
+          // Map server fields to local DailyCheckIn shape
+          const localCheckIns = checkInsData.map((c: any) => ({
+            id: String(c.id),
+            date: c.date,
+            sleepHours: c.sleepHours ?? 7,
+            sleepQuality: c.sleepQuality ?? 'fair',
+            sleepInput: c.sleepInput,
+            sleepScore: c.sleepScore,
+            sleepProblems: c.sleepProblems,
+            sleepType: c.sleepType,
+            morningNotes: c.morningNotes ?? '',
+            morningDone: c.morningDone ?? false,
+            moodEmoji: c.moodEmoji ?? '😌',
+            moodScore: c.moodScore ?? 5,
+            medicationTaken: c.medicationTaken ?? true,
+            medicationNotes: c.medicationNotes ?? '',
+            mealNotes: c.mealNotes ?? '',
+            mealOption: c.mealOption,
+            eveningNotes: c.eveningNotes ?? '',
+            eveningDone: c.eveningDone ?? false,
+            aiMessage: c.aiMessage ?? '',
+            careScore: c.careScore ?? 50,
+            completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
+            serverCheckInId: c.id,
+          }));
+          await AsyncStorage.setItem(rk('daily_checkins_v2'), JSON.stringify(localCheckIns));
+        }
+
+        // Write diaries
+        if (Array.isArray(diariesData) && diariesData.length > 0) {
+          const localDiaries = diariesData.map((d: any) => ({
+            id: `server_${d.id}`,
+            serverDiaryId: d.id,
+            date: d.date,
+            content: d.content ?? '',
+            moodEmoji: d.moodEmoji,
+            moodLabel: d.moodLabel,
+            moodScore: d.moodScore,
+            tags: d.tags ?? [],
+            caregiverMoodEmoji: d.caregiverMoodEmoji,
+            caregiverMoodLabel: d.caregiverMoodLabel,
+            aiReply: d.aiReply,
+            aiEmoji: d.aiEmoji,
+            aiTip: d.aiTip,
+            conversation: d.conversation ?? [],
+            conversationFinished: d.conversationFinished ?? true,
+            localTimeStr: d.localTimeStr,
+            authorName: d.authorName,
+            authorUserId: d.authorUserId,
+            createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+          }));
+          await AsyncStorage.setItem(rk('diary_entries'), JSON.stringify(localDiaries));
+        }
+
+        // Write announcements
+        if (Array.isArray(announcementsData) && announcementsData.length > 0) {
+          const localAnnouncements = announcementsData.map((a: any) => ({
+            id: String(a.id),
+            serverId: a.id,
+            content: a.content,
+            emoji: a.emoji,
+            type: a.type ?? 'daily',
+            date: a.date,
+            authorName: a.authorName,
+            authorEmoji: a.authorEmoji,
+            authorColor: a.authorColor,
+            reactions: a.reactions ?? {},
+            createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
+          }));
+          await AsyncStorage.setItem(rk('family_announcements_v1'), JSON.stringify(localAnnouncements));
+        }
+
+        // Write briefings
+        if (Array.isArray(briefingsData) && briefingsData.length > 0) {
+          const localBriefings = briefingsData.map((b: any) => ({
+            id: String(b.id),
+            date: b.date,
+            careScore: b.careScore,
+            summary: b.summary,
+            encouragement: b.encouragement,
+            highlights: b.highlights ?? [],
+            attention: b.attention,
+            shareText: b.shareText,
+            generatedAt: b.generatedAt,
+            checkInDate: b.checkInDate,
+          }));
+          await AsyncStorage.setItem(rk('care_briefings_v1'), JSON.stringify(localBriefings));
+        }
+
+        // Write medications
+        if (Array.isArray(medsData) && medsData.length > 0) {
+          const localMeds = medsData.map((m: any) => ({
+            id: String(m.id),
+            serverMedId: m.id,
+            name: m.name,
+            dosage: m.dosage,
+            frequency: m.frequency,
+            times: m.times ?? [],
+            notes: m.notes,
+            icon: m.icon ?? '💊',
+            active: m.active ?? true,
+            reminderEnabled: m.reminderEnabled ?? true,
+            color: m.color,
+          }));
+          await AsyncStorage.setItem(rk('medications'), JSON.stringify(localMeds));
+        }
+
+        console.log('[navigateAfterLogin] Pre-fetched data for room', roomIdStr,
+          '- checkIns:', checkInsData?.length ?? 0,
+          'diaries:', diariesData?.length ?? 0,
+          'announcements:', announcementsData?.length ?? 0,
+          'briefings:', briefingsData?.length ?? 0,
+          'medications:', medsData?.length ?? 0);
+      } catch (e) {
+        console.warn('[navigateAfterLogin] Pre-fetch failed (non-fatal):', e);
+      }
 
       // Navigate to main app — data is restored
       router.replace('/(tabs)' as any);
