@@ -105,13 +105,97 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
         for (const sr of serverRooms) {
           try {
             const roomId = String(sr.roomId);
-            const membership = all.find(m => m.familyId === roomId);
-            if (!membership) continue;
+            let membership = all.find(m => m.familyId === roomId);
+
+            // ── 关键修复：本地 membership 不存在时（如退出登录后），从服务器数据重新建立 ──
+            if (!membership) {
+              const detail2 = await cloudGetRoomDetail(sr.roomId);
+              if (!detail2?.room) continue;
+              const myMemberId = sr.myMemberId ? String(sr.myMemberId) : String(sr.roomId);
+              const serverMembers2: FamilyMember[] = (detail2.members ?? []).map((m: any) => ({
+                id: String(m.id),
+                name: m.name,
+                role: m.role ?? 'family',
+                roleLabel: m.roleLabel ?? m.role ?? '家人',
+                emoji: m.emoji ?? '👤',
+                color: m.color ?? '#888',
+                photoUri: m.photoUri ?? null,
+                birthYear: m.birthYear ?? undefined,
+                joinedAt: m.joinedAt ?? new Date().toISOString(),
+                isCreator: m.isCreator ?? false,
+                isCurrentUser: String(m.id) === myMemberId,
+                relationship: m.relationship,
+              }));
+              const newRoom: import('./storage').FamilyRoom = {
+                id: roomId,
+                roomCode: detail2.room.roomCode ?? sr.roomCode ?? '',
+                elderName: detail2.room.elderName ?? sr.elderName ?? '家人',
+                elderEmoji: detail2.room.elderEmoji ?? sr.elderEmoji ?? undefined,
+                elderPhotoUri: detail2.room.elderPhotoUri ?? sr.elderPhotoUri ?? undefined,
+                members: serverMembers2,
+                createdAt: detail2.room.createdAt ?? new Date().toISOString(),
+              };
+              const newMembership: FamilyMembership = {
+                familyId: roomId,
+                myMemberId,
+                role: sr.isCreator ? 'creator' : 'joiner',
+                room: newRoom,
+                joinedAt: serverMembers2.find(m => m.id === myMemberId)?.joinedAt ?? new Date().toISOString(),
+                memberEmoji: sr.memberEmoji ?? undefined,
+                memberPhotoUri: sr.memberPhotoUri ?? undefined,
+              };
+              await saveFamilyRoom(newRoom);
+              await addOrUpdateMembership(newMembership);
+              // 恢复 elder profile
+              if (detail2.elderProfile) {
+                const ep = detail2.elderProfile;
+                const { saveFamilyProfile } = await import('./storage');
+                await saveFamilyProfile({
+                  name: ep.name ?? undefined,
+                  nickname: ep.nickname ?? undefined,
+                  birthDate: ep.birthDate ?? undefined,
+                  zodiacEmoji: ep.zodiacEmoji ?? undefined,
+                  zodiacName: ep.zodiacName ?? undefined,
+                  elderPhotoUri: ep.elderPhotoUri ?? undefined,
+                  elderAvatarType: ep.elderAvatarType ?? undefined,
+                  city: ep.city ?? undefined,
+                  reminderMorning: ep.reminderMorning ?? undefined,
+                  reminderEvening: ep.reminderEvening ?? undefined,
+                  setupComplete: true,
+                  careNeeds: ep.careNeeds ?? undefined,
+                }, roomId);
+              }
+              // 恢复 CURRENT_MEMBER（如果是 active family）
+              const myMember2 = serverMembers2.find(m => m.id === myMemberId) ?? serverMembers2[0];
+              if (myMember2) {
+                await setCurrentMember(myMember2);
+              }
+              // 恢复 UserProfile（主照顾者名字和头像）
+              if (sr.isCreator && myMember2) {
+                try {
+                  const { saveUserProfile } = await import('./storage');
+                  const existingUp = await getUserProfile();
+                  const updatedName = myMember2.name || existingUp?.caregiverName;
+                  const updatedPhoto = myMember2.photoUri || existingUp?.caregiverPhotoUri;
+                  if (updatedName) {
+                    await saveUserProfile({
+                      ...existingUp,
+                      ...(updatedName ? { caregiverName: updatedName } : {}),
+                      ...(updatedPhoto ? { caregiverPhotoUri: updatedPhoto, caregiverAvatarType: 'photo' as const } : {}),
+                    });
+                  }
+                } catch {}
+              }
+              all.unshift(newMembership);
+              console.log('[FamilyContext] refresh: restored missing membership for room', roomId, 'role:', newMembership.role);
+              continue; // 已经处理完，跳过下面的头像同步
+            }
+
             const detail = await cloudGetRoomDetail(parseInt(roomId));
             if (!detail?.members) continue;
             const serverMembers: import('./storage').FamilyMember[] = detail.members.map((m: any) => {
-              const isCurrentUser = String(m.id) === String(membership.myMemberId);
-              const localMemberPhoto = membership.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined;
+              const isCurrentUser = String(m.id) === String(membership!.myMemberId);
+              const localMemberPhoto = membership!.room.members.find((lm: any) => String(lm.id) === String(m.id))?.photoUri ?? undefined;
               // 优先用服务器 URL，其次用本地已保存的旧 URL
               // 注意：joiner 成员不从本地 caregiverPhotoUri fallback，避免旧照片覆盖自选 emoji
               const isCreatorMember = m.isCreator === true;
@@ -152,6 +236,16 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             console.warn('[FamilyContext] refresh: failed to sync room detail for', sr.roomId, e);
           }
         }
+
+        // ── 关键修复：确保 creator 家庭排在最前，避免 joiner 家庭被优先激活 ──
+        all.sort((a, b) => {
+          if (a.role === 'creator' && b.role !== 'creator') return -1;
+          if (a.role !== 'creator' && b.role === 'creator') return 1;
+          return 0;
+        });
+        // 重新写入排序后的 memberships
+        const { saveMemberships } = await import('./storage');
+        await saveMemberships(all);
       }
     } catch (e) {
       // Network unavailable — skip reconciliation, keep local state as-is
