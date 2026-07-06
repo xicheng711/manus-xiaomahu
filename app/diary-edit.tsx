@@ -820,6 +820,14 @@ export default function DiaryEditScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
+                {/* 结束并保存按钮：与右上角「保存」功能完全一致，方便用户随时结束对话 */}
+                <TouchableOpacity
+                  style={styles.endAndSaveBtn}
+                  onPress={handleEndAndSave}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.endAndSaveBtnText}>✅ 结束并保存</Text>
+                </TouchableOpacity>
               </>
             ) : (
               <View style={styles.finishedBottomBanner}>
@@ -1114,6 +1122,22 @@ const styles = StyleSheet.create({
 
   // Input row
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  endAndSaveBtn: {
+    marginTop: 10,
+    alignSelf: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(176,120,88,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(176,120,88,0.35)',
+  },
+  endAndSaveBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#8B5E3C',
+    letterSpacing: 0.3,
+  },
   inputWrap: { flex: 1 },
   chatInput: {
     backgroundColor: 'rgba(250,248,245,0.95)',
