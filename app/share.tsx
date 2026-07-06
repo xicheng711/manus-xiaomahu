@@ -996,9 +996,11 @@ export default function ShareScreen() {
       // Joiner 直接从云端拉取打卡数据（不依赖本地缓存，避免 room 错误导致空白）
       if (isJoiner) {
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
-        const todayKey = new Date().toISOString().slice(0, 10);
-        const yd = new Date(); yd.setDate(yd.getDate() - 1);
-        const yKey = yd.toISOString().slice(0, 10);
+        // 使用本地日期（避免 UTC 时区偏差导致找不到当天打卡）
+        const _now = new Date();
+        const todayKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+        const yd = new Date(_now); yd.setDate(yd.getDate() - 1);
+        const yKey = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, '0')}-${String(yd.getDate()).padStart(2, '0')}`;
         const cloudToday = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
         const cloudYesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey) ?? null;
         // 云端数据优先（云端有 eveningDone 就用云端）

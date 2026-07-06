@@ -752,22 +752,33 @@ export function JoinerHomeScreen() {
             </View>
 
             {/* 操作按钮：根据打卡状态显示不同内容 */}
-            {latestCheckIn?.eveningDone ? (
-              <TouchableOpacity
-                style={styles.briefingBtn}
-                onPress={() => router.push('/share' as any)}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={['#4CAF82', '#3A9E6E', '#2E8B5A']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={styles.briefingBtnGradient}
+            {latestCheckIn?.eveningDone ? (() => {
+              // 用本地日期判断最新打卡是否是今天（避免 UTC 时区偏差）
+              const _d = new Date();
+              const todayKey = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
+              const isToday = latestCheckIn.date === todayKey;
+              const btnLabel = isToday ? '📋 查看今日简报' : `📋 查看 ${latestCheckIn.date} 简报`;
+              const targetDate = isToday ? undefined : latestCheckIn.date;
+              return (
+                <TouchableOpacity
+                  style={styles.briefingBtn}
+                  onPress={() => router.push(targetDate
+                    ? { pathname: '/share', params: { date: targetDate } } as any
+                    : '/share' as any
+                  )}
+                  activeOpacity={0.85}
                 >
-                  <Text style={styles.briefingBtnText}>📋 查看今日简报</Text>
-                  <Text style={styles.briefingBtnArrow}>›</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
+                  <LinearGradient
+                    colors={['#4CAF82', '#3A9E6E', '#2E8B5A']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={styles.briefingBtnGradient}
+                  >
+                    <Text style={styles.briefingBtnText}>{btnLabel}</Text>
+                    <Text style={styles.briefingBtnArrow}>›</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              );
+            })() : (
               <View style={styles.briefingBtnDisabled}>
                 <Text style={styles.briefingBtnDisabledText}>
                   {latestCheckIn?.morningDone
