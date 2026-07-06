@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
-  createFamilyRoom, getFamilyRoomByCode, getFamilyRoomById, getUserFamilyRooms,
+  createFamilyRoom, getFamilyRoomByCode, getFamilyRoomById, getUserFamilyRooms, updateFamilyRoom,
   addFamilyMember, getRoomMembers, getMemberByUserId, updateFamilyMember,
   removeFamilyMember, deleteFamilyRoom,
   upsertElderProfile, getElderProfile,
@@ -28,8 +28,13 @@ async function sendExpoPushNotifications(
   body: string,
   data?: Record<string, unknown>,
 ) {
+  console.log('[Push] Received tokens:', pushTokens.length, 'raw, filtering...');
   const validTokens = pushTokens.filter(t => t && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[')));
-  if (validTokens.length === 0) return;
+  console.log('[Push] Valid tokens after filter:', validTokens.length);
+  if (validTokens.length === 0) {
+    console.warn('[Push] No valid Expo push tokens found. Raw tokens:', pushTokens.map(t => t ? t.slice(0, 20) + '...' : 'null'));
+    return;
+  }
   try {
     const messages = validTokens.map(to => ({
       to,
@@ -41,10 +46,19 @@ async function sendExpoPushNotifications(
     const resp = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(messages ),
+      body: JSON.stringify(messages),
     });
     const result = await resp.json();
-    console.log('[Push] Sent to', validTokens.length, 'devices:', JSON.stringify(result?.data?.slice(0,2)));
+    console.log('[Push] Expo API response status:', resp.status);
+    console.log('[Push] Sent to', validTokens.length, 'devices:', JSON.stringify(result?.data));
+    // 检查每个 token 的发送结果
+    if (result?.data) {
+      result.data.forEach((item: any, i: number) => {
+        if (item.status === 'error') {
+          console.warn(`[Push] Token[${i}] error: ${item.message} (${item.details?.error})`);
+        }
+      });
+    }
   } catch (e) {
     console.warn('[Push] Failed to send push notifications:', e);
   }
@@ -673,6 +687,15 @@ export const familyRouter = router({
         reminderEvening: input.reminderEvening ?? existing?.reminderEvening ?? null,
         careNeeds: input.careNeeds ?? existing?.careNeeds ?? null,
       });
+      // 同时更新 familyRooms 表中的展示字段，确保 getRoomDetail 返回最新名字
+      const roomUpdates: Record<string, any> = {};
+      if (input.name !== undefined) roomUpdates.elderName = input.name;
+      if (input.elderPhotoUri !== undefined) roomUpdates.elderPhotoUri = input.elderPhotoUri;
+      if (Object.keys(roomUpdates).length > 0) {
+        await updateFamilyRoom(input.roomId, roomUpdates).catch((e) => {
+          console.warn('[updateElderProfile] Failed to sync elderName to familyRooms:', e);
+        });
+      }
       return { success: true, profile };
     }),
 

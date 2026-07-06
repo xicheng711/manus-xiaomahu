@@ -742,7 +742,7 @@ export default function ShareScreen() {
   const [yesterdayBriefing, setYesterdayBriefing] = useState<any>(null); // 昨日记录的简报
   const [viewMode, setViewMode] = useState<'today' | 'yesterday'>('today');
   const { weatherData } = useWeather();
-  const isJoiner = activeMembership?.role === 'joiner';
+  const isJoiner = activeMembership?.role !== 'creator';
   const cardRef = useRef<View>(null);
   const sharePulse = useRef(new Animated.Value(1)).current;
 

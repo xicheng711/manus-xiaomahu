@@ -40,6 +40,12 @@ export async function getFamilyRoomById(id: number) {
   return rows[0] ?? null;
 }
 
+export async function updateFamilyRoom(id: number, data: Partial<InsertFamilyRoom>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(familyRooms).set(data).where(eq(familyRooms.id, id));
+}
+
 export async function getUserFamilyRooms(userId: number) {
   const db = await getDb();
   if (!db) return [];

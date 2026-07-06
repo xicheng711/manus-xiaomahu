@@ -820,12 +820,6 @@ export default function DiaryEditScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={handleEndAndSave} activeOpacity={0.9} style={styles.endBtnWrap}>
-                  <LinearGradient colors={['#1E293B', '#0F172A', '#1E293B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.endBtn}>
-                    <Animated.View style={[styles.endBtnShimmer, { transform: [{ translateX: shimmerTranslate }] }]} />
-                    <Text style={styles.endBtnText}>结束并保存，返回日记列表 →</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
               </>
             ) : (
               <View style={styles.finishedBottomBanner}>

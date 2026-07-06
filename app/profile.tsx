@@ -159,14 +159,15 @@ export default function ProfileScreen() {
             await cloudUpdateMemberProfile({ roomId, photoUri: cloudUrl }).catch(() => {});
           }
         } else {
-          Alert.alert('头像上传失败', '照片未能同步到云端，家人暂时看不到您的头像。请检查网络后重试。');
+          // 云端同步失败时静默处理：本地头像已保存，不弹出失败框
+          console.warn('[Profile] member photo cloud sync failed, local photo saved');
         }
         // Refresh FamilyContext so other screens see the new avatar
         refresh();
       }).catch((err) => {
         setPhotoUploading(false);
         console.error('[Profile] member photo upload error:', err);
-        Alert.alert('头像上传失败', '照片未能同步到云端，请检查网络后重试。');
+        // 静默处理：本地头像已保存，不弹出失败框
       });
       return;
     }
@@ -191,7 +192,8 @@ export default function ProfileScreen() {
       cloudUploadPhoto(localUri, 'member', roomId).then(async (cloudUrl) => {
         setPhotoUploading(false);
         if (!cloudUrl) {
-          Alert.alert('头像上传失败', '照片未能同步到云端，家人暂时看不到您的头像。请检查网络后重试。');
+          // 云端同步失败时静默处理：本地头像已保存
+          console.warn('[Profile] caregiver photo cloud sync failed, local photo saved');
           return;
         }
         // Update local storage with cloud URL — read fresh value to avoid stale closure
@@ -217,7 +219,7 @@ export default function ProfileScreen() {
       }).catch((err) => {
         setPhotoUploading(false);
         console.error('[Profile] caregiver photo upload error:', err);
-        Alert.alert('头像上传失败', '照片未能同步到云端，请检查网络后重试。');
+        // 静默处理：本地头像已保存
       });
     } else {
       // elder photo
@@ -242,7 +244,8 @@ export default function ProfileScreen() {
       cloudUploadPhoto(localUri, 'elder', roomId).then(async (cloudUrl) => {
         setPhotoUploading(false);
         if (!cloudUrl) {
-          Alert.alert('头像上传失败', '照片未能同步到云端，家人暂时看不到被照者的头像。请检查网络后重试。');
+          // 云端同步失败时静默处理：本地头像已保存
+          console.warn('[Profile] elder photo cloud sync failed, local photo saved');
           return;
         }
         if (activeMembership?.familyId) {
@@ -268,7 +271,7 @@ export default function ProfileScreen() {
       }).catch((err) => {
         setPhotoUploading(false);
         console.error('[Profile] elder photo upload error:', err);
-        Alert.alert('头像上传失败', '照片未能同步到云端，请检查网络后重试。');
+        // 静默处理：本地头像已保存
       });
     }
   }, [userProfile, familyProfile, activeMembership, currentMember, refresh]);
@@ -402,6 +405,22 @@ export default function ProfileScreen() {
           city: draftElderCity.trim() || profile.city,
         });
         setProfile(updated);
+      }
+      // 同步到服务器，确保所有家庭成员看到最新名字
+      if (activeMembership?.familyId) {
+        const roomId = parseInt(activeMembership.familyId);
+        if (!isNaN(roomId)) {
+          cloudUpdateElderProfile({
+            name: draftElderName.trim() || familyProfile?.name || '',
+            nickname: draftElderNickname.trim() || familyProfile?.nickname || '',
+            birthDate: rawDate,
+            zodiacEmoji: zodiac.emoji,
+            zodiacName: zodiac.name,
+            city: draftElderCity.trim() || familyProfile?.city,
+          }, roomId).catch((e) => console.warn('[Profile] cloudUpdateElderProfile failed:', e));
+          // 刷新 family-context，确保首页等地方显示最新名字
+          refresh().catch(() => {});
+        }
       }
     }
     setShowEditModal(false);

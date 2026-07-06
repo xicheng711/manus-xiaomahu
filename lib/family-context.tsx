@@ -133,6 +133,8 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
             });
             const updatedRoom = {
               ...membership.room,
+              elderName: detail.room?.elderName || membership.room.elderName,
+              elderEmoji: detail.room?.elderEmoji || membership.room.elderEmoji,
               elderPhotoUri: detail.room?.elderPhotoUri || membership.room.elderPhotoUri,
               members: serverMembers.length > 0 ? serverMembers : membership.room.members,
             };
