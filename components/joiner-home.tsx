@@ -403,6 +403,11 @@ export function JoinerHomeScreen() {
           if (detail.room?.elderPhotoUri) {
             setElderPhotoUri(detail.room.elderPhotoUri);
           }
+          // 从 room members 找到 isCreator 成员，用其名字作为记录人（主照顾者名字）
+          const creatorMemberFromRoom = (detail.members as any[]).find((m: any) => m.isCreator);
+          if (creatorMemberFromRoom?.name) {
+            setCaregiverName(creatorMemberFromRoom.name);
+          }
         }
       }
     } catch (e) {

@@ -11,7 +11,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { saveProfile, saveUserProfile, getUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
 import { getSessionToken } from '@/lib/_core/auth';
-import { scheduleAllReminders } from '@/lib/notifications';
+import { scheduleAllReminders, registerPushToken } from '@/lib/notifications';
 import { cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from "../lib/family-context";
 import { getZodiac } from '@/lib/zodiac';
@@ -445,6 +445,8 @@ export default function OnboardingScreen() {
       }, newRoomId);
     }
     await refresh();
+    // 新用户注册完成后立即注册 push token，确保不需退出再登录就能收到推送通知
+    registerPushToken().catch(() => {});
     router.replace('/(tabs)');
   }
 
@@ -481,6 +483,8 @@ export default function OnboardingScreen() {
     });
     setIsSubmitting(false);
     await refresh();
+    // Joiner 加入家庭完成后立即注册 push token
+    registerPushToken().catch(() => {});
     router.replace('/(tabs)/family');
   }
 

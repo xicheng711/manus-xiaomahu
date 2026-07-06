@@ -586,7 +586,10 @@ function DiaryScreenContent() {
                     grouped[key].push(e);
                   }
                 });
-                return Object.entries(grouped).map(([month, monthEntries]) => (
+                // 月份分组按时间降序排列（最新月份在最前）
+                return Object.entries(grouped)
+                  .sort(([a], [b]) => b.localeCompare(a))
+                  .map(([month, monthEntries]) => (
                   <View key={month}>
                     <View style={styles.monthDivider}>
                       <Text style={styles.monthDividerText}>{month}</Text>

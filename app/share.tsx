@@ -812,7 +812,18 @@ export default function ShareScreen() {
         getProfile(),
       ]);
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
-      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      // Joiner 应显示主照顾者名字，从 room members 找 isCreator 成员
+      let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      if (isJoiner) {
+        try {
+          const roomId0h = familyId ? parseInt(familyId) : null;
+          if (roomId0h && !isNaN(roomId0h)) {
+            const detail0h = await cloudGetRoomDetail(roomId0h);
+            const creatorMember = (detail0h?.members as any[])?.find((m: any) => m.isCreator);
+            if (creatorMember?.name) caregiver = creatorMember.name;
+          }
+        } catch (e) { /* 网络不可用时降级 */ }
+      }
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
       // 主动从云端拉取最新被照者头像
       let elderPhotoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
@@ -975,7 +986,20 @@ export default function ShareScreen() {
         getProfile(),
       ]);
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
-      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      // Joiner 应显示主照顾者名字，从 room members 找 isCreator 成员
+      let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      if (isJoiner) {
+        // 从云端获取房间详情，找到 creator 成员的名字
+        try {
+          const roomId0 = familyId ? parseInt(familyId) : null;
+          if (roomId0 && !isNaN(roomId0)) {
+            const detail0 = await cloudGetRoomDetail(roomId0);
+            const creatorMember = (detail0?.members as any[])?.find((m: any) => m.isCreator);
+            if (creatorMember?.name) caregiver = creatorMember.name;
+            else if (detail0?.room?.elderNickname) caregiver = caregiver; // fallback
+          }
+        } catch (e) { /* 网络不可用时降级到本地缓存 */ }
+      }
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
       // 主动从云端拉取最新被照者头像
       let elderPhotoUri2 = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
@@ -1082,7 +1106,18 @@ export default function ShareScreen() {
       }
 
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
-      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      // Joiner 应显示主照顾者名字，从 room members 找 isCreator 成员
+      let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
+      if (isJoiner) {
+        try {
+          const roomId0b = familyId ? parseInt(familyId) : null;
+          if (roomId0b && !isNaN(roomId0b)) {
+            const detail0b = await cloudGetRoomDetail(roomId0b);
+            const creatorMember = (detail0b?.members as any[])?.find((m: any) => m.isCreator);
+            if (creatorMember?.name) caregiver = creatorMember.name;
+          }
+        } catch (e) { /* 网络不可用时降级 */ }
+      }
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
       // 主动从云端拉取最新被照者头像
       let photoUri3 = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;

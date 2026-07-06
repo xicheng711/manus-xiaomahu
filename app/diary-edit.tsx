@@ -520,6 +520,8 @@ export default function DiaryEditScreen() {
       // 再设置 conversationFinished=true 并触发云端同步，确保云端收到完整对话
       await updateDiaryEntry(entryId, { conversation, conversationFinished: true });
     }
+    // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
+    setFinished(true);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/(tabs)/diary' as any);
   }
