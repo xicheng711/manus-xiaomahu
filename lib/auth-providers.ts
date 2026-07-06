@@ -6,6 +6,7 @@ import {
   getProfile, getFamilyProfile,
   addOrUpdateMembership, saveFamilyRoom, saveFamilyProfile,
   setActiveFamilyId, setActiveRoomIdCache,
+  setCurrentMember,
   FamilyMembership, FamilyRoom,
 } from '@/lib/storage';
 import {
@@ -151,10 +152,34 @@ async function navigateAfterLogin(router: Router) {
         }
       }
 
-      // Set the first room as active
-      const firstRoomId = String(serverRooms[0].roomId);
-      await setActiveFamilyId(firstRoomId);
-      setActiveRoomIdCache(firstRoomId);
+      // ── 关键修复：优先激活 creator 家庭，避免 joiner 家庭排在前面导致角色错误 ──
+      // 服务器返回的 rooms 顺序不确定（按数据库插入顺序），如果用户同时是某家庭的 creator
+      // 和另一家庭的 joiner，必须优先激活 creator 家庭
+      const creatorRoom = serverRooms.find((r: any) => r.isCreator === true);
+      const activeRoom = creatorRoom ?? serverRooms[0];
+      const activeRoomId = String(activeRoom.roomId);
+      await setActiveFamilyId(activeRoomId);
+      setActiveRoomIdCache(activeRoomId);
+
+      // ── 恢复 CURRENT_MEMBER（登录后必须设置，否则首页头像/名字为空）──
+      // 找到 active room 对应的 membership 和 myMember，写入 CURRENT_MEMBER
+      try {
+        // 重新从本地读取已保存的 membership（上面 loop 已经写入）
+        const { getAllMemberships } = await import('@/lib/storage');
+        const allMemberships = await getAllMemberships();
+        const activeMembership = allMemberships.find(m => m.familyId === activeRoomId);
+        if (activeMembership) {
+          const myMember = activeMembership.room.members.find(
+            (m: any) => m.id === activeMembership.myMemberId
+          ) ?? activeMembership.room.members[0];
+          if (myMember) {
+            await setCurrentMember(myMember);
+            console.log('[navigateAfterLogin] Restored CURRENT_MEMBER:', myMember.name, 'isCreator:', myMember.isCreator);
+          }
+        }
+      } catch (e) {
+        console.warn('[navigateAfterLogin] Failed to restore CURRENT_MEMBER:', e);
+      }
 
       // 登录成功后保存 userId 到 CloudSyncState，为日记合并等功能提供精确的用户识别
       try {
@@ -170,141 +195,144 @@ async function navigateAfterLogin(router: Router) {
         registerPushToken().catch(() => {});
       } catch {}
 
-      // 预拉取所有数据写入本地缓存，确保退出重新登录后数据立即可见
-      // 对每个 room 都拉取一次，但主要用 firstRoomId
-      try {
-        const firstRoomIdNum = serverRooms[0].roomId;
-        const roomIdStr = firstRoomId; // already set above
+      // ── 预拉取所有家庭的数据写入本地缓存 ──
+      // 对每个 room 都拉取，确保所有家庭数据都能恢复
+      const prefetchRoom = async (roomIdNum: number, roomIdStr: string) => {
+        try {
+          const [checkInsData, diariesData, announcementsData, briefingsData, medsData] = await Promise.all([
+            cloudGetCheckIns(roomIdNum, 60),
+            cloudGetDiaries(roomIdNum, 100),
+            cloudGetAnnouncements(roomIdNum, 50),
+            cloudGetBriefings(roomIdNum, 14),
+            cloudGetMedications(roomIdNum),
+          ]);
 
-        const [checkInsData, diariesData, announcementsData, briefingsData, medsData] = await Promise.all([
-          cloudGetCheckIns(firstRoomIdNum, 60),
-          cloudGetDiaries(firstRoomIdNum, 100),
-          cloudGetAnnouncements(firstRoomIdNum, 50),
-          cloudGetBriefings(firstRoomIdNum, 14),
-          cloudGetMedications(firstRoomIdNum),
-        ]);
+          // Helper: room-scoped key
+          const rk = (base: string) => `${base}:${roomIdStr}`;
 
-        // Helper: room-scoped key
-        const rk = (base: string) => roomIdStr ? `${base}:${roomIdStr}` : base;
+          // Write check-ins
+          if (Array.isArray(checkInsData) && checkInsData.length > 0) {
+            const localCheckIns = checkInsData.map((c: any) => ({
+              id: String(c.id),
+              date: c.date,
+              sleepHours: c.sleepHours ?? 7,
+              sleepQuality: c.sleepQuality ?? 'fair',
+              sleepInput: c.sleepInput,
+              sleepScore: c.sleepScore,
+              sleepProblems: c.sleepProblems,
+              sleepType: c.sleepType,
+              morningNotes: c.morningNotes ?? '',
+              morningDone: c.morningDone ?? false,
+              moodEmoji: c.moodEmoji ?? '😌',
+              moodScore: c.moodScore ?? 5,
+              medicationTaken: c.medicationTaken ?? true,
+              medicationNotes: c.medicationNotes ?? '',
+              mealNotes: c.mealNotes ?? '',
+              mealOption: c.mealOption,
+              eveningNotes: c.eveningNotes ?? '',
+              eveningDone: c.eveningDone ?? false,
+              aiMessage: c.aiMessage ?? '',
+              careScore: c.careScore ?? 50,
+              completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
+              serverCheckInId: c.id,
+            }));
+            await AsyncStorage.setItem(rk('daily_checkins_v2'), JSON.stringify(localCheckIns));
+          }
 
-        // Write check-ins
-        if (Array.isArray(checkInsData) && checkInsData.length > 0) {
-          // Map server fields to local DailyCheckIn shape
-          const localCheckIns = checkInsData.map((c: any) => ({
-            id: String(c.id),
-            date: c.date,
-            sleepHours: c.sleepHours ?? 7,
-            sleepQuality: c.sleepQuality ?? 'fair',
-            sleepInput: c.sleepInput,
-            sleepScore: c.sleepScore,
-            sleepProblems: c.sleepProblems,
-            sleepType: c.sleepType,
-            morningNotes: c.morningNotes ?? '',
-            morningDone: c.morningDone ?? false,
-            moodEmoji: c.moodEmoji ?? '😌',
-            moodScore: c.moodScore ?? 5,
-            medicationTaken: c.medicationTaken ?? true,
-            medicationNotes: c.medicationNotes ?? '',
-            mealNotes: c.mealNotes ?? '',
-            mealOption: c.mealOption,
-            eveningNotes: c.eveningNotes ?? '',
-            eveningDone: c.eveningDone ?? false,
-            aiMessage: c.aiMessage ?? '',
-            careScore: c.careScore ?? 50,
-            completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
-            serverCheckInId: c.id,
-          }));
-          await AsyncStorage.setItem(rk('daily_checkins_v2'), JSON.stringify(localCheckIns));
+          // Write diaries
+          if (Array.isArray(diariesData) && diariesData.length > 0) {
+            const localDiaries = diariesData.map((d: any) => ({
+              id: `server_${d.id}`,
+              serverDiaryId: d.id,
+              date: d.date,
+              content: d.content ?? '',
+              moodEmoji: d.moodEmoji,
+              moodLabel: d.moodLabel,
+              moodScore: d.moodScore,
+              tags: d.tags ?? [],
+              caregiverMoodEmoji: d.caregiverMoodEmoji,
+              caregiverMoodLabel: d.caregiverMoodLabel,
+              aiReply: d.aiReply,
+              aiEmoji: d.aiEmoji,
+              aiTip: d.aiTip,
+              conversation: d.conversation ?? [],
+              conversationFinished: d.conversationFinished ?? true,
+              localTimeStr: d.localTimeStr,
+              authorName: d.authorName,
+              authorUserId: d.authorUserId,
+              createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+            }));
+            await AsyncStorage.setItem(rk('diary_entries'), JSON.stringify(localDiaries));
+          }
+
+          // Write announcements
+          if (Array.isArray(announcementsData) && announcementsData.length > 0) {
+            const localAnnouncements = announcementsData.map((a: any) => ({
+              id: String(a.id),
+              serverId: a.id,
+              content: a.content,
+              emoji: a.emoji,
+              type: a.type ?? 'daily',
+              date: a.date,
+              authorName: a.authorName,
+              authorEmoji: a.authorEmoji,
+              authorColor: a.authorColor,
+              reactions: a.reactions ?? {},
+              createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
+            }));
+            await AsyncStorage.setItem(rk('family_announcements_v1'), JSON.stringify(localAnnouncements));
+          }
+
+          // Write briefings
+          if (Array.isArray(briefingsData) && briefingsData.length > 0) {
+            const localBriefings = briefingsData.map((b: any) => ({
+              id: String(b.id),
+              date: b.date,
+              careScore: b.careScore,
+              summary: b.summary,
+              encouragement: b.encouragement,
+              highlights: b.highlights ?? [],
+              attention: b.attention,
+              shareText: b.shareText,
+              generatedAt: b.generatedAt,
+              checkInDate: b.checkInDate,
+            }));
+            await AsyncStorage.setItem(rk('care_briefings_v1'), JSON.stringify(localBriefings));
+          }
+
+          // Write medications
+          if (Array.isArray(medsData) && medsData.length > 0) {
+            const localMeds = medsData.map((m: any) => ({
+              id: String(m.id),
+              serverMedId: m.id,
+              name: m.name,
+              dosage: m.dosage,
+              frequency: m.frequency,
+              times: m.times ?? [],
+              notes: m.notes,
+              icon: m.icon ?? '💊',
+              active: m.active ?? true,
+              reminderEnabled: m.reminderEnabled ?? true,
+              color: m.color,
+            }));
+            await AsyncStorage.setItem(rk('medications'), JSON.stringify(localMeds));
+          }
+
+          console.log('[navigateAfterLogin] Pre-fetched data for room', roomIdStr,
+            '- checkIns:', checkInsData?.length ?? 0,
+            'diaries:', diariesData?.length ?? 0,
+            'announcements:', announcementsData?.length ?? 0,
+            'briefings:', briefingsData?.length ?? 0,
+            'medications:', medsData?.length ?? 0);
+        } catch (e) {
+          console.warn('[navigateAfterLogin] Pre-fetch failed for room', roomIdStr, '(non-fatal):', e);
         }
+      };
 
-        // Write diaries
-        if (Array.isArray(diariesData) && diariesData.length > 0) {
-          const localDiaries = diariesData.map((d: any) => ({
-            id: `server_${d.id}`,
-            serverDiaryId: d.id,
-            date: d.date,
-            content: d.content ?? '',
-            moodEmoji: d.moodEmoji,
-            moodLabel: d.moodLabel,
-            moodScore: d.moodScore,
-            tags: d.tags ?? [],
-            caregiverMoodEmoji: d.caregiverMoodEmoji,
-            caregiverMoodLabel: d.caregiverMoodLabel,
-            aiReply: d.aiReply,
-            aiEmoji: d.aiEmoji,
-            aiTip: d.aiTip,
-            conversation: d.conversation ?? [],
-            conversationFinished: d.conversationFinished ?? true,
-            localTimeStr: d.localTimeStr,
-            authorName: d.authorName,
-            authorUserId: d.authorUserId,
-            createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
-          }));
-          await AsyncStorage.setItem(rk('diary_entries'), JSON.stringify(localDiaries));
-        }
-
-        // Write announcements
-        if (Array.isArray(announcementsData) && announcementsData.length > 0) {
-          const localAnnouncements = announcementsData.map((a: any) => ({
-            id: String(a.id),
-            serverId: a.id,
-            content: a.content,
-            emoji: a.emoji,
-            type: a.type ?? 'daily',
-            date: a.date,
-            authorName: a.authorName,
-            authorEmoji: a.authorEmoji,
-            authorColor: a.authorColor,
-            reactions: a.reactions ?? {},
-            createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
-          }));
-          await AsyncStorage.setItem(rk('family_announcements_v1'), JSON.stringify(localAnnouncements));
-        }
-
-        // Write briefings
-        if (Array.isArray(briefingsData) && briefingsData.length > 0) {
-          const localBriefings = briefingsData.map((b: any) => ({
-            id: String(b.id),
-            date: b.date,
-            careScore: b.careScore,
-            summary: b.summary,
-            encouragement: b.encouragement,
-            highlights: b.highlights ?? [],
-            attention: b.attention,
-            shareText: b.shareText,
-            generatedAt: b.generatedAt,
-            checkInDate: b.checkInDate,
-          }));
-          await AsyncStorage.setItem(rk('care_briefings_v1'), JSON.stringify(localBriefings));
-        }
-
-        // Write medications
-        if (Array.isArray(medsData) && medsData.length > 0) {
-          const localMeds = medsData.map((m: any) => ({
-            id: String(m.id),
-            serverMedId: m.id,
-            name: m.name,
-            dosage: m.dosage,
-            frequency: m.frequency,
-            times: m.times ?? [],
-            notes: m.notes,
-            icon: m.icon ?? '💊',
-            active: m.active ?? true,
-            reminderEnabled: m.reminderEnabled ?? true,
-            color: m.color,
-          }));
-          await AsyncStorage.setItem(rk('medications'), JSON.stringify(localMeds));
-        }
-
-        console.log('[navigateAfterLogin] Pre-fetched data for room', roomIdStr,
-          '- checkIns:', checkInsData?.length ?? 0,
-          'diaries:', diariesData?.length ?? 0,
-          'announcements:', announcementsData?.length ?? 0,
-          'briefings:', briefingsData?.length ?? 0,
-          'medications:', medsData?.length ?? 0);
-      } catch (e) {
-        console.warn('[navigateAfterLogin] Pre-fetch failed (non-fatal):', e);
-      }
+      // 为所有家庭预拉取数据（并行）
+      await Promise.all(
+        serverRooms.map((sr: any) => prefetchRoom(sr.roomId, String(sr.roomId)))
+      );
 
       // Navigate to main app — data is restored
       router.replace('/(tabs)' as any);

@@ -58,6 +58,12 @@ export async function getUserFamilyRooms(userId: number) {
     const room = await getFamilyRoomById(roomId);
     if (room) rooms.push({ room, membership: memberships.find(m => m.roomId === roomId)! });
   }
+  // 关键修复：将 creator 家庭排在最前，确保客户端激活第一个家庭时优先选择 creator 身份
+  rooms.sort((a, b) => {
+    if (a.membership.isCreator && !b.membership.isCreator) return -1;
+    if (!a.membership.isCreator && b.membership.isCreator) return 1;
+    return 0;
+  });
   return rooms;
 }
 
