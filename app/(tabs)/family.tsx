@@ -585,7 +585,7 @@ export default function FamilyScreen() {
       diaryEntries = (cloudDiaries as any[]) ?? [];
       profile = cloudProfile ?? await getProfile();
     } else {
-      // Creator: read local
+      // Creator: read local first, then sync from cloud in background
       const activeRoomId = getActiveRoomIdCache();
       const [localToday, localAll, localDiaries, localFp, localProfile] = await Promise.all([
         getTodayCheckIn(activeRoomId || undefined),
@@ -597,6 +597,74 @@ export default function FamilyScreen() {
       todayCheckIn = localToday;
       allCheckIns = localAll;
       diaryEntries = localDiaries;
+      // 如果本地缓存为空（如退出登录后），立即从云端拉取数据
+      if (allCheckIns.length === 0 && diaryEntries.length === 0 && familyId) {
+        try {
+          const [cloudCIs, cloudDiaries] = await Promise.all([
+            cloudGetCheckIns(Number(familyId), 60).catch(() => []),
+            cloudGetDiaries(Number(familyId), 100).catch(() => []),
+          ]);
+          if (Array.isArray(cloudCIs) && cloudCIs.length > 0) {
+            const localCheckIns = (cloudCIs as any[]).map((c: any) => ({
+              id: String(c.id),
+              date: c.date,
+              sleepHours: c.sleepHours ?? 7,
+              sleepQuality: c.sleepQuality ?? 'fair',
+              sleepInput: c.sleepInput,
+              sleepScore: c.sleepScore,
+              sleepProblems: c.sleepProblems,
+              sleepType: c.sleepType,
+              morningNotes: c.morningNotes ?? '',
+              morningDone: c.morningDone ?? false,
+              moodEmoji: c.moodEmoji ?? '😌',
+              moodScore: c.moodScore ?? 5,
+              medicationTaken: c.medicationTaken ?? true,
+              medicationNotes: c.medicationNotes ?? '',
+              mealNotes: c.mealNotes ?? '',
+              mealOption: c.mealOption,
+              eveningNotes: c.eveningNotes ?? '',
+              eveningDone: c.eveningDone ?? false,
+              aiMessage: c.aiMessage ?? '',
+              careScore: c.careScore ?? 50,
+              completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
+              serverCheckInId: c.id,
+            }));
+            const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+            await AsyncStorage.setItem(`daily_checkins_v2:${familyId}`, JSON.stringify(localCheckIns));
+            allCheckIns = localCheckIns as any[];
+            const todayDate = todayStr();
+            todayCheckIn = localCheckIns.find((c: any) => c.date === todayDate) ?? null;
+          }
+          if (Array.isArray(cloudDiaries) && cloudDiaries.length > 0) {
+            const localDiaries2 = (cloudDiaries as any[]).map((d: any) => ({
+              id: `server_${d.id}`,
+              serverDiaryId: d.id,
+              date: d.date,
+              content: d.content ?? '',
+              moodEmoji: d.moodEmoji,
+              moodLabel: d.moodLabel,
+              moodScore: d.moodScore,
+              tags: d.tags ?? [],
+              caregiverMoodEmoji: d.caregiverMoodEmoji,
+              caregiverMoodLabel: d.caregiverMoodLabel,
+              aiReply: d.aiReply,
+              aiEmoji: d.aiEmoji,
+              aiTip: d.aiTip,
+              conversation: d.conversation ?? [],
+              conversationFinished: d.conversationFinished ?? true,
+              localTimeStr: d.localTimeStr,
+              authorName: d.authorName,
+              authorUserId: d.authorUserId,
+              createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+            }));
+            const { default: AsyncStorage2 } = await import('@react-native-async-storage/async-storage');
+            await AsyncStorage2.setItem(`diary_entries:${familyId}`, JSON.stringify(localDiaries2));
+            diaryEntries = localDiaries2;
+          }
+        } catch (e) {
+          console.warn('[Family] cloud fallback failed:', e);
+        }
+      }
       // Prefer FamilyProfile (family-scoped) for elder data
       profile = localFp ? { ...localProfile, ...localFp, name: localFp.name || localProfile?.name, nickname: localFp.nickname || localProfile?.nickname } as any : localProfile;
     }

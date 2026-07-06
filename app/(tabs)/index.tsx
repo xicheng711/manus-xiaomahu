@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
-import { cloudGetRoomDetail } from '@/lib/cloud-sync';
+import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiacFromDate } from '@/lib/zodiac';
 import { TrendChart } from '@/components/trend-chart';
@@ -576,6 +576,84 @@ function CreatorHomeScreen() {
     setAllCheckIns(all);
     const diaries = await getDiaryEntriesForHome(fid, 20);
     setAllDiaryEntries(diaries);
+    // 后台从云端拉取最新数据并写入本地缓存，然后更新 UI
+    // 这样即使本地缓存为空（如退出登录后）也能展示最新数据
+    if (fid) {
+      const fidNum = Number(fid);
+      if (!isNaN(fidNum)) {
+        Promise.all([
+          cloudGetCheckIns(fidNum, 60),
+          cloudGetDiaries(fidNum, 100),
+        ]).then(async ([cloudCheckIns, cloudDiaries]) => {
+          // 将云端打卡数据写入本地缓存
+          if (Array.isArray(cloudCheckIns) && cloudCheckIns.length > 0) {
+            const localCheckIns = cloudCheckIns.map((c: any) => ({
+              id: String(c.id),
+              date: c.date,
+              sleepHours: c.sleepHours ?? 7,
+              sleepQuality: c.sleepQuality ?? 'fair',
+              sleepInput: c.sleepInput,
+              sleepScore: c.sleepScore,
+              sleepProblems: c.sleepProblems,
+              sleepType: c.sleepType,
+              morningNotes: c.morningNotes ?? '',
+              morningDone: c.morningDone ?? false,
+              moodEmoji: c.moodEmoji ?? '😌',
+              moodScore: c.moodScore ?? 5,
+              medicationTaken: c.medicationTaken ?? true,
+              medicationNotes: c.medicationNotes ?? '',
+              mealNotes: c.mealNotes ?? '',
+              mealOption: c.mealOption,
+              eveningNotes: c.eveningNotes ?? '',
+              eveningDone: c.eveningDone ?? false,
+              aiMessage: c.aiMessage ?? '',
+              careScore: c.careScore ?? 50,
+              completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
+              serverCheckInId: c.id,
+            }));
+            await AsyncStorage.setItem(`daily_checkins_v2:${fid}`, JSON.stringify(localCheckIns));
+          }
+          // 将云端日记数据写入本地缓存
+          if (Array.isArray(cloudDiaries) && cloudDiaries.length > 0) {
+            const localDiaries = cloudDiaries.map((d: any) => ({
+              id: `server_${d.id}`,
+              serverDiaryId: d.id,
+              date: d.date,
+              content: d.content ?? '',
+              moodEmoji: d.moodEmoji,
+              moodLabel: d.moodLabel,
+              moodScore: d.moodScore,
+              tags: d.tags ?? [],
+              caregiverMoodEmoji: d.caregiverMoodEmoji,
+              caregiverMoodLabel: d.caregiverMoodLabel,
+              aiReply: d.aiReply,
+              aiEmoji: d.aiEmoji,
+              aiTip: d.aiTip,
+              conversation: d.conversation ?? [],
+              conversationFinished: d.conversationFinished ?? true,
+              localTimeStr: d.localTimeStr,
+              authorName: d.authorName,
+              authorUserId: d.authorUserId,
+              createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+            }));
+            await AsyncStorage.setItem(`diary_entries:${fid}`, JSON.stringify(localDiaries));
+          }
+          // 重新读取本地数据更新 UI
+          const [freshToday, freshAll, freshDiaries] = await Promise.all([
+            getTodayCheckIn(fid),
+            getCheckInsForHome(fid),
+            getDiaryEntriesForHome(fid, 20),
+          ]);
+          setTodayCheckIn(freshToday);
+          const freshYesterday = await getYesterdayCheckIn(fid);
+          setLatestCheckIn(freshToday ?? freshYesterday);
+          setAllCheckIns(freshAll);
+          setAllDiaryEntries(freshDiaries);
+        }).catch(() => {
+          // 云端拉取失败时不影响已显示的本地数据
+        });
+      }
+    }
     // 读取今日简报缓存的 AI 总结（family-scoped key，和 share.tsx 保持一致）
     try {
       const todayKey = new Date().toISOString().slice(0, 10);
