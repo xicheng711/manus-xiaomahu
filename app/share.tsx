@@ -985,29 +985,25 @@ export default function ShareScreen() {
         getFamilyProfile(familyId),
         getProfile(),
       ]);
-      const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      let nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       // Joiner 应显示主照顾者名字，从 room members 找 isCreator 成员
       let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
-      if (isJoiner) {
-        // 从云端获取房间详情，找到 creator 成员的名字
-        try {
-          const roomId0 = familyId ? parseInt(familyId) : null;
-          if (roomId0 && !isNaN(roomId0)) {
-            const detail0 = await cloudGetRoomDetail(roomId0);
-            const creatorMember = (detail0?.members as any[])?.find((m: any) => m.isCreator);
-            if (creatorMember?.name) caregiver = creatorMember.name;
-            else if (detail0?.room?.elderNickname) caregiver = caregiver; // fallback
-          }
-        } catch (e) { /* 网络不可用时降级到本地缓存 */ }
-      }
       const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
-      // 主动从云端拉取最新被照者头像
       let elderPhotoUri2 = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      // 合并两次 cloudGetRoomDetail 调用为一次，同时获取被照者昵称、主照顾者名字、被照者头像
       try {
-        const roomId2 = familyId ? parseInt(familyId) : null;
-        if (roomId2 && !isNaN(roomId2)) {
-          const detail2 = await cloudGetRoomDetail(roomId2);
-          if (detail2?.room?.elderPhotoUri) elderPhotoUri2 = detail2.room.elderPhotoUri;
+        const roomIdX = familyId ? parseInt(familyId) : null;
+        if (roomIdX && !isNaN(roomIdX)) {
+          const detailX = await cloudGetRoomDetail(roomIdX);
+          // 被照者昵称：云端 room.elderName 优先（解决 joiner 本地无档案时显示「家人」的问题）
+          if (detailX?.room?.elderName) nickname = detailX.room.elderName;
+          // 主照顾者名字：找 isCreator 成员
+          if (isJoiner) {
+            const creatorMember = (detailX?.members as any[])?.find((m: any) => m.isCreator);
+            if (creatorMember?.name) caregiver = creatorMember.name;
+          }
+          // 被照者头像
+          if (detailX?.room?.elderPhotoUri) elderPhotoUri2 = detailX.room.elderPhotoUri;
         }
       } catch (e) { /* 网络不可用时降级到本地缓存 */ }
       setElderNickname(nickname);

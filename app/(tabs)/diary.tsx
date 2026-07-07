@@ -574,38 +574,43 @@ function DiaryScreenContent() {
 
               {/* 展开：全部日记按月分组 */}
               {!editMode && showAll && (() => {
+                // 用 YYYY-MM 作为 key 确保数字排序正确，显示时转为中文
                 const grouped: Record<string, DiaryEntry[]> = {};
                 entries.slice(3).forEach(e => {
-                  // Parse date field (YYYY-MM-DD) to get year and month
                   const parts = e.date.split('-');
                   if (parts.length === 3) {
-                    const year = parts[0];
-                    const month = parseInt(parts[1], 10);
-                    const key = `${year}年${month}月`;
+                    const key = `${parts[0]}-${parts[1]}`; // YYYY-MM
                     if (!grouped[key]) grouped[key] = [];
                     grouped[key].push(e);
                   }
                 });
-                // 月份分组按时间降序排列（最新月份在最前）
+                // 月份分组按时间降序排列（最新月份在最前），组内日记也按时间降序
                 return Object.entries(grouped)
-                  .sort(([a], [b]) => b.localeCompare(a))
-                  .map(([month, monthEntries]) => (
-                  <View key={month}>
-                    <View style={styles.monthDivider}>
-                      <Text style={styles.monthDividerText}>{month}</Text>
-                    </View>
-                    {monthEntries.map((entry, i) => (
-                      <DiaryCard
-                        key={entry.id}
-                        entry={entry}
-                        onPress={() => openDetail(entry.id)}
-                        onDelete={() => confirmDelete(entry.id, entry.date)}
-                        index={i}
-                        editMode={false}
-                      />
-                    ))}
-                  </View>
-                ));
+                  .sort(([a], [b]) => b.localeCompare(a)) // YYYY-MM 字符串可直接比较
+                  .map(([monthKey, monthEntries]) => {
+                    const [yr, mo] = monthKey.split('-');
+                    const displayMonth = `${yr}年${parseInt(mo, 10)}月`;
+                    const sortedEntries = [...monthEntries].sort((a, b) =>
+                      new Date(b.date).getTime() - new Date(a.date).getTime()
+                    );
+                    return (
+                      <View key={monthKey}>
+                        <View style={styles.monthDivider}>
+                          <Text style={styles.monthDividerText}>{displayMonth}</Text>
+                        </View>
+                        {sortedEntries.map((entry, i) => (
+                          <DiaryCard
+                            key={entry.id}
+                            entry={entry}
+                            onPress={() => openDetail(entry.id)}
+                            onDelete={() => confirmDelete(entry.id, entry.date)}
+                            index={i}
+                            editMode={false}
+                          />
+                        ))}
+                      </View>
+                    );
+                  });
               })()}
             </View>
 
