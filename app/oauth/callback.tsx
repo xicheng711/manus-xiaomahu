@@ -3,6 +3,8 @@ import * as Api from "@/lib/_core/api";
 import * as Auth from "@/lib/_core/auth";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { setCloudSyncState } from "@/lib/cloud-sync";
+import { registerPushToken } from "@/lib/notifications";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -53,12 +55,14 @@ export default function OAuthCallback() {
                 lastSignedIn: new Date(userData.lastSignedIn || Date.now()),
               };
               await Auth.setUserInfo(userInfo);
+              await setCloudSyncState({ userId: userInfo.id });
               console.log("[OAuth] User info stored:", userInfo);
             } catch (err) {
               console.error("[OAuth] Failed to parse user data:", err);
             }
           }
 
+          await registerPushToken().catch(() => null);
           setStatus("success");
           console.log("[OAuth] Web authentication successful, redirecting to home...");
           setTimeout(() => {
@@ -154,6 +158,7 @@ export default function OAuthCallback() {
           console.log("[OAuth] Session token found in URL, storing...");
           await Auth.setSessionToken(sessionToken);
           console.log("[OAuth] Session token stored successfully");
+          await registerPushToken().catch(() => null);
           // User info is already in the OAuth callback response
           // No need to fetch from API
           setStatus("success");
@@ -204,11 +209,13 @@ export default function OAuthCallback() {
               lastSignedIn: new Date(result.user.lastSignedIn || Date.now()),
             };
             await Auth.setUserInfo(userInfo);
+            await setCloudSyncState({ userId: userInfo.id });
             console.log("[OAuth] User info stored:", userInfo);
           } else {
             console.log("[OAuth] No user data in result");
           }
 
+          await registerPushToken().catch(() => null);
           setStatus("success");
           console.log("[OAuth] Authentication successful, redirecting to home...");
 

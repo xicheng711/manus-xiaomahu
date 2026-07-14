@@ -22,6 +22,7 @@ import {
   scheduleAllReminders,
   cancelAllReminders,
   requestNotificationPermissions,
+  registerPushToken,
 } from '@/lib/notifications';
 import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
@@ -443,6 +444,8 @@ export default function ProfileScreen() {
         const granted = await requestNotificationPermissions();
         if (granted) {
           await scheduleAllReminders(familyProfile?.nickname || familyProfile?.name || profile?.nickname || profile?.name || undefined, activeMembership?.familyId);
+          // 开启通知权限后同时上传 push token，确保远程推送正常工作
+          registerPushToken().catch(() => {});
           setNotifEnabled(true);
         } else {
           setNotifEnabled(false);

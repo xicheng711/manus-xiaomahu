@@ -189,10 +189,10 @@ async function navigateAfterLogin(router: Router) {
         }
       } catch {}
 
-      // 登录成功后重新注册 push token，确保 Joiner 和主照顾者都能收到服务器推送通知
+      // 登录成功后立即重新注册 push token，确保 Joiner 和主照顾者无需退出重登也能收到通知
       try {
         const { registerPushToken } = await import('@/lib/notifications');
-        registerPushToken().catch(() => {});
+        await registerPushToken();
       } catch {}
 
       // ── 预拉取所有家庭的数据写入本地缓存 ──

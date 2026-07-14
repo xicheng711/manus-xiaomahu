@@ -46,15 +46,14 @@ export default function RootLayout() {
 
   // Register push token for cross-device notifications (after cloud sync is ready)
   useEffect(() => {
-    // 延迟 3 秒第一次注册，确保 cloud sync 初始化完成
-    const timer1 = setTimeout(() => {
-      registerPushToken().catch(() => {});
-    }, 3000);
-    // 延迟 8 秒再注册一次，作为兼容保障（防止首次注册时用户还未登录）
-    const timer2 = setTimeout(() => {
-      registerPushToken().catch(() => {});
-    }, 8000);
-    return () => { clearTimeout(timer1); clearTimeout(timer2); };
+    // App 启动时延迟注册 push token：
+    // - 2s: 第一次尝试（大多数情况下 session token 已就绪）
+    // - 6s: 备用重试（防止网络慢导致首次失败）
+    // - 15s: 最后一次保障（覆盖异常慢启动场景）
+    const timer1 = setTimeout(() => { registerPushToken().catch(() => {}); }, 2000);
+    const timer2 = setTimeout(() => { registerPushToken().catch(() => {}); }, 6000);
+    const timer3 = setTimeout(() => { registerPushToken().catch(() => {}); }, 15000);
+    return () => { clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3); };
   }, []);
 
   // Handle push notification tap: navigate to the relevant screen

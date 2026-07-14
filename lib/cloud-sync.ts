@@ -11,6 +11,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,10 @@ export async function setCloudSyncState(state: Partial<SyncState>) {
   if (state.userId !== undefined) {
     await AsyncStorage.setItem(SYNC_KEYS.USER_ID, String(state.userId ?? ''));
   }
+}
+
+export async function clearCloudSyncState() {
+  await AsyncStorage.multiRemove(Object.values(SYNC_KEYS));
 }
 
 export async function getCloudSyncState(): Promise<SyncState> {
@@ -553,16 +558,27 @@ export async function cloudToggleReaction(
 
 /** Register or update the Expo push token on the server */
 export async function cloudUpdatePushToken(pushToken: string) {
-  // 未登录时跳过（没有 userId 就无法将 token 与用户关联）
-  const state = await getCloudSyncState();
-  if (!state.isLoggedIn || !state.userId) {
-    console.log('[CloudSync] Skipping push token registration: user not logged in');
+  const sessionToken = await getSessionToken();
+  if (!sessionToken) {
+    console.log('[CloudSync] Skipping push token registration: no session token');
     return false;
   }
+
+  let userId = (await getCloudSyncState()).userId;
+  if (!userId) {
+    try {
+      const userInfo = await getUserInfo();
+      if (userInfo?.id) {
+        userId = userInfo.id;
+        await setCloudSyncState({ userId });
+      }
+    } catch {}
+  }
+
   try {
     const client = getClient();
     await client.family.updatePushToken.mutate({ pushToken });
-    console.log('[CloudSync] Push token registered successfully for user', state.userId);
+    console.log('[CloudSync] Push token registered successfully for user', userId ?? 'unknown');
     return true;
   } catch (e) {
     console.warn('[CloudSync] updatePushToken failed:', e);
