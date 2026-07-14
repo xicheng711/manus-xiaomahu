@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Animated, Easing, Modal,
+  StyleSheet, Animated, Easing, Modal, RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -333,6 +333,13 @@ function DiaryScreenContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshParam]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadEntries(); } finally { setRefreshing(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId]);
+
   useFocusEffect(useCallback(() => {
     loadEntries();
     setEditMode(false);
@@ -486,6 +493,14 @@ function DiaryScreenContent() {
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#B07858"
+            colors={['#B07858']}
+          />
+        }
       >
         {/* Header */}
         <Animated.View style={{ opacity: headerFade, transform: [{ translateY: headerSlide }] }}>

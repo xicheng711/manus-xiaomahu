@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   ScrollView, View, Text, TouchableOpacity, Modal,
   StyleSheet, Dimensions, Animated, Easing, Platform, Image, Keyboard, Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -485,6 +486,8 @@ function CreatorHomeScreen() {
   const avatarScale = useRef(new Animated.Value(0)).current;
   const _unusedShake = useShakeAnim();
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const loadData = useCallback(async () => {
     // P1 fix: read from scoped profiles (family-scoped for elder, global for caregiver)
     // Fall back to legacy getProfile() only for setupComplete guard and missing fields.
@@ -683,6 +686,11 @@ function CreatorHomeScreen() {
     } catch { setBriefingSummary(null); }
   }, [activeMembership?.familyId]);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadData(); } finally { setRefreshing(false); }
+  }, [loadData]);
+
   // 修复：只保留 useFocusEffect 一个加载入口，删除 useEffect([familyId]) 避免切换家庭时重复触发双重 IO
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
@@ -755,6 +763,14 @@ function CreatorHomeScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         onScrollBeginDrag={Keyboard.dismiss}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#B07858"
+            colors={['#B07858']}
+          />
+        }
       >
         {/* ── 顶部 Header ── */}
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>

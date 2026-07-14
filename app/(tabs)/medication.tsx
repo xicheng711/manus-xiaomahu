@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Alert, Platform, Animated, Easing, Keyboard,
+  StyleSheet, Alert, Platform, Animated, Easing, Keyboard, RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -129,26 +129,34 @@ function MedicationScreenContent() {
     }
   }, [adding]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadMeds = useCallback(async () => {
+    const creator = await getCurrentUserIsCreator();
+    if (creator) {
+      getMedications(familyId).then(setMeds);
+    } else {
+      cloudGetMedications().then(cloudMeds => {
+        if (cloudMeds && cloudMeds.length > 0) {
+          setMeds(cloudMeds as unknown as Medication[]);
+        } else {
+          getMedications(familyId).then(setMeds);
+        }
+      }).catch(() => getMedications(familyId).then(setMeds));
+    }
+    const [fp, lp] = await Promise.all([getFamilyProfile(familyId), getProfile()]);
+    setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
+    setCareNeeds(fp?.careNeeds?.selectedNeeds || lp?.careNeeds?.selectedNeeds || []);
+  }, [familyId]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadMeds(); } finally { setRefreshing(false); }
+  }, [loadMeds]);
+
   useFocusEffect(useCallback(() => {
-    // joiner 视角：从云端拉取主照顾者的用药记录；creator 视角：读本地
-    getCurrentUserIsCreator().then(creator => {
-      if (creator) {
-        getMedications(familyId).then(setMeds);
-      } else {
-        cloudGetMedications().then(cloudMeds => {
-          if (cloudMeds && cloudMeds.length > 0) {
-            setMeds(cloudMeds as unknown as Medication[]);
-          } else {
-            getMedications(familyId).then(setMeds);
-          }
-        }).catch(() => getMedications(familyId).then(setMeds));
-      }
-    });
-    Promise.all([getFamilyProfile(familyId), getProfile()]).then(([fp, lp]) => {
-      setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
-      setCareNeeds(fp?.careNeeds?.selectedNeeds || lp?.careNeeds?.selectedNeeds || []);
-    });
-  }, [familyId]));
+    loadMeds();
+  }, [loadMeds]));
 
   function resetForm() {
     setAdding(false);
@@ -279,7 +287,7 @@ function MedicationScreenContent() {
 
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#B07858" colors={['#B07858']} />}>
         {/* Header */}
         <Animated.View style={{ opacity: headerFade, transform: [{ translateY: headerSlide }] }}>
           <PageHeader

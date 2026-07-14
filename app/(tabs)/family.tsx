@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Animated, Platform, Alert, Share, Modal, Easing,
-  Keyboard, TouchableWithoutFeedback, Clipboard, KeyboardAvoidingView,
+  Keyboard, TouchableWithoutFeedback, Clipboard, KeyboardAvoidingView, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
@@ -435,6 +435,13 @@ export default function FamilyScreen() {
 
   const { activeMembership, refresh } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadData(); } finally { setRefreshing(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId]);
 
   const loadDataCallback = useCallback(() => {
     loadData();
@@ -902,7 +909,7 @@ export default function FamilyScreen() {
       </View>
 
       {/* Content */}
-      <ScrollView ref={scrollRef} style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView ref={scrollRef} style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#B07858" colors={['#B07858']} />}>
 
         {/* ── BROADCAST SECTION ── */}
         {activeSection === 'broadcast' && (

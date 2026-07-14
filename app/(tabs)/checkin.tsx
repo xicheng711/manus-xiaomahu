@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Animated, Platform, Easing, Dimensions, Modal, Keyboard, KeyboardAvoidingView, Alert,
+  StyleSheet, Animated, Platform, Easing, Dimensions, Modal, Keyboard, KeyboardAvoidingView, Alert, RefreshControl,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
@@ -458,6 +458,8 @@ function CheckinLanding({
   onStartMorning,
   onStartEvening,
   onViewMorning,
+  onRefresh,
+  refreshing = false,
 }: {
   checkIn: DailyCheckIn | null;
   elderNickname: string;
@@ -465,6 +467,8 @@ function CheckinLanding({
   onStartMorning: () => void;
   onStartEvening: () => void;
   onViewMorning: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
   const morningDone = checkIn?.morningDone ?? false;
   const eveningDone = checkIn?.eveningDone ?? false;
@@ -480,7 +484,7 @@ function CheckinLanding({
     : null;
 
   return (
-    <ScrollView contentContainerStyle={styles.landingContainer} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={styles.landingContainer} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B07858" colors={['#B07858']} />}>
       {/* Header */}
       <PageHeader
         theme={PAGE_THEMES.checkin}
@@ -765,6 +769,20 @@ function CheckinScreenContent() {
       }
     }
   }
+
+  const [refreshing, setRefreshing] = useState(false);
+  const loadCheckInData = useCallback(async () => {
+    const [userProfile, familyProfile, legacyProfile] = await Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]);
+    const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+    const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '您';
+    setElderNickname(nickname);
+    setCaregiverName(caregiver);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familyId]);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadCheckInData(); } finally { setRefreshing(false); }
+  }, [loadCheckInData]);
 
   useFocusEffect(useCallback(() => {
     // 加载姓名（family-scoped 优先，fallback 到 legacy）
@@ -1171,6 +1189,8 @@ function CheckinScreenContent() {
           onStartMorning={() => { setStep(0); setMode('morning'); }}
           onStartEvening={() => { setStep(0); setMode('evening'); }}
           onViewMorning={() => { setStep(0); setMode('morning'); }}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
         />
       </ScreenContainer>
     );
@@ -2464,37 +2484,39 @@ function JoinerCheckinView() {
   const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
 
-  useFocusEffect(useCallback(() => {
-    // joiner 视角：从云端拉取主照顾者的打卡数据（本地数据库里没有主照顾者的记录）
+  const [refreshing, setRefreshing] = useState(false);
+  const loadJoinerData = useCallback(async () => {
     const todayDate = new Date();
     const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
-    import('@/lib/cloud-sync').then(({ cloudGetCheckIns }) => {
-      cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30).then((cloudCIs: any[]) => {
-        if (cloudCIs && cloudCIs.length > 0) {
-          const todayCi = cloudCIs.find((ci: any) => ci.date === todayKey) ?? null;
-          setCheckIn(todayCi);
-          setAllCheckIns(cloudCIs as DailyCheckIn[]);
-        } else {
-          // 降级到本地
-          getTodayCheckIn(familyId).then(setCheckIn);
-          getAllCheckIns(familyId).then(setAllCheckIns);
-        }
-      }).catch(() => {
+    const { cloudGetCheckIns } = await import('@/lib/cloud-sync');
+    try {
+      const cloudCIs: any[] = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
+      if (cloudCIs && cloudCIs.length > 0) {
+        setCheckIn(cloudCIs.find((ci: any) => ci.date === todayKey) ?? null);
+        setAllCheckIns(cloudCIs as DailyCheckIn[]);
+      } else {
         getTodayCheckIn(familyId).then(setCheckIn);
         getAllCheckIns(familyId).then(setAllCheckIns);
-      });
-    });
-    Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]).then(([up, fp, lp]) => {
-      setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
-    });
-  }, [familyId]));
+      }
+    } catch {
+      getTodayCheckIn(familyId).then(setCheckIn);
+      getAllCheckIns(familyId).then(setAllCheckIns);
+    }
+    const [, fp, lp] = await Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]);
+    setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
+  }, [familyId]);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadJoinerData(); } finally { setRefreshing(false); }
+  }, [loadJoinerData]);
+  useFocusEffect(useCallback(() => { loadJoinerData(); }, [loadJoinerData]));
 
   const morningDone = checkIn?.morningDone ?? false;
   const eveningDone = checkIn?.eveningDone ?? false;
 
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#B07858" colors={['#B07858']} />}>
         {/* Header */}
         <View style={{ marginBottom: 20 }}>
           <Text style={{ fontSize: 22, fontWeight: '800', color: '#2D1B4E', marginBottom: 4 }}>每日打卡</Text>
