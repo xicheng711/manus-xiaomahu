@@ -224,11 +224,6 @@ export default function DiaryEditScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [finished, setFinished] = useState(false);
   const [conversation, setConversationRaw] = useState<ConversationMessage[]>([]);
-  // 包装 setConversation，同时更新 ref，确保 handleEndAndSave 始终拿到最新值
-  const setConversation = (conv: ConversationMessage[]) => {
-    conversationRef.current = conv;
-    setConversationRaw(conv);
-  };
   const [smartLoading, setAiLoading] = useState(false);
   const [followUpInput, setFollowUpInput] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
@@ -242,7 +237,13 @@ export default function DiaryEditScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const entryRef = useRef<DiaryEntry | null>(null);
+  // conversationRef 必须在 setConversation 包装函数之前声明，避免 TDZ 问题
   const conversationRef = useRef<ConversationMessage[]>([]);
+  // 包装 setConversation，同时更新 ref，确保 handleEndAndSave 始终拿到最新值
+  const setConversation = (conv: ConversationMessage[]) => {
+    conversationRef.current = conv;
+    setConversationRaw(conv);
+  };
   const formFade = useRef(new Animated.Value(0)).current;
   const formSlide = useRef(new Animated.Value(30)).current;
   const shimmerAnim = useRef(new Animated.Value(-1)).current;
