@@ -223,7 +223,12 @@ export default function DiaryEditScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [conversation, setConversationRaw] = useState<ConversationMessage[]>([]);
+  // 包装 setConversation，同时更新 ref，确保 handleEndAndSave 始终拿到最新值
+  const setConversation = (conv: ConversationMessage[]) => {
+    conversationRef.current = conv;
+    setConversationRaw(conv);
+  };
   const [smartLoading, setAiLoading] = useState(false);
   const [followUpInput, setFollowUpInput] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
@@ -237,6 +242,7 @@ export default function DiaryEditScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const entryRef = useRef<DiaryEntry | null>(null);
+  const conversationRef = useRef<ConversationMessage[]>([]);
   const formFade = useRef(new Animated.Value(0)).current;
   const formSlide = useRef(new Animated.Value(30)).current;
   const shimmerAnim = useRef(new Animated.Value(-1)).current;
@@ -516,9 +522,10 @@ export default function DiaryEditScreen() {
 
   async function handleEndAndSave() {
     if (entryId) {
-      // 关键修复：先将当前内存中最新的 conversation 写入本地，
-      // 再设置 conversationFinished=true 并触发云端同步，确保云端收到完整对话
-      await updateDiaryEntry(entryId, { conversation, conversationFinished: true });
+      // 关键修复：使用 ref 获取最新 conversation（避免 React state 闭包问题），
+      // 确保 AI 最后一条回复一定被包含在保存的对话中
+      const latestConv = conversationRef.current;
+      await updateDiaryEntry(entryId, { conversation: latestConv, conversationFinished: true });
     }
     // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
     setFinished(true);

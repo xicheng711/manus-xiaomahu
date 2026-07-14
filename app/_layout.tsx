@@ -62,12 +62,12 @@ export default function RootLayout() {
     if (Platform.OS === "web") return;
       const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as any;
-      if (!data?.screen) return;
+      const screen = data?.screen || 'family'; // 默认导航到 family 页面（防止 Unmatched Route）
       // Small delay to ensure the navigator is ready
       setTimeout(() => {
         try {
           // 传入 refresh=1 参数，让目标页面在 useFocusEffect 里检测到并自动刷新最新数据
-          switch (data.screen) {
+          switch (screen) {
             case "diary":
               router.push({ pathname: "/(tabs)/diary", params: { refresh: Date.now() } } as any);
               break;
@@ -84,6 +84,8 @@ export default function RootLayout() {
               router.push({ pathname: "/(tabs)/index", params: { refresh: Date.now() } } as any);
               break;
             default:
+              // 未知 screen 值也导航到 family 页面
+              router.push({ pathname: "/(tabs)/family", params: { refresh: Date.now() } } as any);
               break;
           }
         } catch (e) {

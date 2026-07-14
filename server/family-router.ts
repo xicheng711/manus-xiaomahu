@@ -775,7 +775,7 @@ export const familyRouter = router({
           userId,
           `${senderName} 对你的公告回应了 ${input.emoji}`,
           '点击查看家庭动态',
-          { type: 'reaction', announcementId: input.announcementId, roomId: input.roomId },
+          { type: 'reaction', screen: 'family', announcementId: input.announcementId, roomId: input.roomId },
           'toggleReaction',
         );
       }

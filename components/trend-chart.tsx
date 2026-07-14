@@ -46,7 +46,8 @@ function getMonthRange(offset: number): { start: Date; end: Date; label: string 
 }
 
 function dateStr(d: Date): string {
-  return d.toISOString().split('T')[0];
+  // 使用本地日期格式（与打卡保存的 todayStr() 一致），避免 UTC 时区偏移导致日期不匹配
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function buildDateRange(start: Date, end: Date): string[] {

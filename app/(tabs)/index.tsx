@@ -805,7 +805,7 @@ function CreatorHomeScreen() {
             )}
             <Text style={styles.greeting}>{greeting}</Text>
           </View>
-          <Animated.View style={{ transform: [{ scale: avatarScale }] }}>
+          <Animated.View style={{ transform: [{ scale: avatarScale }], alignItems: 'center' }}>
             <TouchableOpacity
               style={[styles.profileBtn, memberPhotoUri && !photoLoadError ? { backgroundColor: 'transparent', borderWidth: 0 } : {}]}
               onPress={() => {
@@ -825,6 +825,9 @@ function CreatorHomeScreen() {
                 </LinearGradient>
               )}
             </TouchableOpacity>
+            {elderNickname ? (
+              <Text style={{ fontSize: 11, color: AppColors.text.tertiary, fontWeight: '600', marginTop: 4 }}>{elderNickname}</Text>
+            ) : null}
           </Animated.View>
         </Animated.View>
 
