@@ -522,11 +522,22 @@ export default function DiaryEditScreen() {
   }
 
   async function handleEndAndSave() {
-    if (entryId) {
-      // 关键修复：使用 ref 获取最新 conversation（避免 React state 闭包问题），
-      // 确保 AI 最后一条回复一定被包含在保存的对话中
-      const latestConv = conversationRef.current;
-      await updateDiaryEntry(entryId, { conversation: latestConv, conversationFinished: true });
+    // 使用 ref 获取最新对话内容（避免 React state 闭包问题）
+    const latestConv = conversationRef.current;
+    // 使用 entryRef.current?.id 作为 fallback，避免 entryId state 闭包问题导致 id 为 null
+    const eid = entryId ?? entryRef.current?.id ?? null;
+    if (eid) {
+      // 先更新本地存储（同时触发异步云同步）
+      await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true });
+      // 额外直接触发云同步：确保 conversationFinished:true 和完整对话一定被上传
+      const latestEntry = await getDiaryEntryById(eid);
+      if (latestEntry?.serverDiaryId) {
+        cloudSyncDiary(
+          { ...latestEntry, conversation: latestConv, conversationFinished: true },
+          latestEntry.serverDiaryId,
+          familyId
+        ).catch(() => {});
+      }
     }
     // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
     setFinished(true);

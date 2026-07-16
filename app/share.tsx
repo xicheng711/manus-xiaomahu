@@ -32,7 +32,10 @@ function fixMoodScore(ci: any): any {
 const CACHE_KEY_PREFIX = 'share_briefing_cache_v1';
 type BriefingCacheEntry = { date: string; briefing: any; shareText: string; checkIn: any };
 const _briefingCacheMap: Map<string, BriefingCacheEntry> = new Map();
-function getTodayKey() { return new Date().toISOString().slice(0, 10); }
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function getCacheKey(familyId?: string) { return familyId ? `${CACHE_KEY_PREFIX}:${familyId}` : CACHE_KEY_PREFIX; }
 function getCachedBriefing(familyId?: string) {
   const entry = _briefingCacheMap.get(getCacheKey(familyId));
@@ -735,6 +738,7 @@ export default function ShareScreen() {
   const [copied, setCopied] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
   const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number; napMinutes: number }>>([]);
+  const [weeklyLoading, setWeeklyLoading] = useState(true); // 初始为 true，等 loadSupplementaryData 完成后设为 false
   const [todayCi, setTodayCi] = useState<DailyCheckIn | null>(null);
   const [yesterdayCi, setYesterdayCi] = useState<DailyCheckIn | null>(null);
   const [mergedTodayCi, setMergedTodayCi] = useState<DailyCheckIn | null>(null); // 今日分析用的合并记录
@@ -858,20 +862,20 @@ export default function ShareScreen() {
 
       // 加载周数据
       const weekly = await getWeeklySleepData(7, familyId);
-      setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
-
+            setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
+      setWeeklyLoading(false);
       // 使用本地构建简报（历史模式不调用 AI）
       const fallback = buildLocalBriefing(nickname, caregiver, fixedCi);
       setBriefing(fallback);
       setShareText(fallback.shareText);
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败'); errorRef.current = e instanceof Error ? e.message : '加载失败';
+      setWeeklyLoading(false);
     } finally {
       setLoading(false);
       loadingRef.current = false;
     }
   }
-
   async function recheckBackfill() {
     try {
       const today = await getTodayCheckIn(familyId);
@@ -888,7 +892,8 @@ export default function ShareScreen() {
       let checkIn = await getTodayCheckIn(familyId);
       if (!checkIn && isJoiner) {
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        const todayKey = new Date().toISOString().slice(0, 10);
+        const _ns = new Date();
+        const todayKey = `${_ns.getFullYear()}-${String(_ns.getMonth() + 1).padStart(2, '0')}-${String(_ns.getDate()).padStart(2, '0')}`;
         checkIn = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
       }
       // 如果打卡已完成，则强制刷新内容
@@ -914,7 +919,9 @@ export default function ShareScreen() {
       if (!earlyCheckIn && isJoiner) {
         // Joiner: 从云端拉取今日打卡，明确传入 familyId 避免读到错误的 room
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        const todayKey = new Date().toISOString().slice(0, 10);
+        // 使用本地日期（避免 UTC 时区偏差导致在 UTC+8 时区下找不到当天打卡）
+        const _n0 = new Date();
+        const todayKey = `${_n0.getFullYear()}-${String(_n0.getMonth() + 1).padStart(2, '0')}-${String(_n0.getDate()).padStart(2, '0')}`;
         earlyCheckIn = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
       }
       if (!earlyCheckIn?.morningDone) {
@@ -1093,9 +1100,10 @@ export default function ShareScreen() {
       let cloudCIsForWeekly: any[] = [];
       if (isJoiner) {
         cloudCIsForWeekly = (await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30)) as any[];
-        const todayKey = new Date().toISOString().slice(0, 10);
-        const yd = new Date(); yd.setDate(yd.getDate() - 1);
-        const yKey = yd.toISOString().slice(0, 10);
+        const _nw = new Date();
+        const todayKey = `${_nw.getFullYear()}-${String(_nw.getMonth() + 1).padStart(2, '0')}-${String(_nw.getDate()).padStart(2, '0')}`;
+        const yd = new Date(_nw); yd.setDate(yd.getDate() - 1);
+        const yKey = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, '0')}-${String(yd.getDate()).padStart(2, '0')}`;
         // Joiner 直接用云端数据（不依赖本地缓存）
         today = cloudCIsForWeekly.find((ci: any) => ci.date === todayKey) ?? today;
         yesterday = cloudCIsForWeekly.find((ci: any) => ci.date === yKey) ?? yesterday;
@@ -1135,7 +1143,8 @@ export default function ShareScreen() {
         const joinerWeekly = Array.from({ length: 7 }, (_, i) => {
           const d = new Date(today7);
           d.setDate(d.getDate() - i);
-          const dateStr = d.toISOString().split('T')[0];
+          // 使用本地日期（避免 UTC 时区偏差导致 chart 数据不匹配）
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           const ci = cloudCIsForWeekly.find((c: any) => c.date === dateStr);
           return {
             date: dateStr,
@@ -1150,11 +1159,13 @@ export default function ShareScreen() {
         setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
       }
 
-      setTodayCi(today);
+            setTodayCi(today);
       setYesterdayCi(yesterday);
     } catch {}
+    finally {
+      setWeeklyLoading(false); // 趋势图数据加载完成
+    }
   }
-
   async function doGenerate(nickname: string, caregiver: string, ci: DailyCheckIn, _score: number | null) {
     setGenerating(true);
     setBriefing(null);
@@ -1452,9 +1463,15 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
             {/* ── Last Night Sleep Detail (Donut + Timeline) ── */}
             <SleepDetailSection checkIn={checkIn} />
 
-            {/* ── Weekly Sleep Trend (Bar Chart) ── */}
-            <WeeklySleepChart weeklyData={weeklyData} />
-
+                        {/* ── Weekly Sleep Trend (Bar Chart) ── */}
+            {weeklyLoading && weeklyData.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                <ActivityIndicator size="small" color="#B07858" />
+                <Text style={{ color: '#9CA3AF', fontSize: 13, marginTop: 8 }}>加载趋势图...</Text>
+              </View>
+            ) : (
+              <WeeklySleepChart weeklyData={weeklyData} />
+            )}
             {/* ── Weekly Nap Trend (Bar Chart) ── */}
             <WeeklyNapChart weeklyData={weeklyData} />
 

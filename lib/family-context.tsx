@@ -270,12 +270,24 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
       refresh();
     }
   }, [refresh]);
+
+  // 当家庭数据就绪（ready=true）时，确保 push token 已注册到服务器
+  // 覆盖 Joiner 登录后 session token 延迟就绪导致 _layout.tsx 注册失败的情况
+  useEffect(() => {
+    if (ready) {
+      setTimeout(() => {
+        import('@/lib/notifications').then(({ registerPushToken }) => {
+          registerPushToken().catch(() => {});
+        });
+      }, 1000); // 延迟 1s 确保 tRPC 客户端初始化完成
+    }
+  }, [ready]);
 
   const switchFamily = useCallback(async (familyId: string) => {
     const all = await getAllMemberships();
