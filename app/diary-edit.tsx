@@ -209,7 +209,7 @@ export default function DiaryEditScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; readOnly?: string }>();
   const existingId = params.id;
-  const { activeMembership } = useFamilyContext();
+  const { activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
   const [roleReadOnly, setRoleReadOnly] = useState(params.readOnly === '1');
   const isReadOnly = roleReadOnly;
@@ -251,14 +251,22 @@ export default function DiaryEditScreen() {
   const replyMutation = trpc.ai.replyToDiary.useMutation();
   const followUpMutation = trpc.ai.followUpDiary.useMutation();
 
-  // 初始加载动画和日记条目（只运行一次）
+  // 初始加载动画（只运行一次）
+  const entryLoadedRef = useRef(false);
   useEffect(() => {
     fadeInUp(formFade, formSlide, { duration: 400 });
-    if (existingId) loadExistingEntry(existingId);
     Animated.loop(
       Animated.timing(shimmerAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
     ).start();
   }, []);
+
+  // 等待 familyId 就绪后再加载日记（避免 familyId 为 undefined 时读取错误的 storage key）
+  useEffect(() => {
+    if (existingId && familyReady && !entryLoadedRef.current) {
+      entryLoadedRef.current = true;
+      loadExistingEntry(existingId);
+    }
+  }, [familyReady, existingId]);
 
   // 当 familyId 变化时重新加载称谓和头像（包括初始进入页面）
   useEffect(() => {
@@ -535,11 +543,26 @@ export default function DiaryEditScreen() {
       // 额外直接触发云同步：确保 conversationFinished:true 和完整对话一定被上传
       const latestEntry = await getDiaryEntryById(eid, familyId ?? undefined);
       if (latestEntry?.serverDiaryId) {
+        // serverDiaryId 已知，直接同步
         cloudSyncDiary(
           { ...latestEntry, conversation: latestConv, conversationFinished: true },
           latestEntry.serverDiaryId,
           familyId
         ).catch(() => {});
+      } else {
+        // serverDiaryId 还未就绪（云端初次创建还在进行中），等待它就绪后再同步
+        waitForServerDiaryId(eid).then(async (serverDiaryId) => {
+          if (serverDiaryId) {
+            const freshEntry = await getDiaryEntryById(eid, familyId ?? undefined);
+            if (freshEntry) {
+              cloudSyncDiary(
+                { ...freshEntry, conversation: latestConv, conversationFinished: true },
+                serverDiaryId,
+                familyId
+              ).catch(() => {});
+            }
+          }
+        });
       }
     }
     // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
