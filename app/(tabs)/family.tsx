@@ -1417,7 +1417,8 @@ function AnnouncementCard({
     }
   }
 
-  const time = new Date(ann.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const _annDate = new Date(ann.createdAt);
+  const time = `${String(_annDate.getHours()).padStart(2, '0')}:${String(_annDate.getMinutes()).padStart(2, '0')}`;
   const date = ann.date !== todayStr()
     ? new Date(ann.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' '
     : '';

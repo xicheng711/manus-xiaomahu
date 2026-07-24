@@ -538,32 +538,9 @@ export default function DiaryEditScreen() {
     // 使用 entryRef.current?.id 作为 fallback，避免 entryId state 闭包问题导致 id 为 null
     const eid = entryId ?? entryRef.current?.id ?? null;
     if (eid) {
-      // 先更新本地存储（传入 familyId 确保写入正确的 storage key）
+      // updateDiaryEntry 内部已处理云同步（conversationFinished:true 时会触发带通知的 syncDiary）
+      // 不需要额外调用 cloudSyncDiary，否则会发送重复通知
       await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true }, familyId ?? undefined);
-      // 额外直接触发云同步：确保 conversationFinished:true 和完整对话一定被上传
-      const latestEntry = await getDiaryEntryById(eid, familyId ?? undefined);
-      if (latestEntry?.serverDiaryId) {
-        // serverDiaryId 已知，直接同步
-        cloudSyncDiary(
-          { ...latestEntry, conversation: latestConv, conversationFinished: true },
-          latestEntry.serverDiaryId,
-          familyId
-        ).catch(() => {});
-      } else {
-        // serverDiaryId 还未就绪（云端初次创建还在进行中），等待它就绪后再同步
-        waitForServerDiaryId(eid).then(async (serverDiaryId) => {
-          if (serverDiaryId) {
-            const freshEntry = await getDiaryEntryById(eid, familyId ?? undefined);
-            if (freshEntry) {
-              cloudSyncDiary(
-                { ...freshEntry, conversation: latestConv, conversationFinished: true },
-                serverDiaryId,
-                familyId
-              ).catch(() => {});
-            }
-          }
-        });
-      }
     }
     // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
     setFinished(true);
@@ -607,11 +584,7 @@ export default function DiaryEditScreen() {
           {isReadOnly ? (
             <View style={{ width: 60 }} />
           ) : submitted && !finished ? (
-            <TouchableOpacity onPress={handleEndAndSave} activeOpacity={0.85}>
-              <LinearGradient colors={['#B07858', '#8B5E3C']} style={styles.headerSaveBtn}>
-                <Text style={styles.headerSaveBtnText}>❤️ 保存</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+            <View style={{ width: 60 }} />
           ) : existingId && finished ? (
             <TouchableOpacity style={styles.headerDeleteBtn} onPress={() => setShowDeleteModal(true)} activeOpacity={0.8}>
               <Text style={styles.headerDeleteBtnText}>🗑️ 删除</Text>

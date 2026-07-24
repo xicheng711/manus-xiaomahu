@@ -749,6 +749,13 @@ export function JoinerHomeScreen() {
               ))}
             </View>
 
+            {/* 白天小睡 */}
+            {latestCheckIn?.napDuration && latestCheckIn.napDuration !== '没有' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingHorizontal: 4 }}>
+                <Text style={{ fontSize: 14, marginRight: 6 }}>☀️</Text>
+                <Text style={{ fontSize: 13, color: '#B8860B', fontWeight: '500' }}>白天小睡：{latestCheckIn.napDuration}</Text>
+              </View>
+            )}
             {/* 最新日记摘要 */}
             {allDiaries.length > 0 && (
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: AppColors.border.soft }}>

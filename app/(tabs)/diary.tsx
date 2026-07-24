@@ -1022,10 +1022,31 @@ function JoinerDiaryReadOnly() {
           const key = familyId ? `diary_entries:${familyId}` : 'diary_entries';
           await AsyncStorage.setItem(key, JSON.stringify(merged));
         } else if (local.length > 0) {
-          setEntries(local);
+          // 本地缓存也要按时间降序排列
+          const localSorted = [...local].sort((a, b) => {
+            const da = a.createdAt || a.date;
+            const db = b.createdAt || b.date;
+            const cmp = db.localeCompare(da);
+            if (cmp !== 0) return cmp;
+            const ta = a.localTimeStr || '00:00';
+            const tb = b.localTimeStr || '00:00';
+            return tb.localeCompare(ta);
+          });
+          setEntries(localSorted);
         }
       } catch {
-        if (local.length > 0) setEntries(local);
+        if (local.length > 0) {
+          const localSorted = [...local].sort((a, b) => {
+            const da = a.createdAt || a.date;
+            const db = b.createdAt || b.date;
+            const cmp = db.localeCompare(da);
+            if (cmp !== 0) return cmp;
+            const ta = a.localTimeStr || '00:00';
+            const tb = b.localTimeStr || '00:00';
+            return tb.localeCompare(ta);
+          });
+          setEntries(localSorted);
+        }
       }
     }
     loadJoinerEntries();

@@ -626,6 +626,11 @@ function CheckinLanding({
                   <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>🍜 {checkIn.mealNotes}</Text>
                 </View>
               )}
+              {checkIn.napDuration && checkIn.napDuration !== '没有' && (
+                <View style={[styles.checkinChip, { backgroundColor: 'rgba(255,200,100,0.15)' }]}>
+                  <Text style={[styles.checkinChipText, { color: '#B8860B' }]}>☀️ 白天小睡 {checkIn.napDuration}</Text>
+                </View>
+              )}
             </View>
           )}
 
