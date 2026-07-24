@@ -892,9 +892,17 @@ export default function ShareScreen() {
       let checkIn = await getTodayCheckIn(familyId);
       if (!checkIn && isJoiner) {
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
+        // 跨时区兼容：用最近3天范围匹配
         const _ns = new Date();
-        const todayKey = `${_ns.getFullYear()}-${String(_ns.getMonth() + 1).padStart(2, '0')}-${String(_ns.getDate()).padStart(2, '0')}`;
-        checkIn = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
+        const _tK = `${_ns.getFullYear()}-${String(_ns.getMonth() + 1).padStart(2, '0')}-${String(_ns.getDate()).padStart(2, '0')}`;
+        const _tmS = new Date(_ns); _tmS.setDate(_tmS.getDate() + 1);
+        const _tmKS = `${_tmS.getFullYear()}-${String(_tmS.getMonth() + 1).padStart(2, '0')}-${String(_tmS.getDate()).padStart(2, '0')}`;
+        const _ydS = new Date(_ns); _ydS.setDate(_ydS.getDate() - 1);
+        const _ydKS = `${_ydS.getFullYear()}-${String(_ydS.getMonth() + 1).padStart(2, '0')}-${String(_ydS.getDate()).padStart(2, '0')}`;
+        checkIn = (cloudCIs as any[])?.find((ci: any) => ci.date === _tK)
+          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _tmKS)
+          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _ydKS)
+          ?? null;
       }
       // 如果打卡已完成，则强制刷新内容
       if (checkIn?.morningDone && checkIn?.eveningDone) {
@@ -917,12 +925,20 @@ export default function ShareScreen() {
     try {
       let earlyCheckIn = await getTodayCheckIn(familyId);
       if (!earlyCheckIn && isJoiner) {
-        // Joiner: 从云端拉取今日打卡，明确传入 familyId 避免读到错误的 room
+        // Joiner: 从云端拉取打卡，明确传入 familyId 避免读到错误的 room
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        // 使用本地日期（避免 UTC 时区偏差导致在 UTC+8 时区下找不到当天打卡）
+        // 跨时区兼容：主照顾者可能在不同时区，打卡 date 字段是主照顾者的本地日期
+        // Joiner 用「今天」、「明天（主照顾者在东边时区）」、「昨天（主照顾者在西边时区）」三个日期内匹配
         const _n0 = new Date();
-        const todayKey = `${_n0.getFullYear()}-${String(_n0.getMonth() + 1).padStart(2, '0')}-${String(_n0.getDate()).padStart(2, '0')}`;
-        earlyCheckIn = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
+        const _todayK = `${_n0.getFullYear()}-${String(_n0.getMonth() + 1).padStart(2, '0')}-${String(_n0.getDate()).padStart(2, '0')}`;
+        const _tmN0 = new Date(_n0); _tmN0.setDate(_tmN0.getDate() + 1);
+        const _tmK = `${_tmN0.getFullYear()}-${String(_tmN0.getMonth() + 1).padStart(2, '0')}-${String(_tmN0.getDate()).padStart(2, '0')}`;
+        const _ydN0 = new Date(_n0); _ydN0.setDate(_ydN0.getDate() - 1);
+        const _ydK = `${_ydN0.getFullYear()}-${String(_ydN0.getMonth() + 1).padStart(2, '0')}-${String(_ydN0.getDate()).padStart(2, '0')}`;
+        earlyCheckIn = (cloudCIs as any[])?.find((ci: any) => ci.date === _todayK)
+          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _tmK)
+          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _ydK)
+          ?? null;
       }
       if (!earlyCheckIn?.morningDone) {
         setLoading(false);
@@ -1023,13 +1039,22 @@ export default function ShareScreen() {
       // Joiner 直接从云端拉取打卡数据（不依赖本地缓存，避免 room 错误导致空白）
       if (isJoiner) {
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
-        // 使用本地日期（避免 UTC 时区偏差导致找不到当天打卡）
+        // 跨时区兼容：主照顾者可能在不同时区，打卡 date 字段是主照顾者的本地日期
+        // Joiner 用「今天」、「明天（主照顾者在东边时区）」、「昨天（主照顾者在西边时区）」三个日期匹配
         const _now = new Date();
         const todayKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+        const _tmNow = new Date(_now); _tmNow.setDate(_tmNow.getDate() + 1);
+        const tmKey = `${_tmNow.getFullYear()}-${String(_tmNow.getMonth() + 1).padStart(2, '0')}-${String(_tmNow.getDate()).padStart(2, '0')}`;
         const yd = new Date(_now); yd.setDate(yd.getDate() - 1);
         const yKey = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, '0')}-${String(yd.getDate()).padStart(2, '0')}`;
-        const cloudToday = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey) ?? null;
-        const cloudYesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey) ?? null;
+        // 今天匹配：优先今天，其次明天（主照顾者在东边时区），最后昨天（主照顾者在西边时区）
+        const cloudToday = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey)
+          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === tmKey)
+          ?? null;
+        // 昨天匹配：今天的前一天和前两天
+        const cloudYesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey)
+          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey)
+          ?? null;
         // 云端数据优先（云端有 eveningDone 就用云端）
         if (cloudToday) today = cloudToday;
         if (cloudYesterday) yesterday = cloudYesterday;

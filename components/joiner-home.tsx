@@ -458,10 +458,19 @@ export function JoinerHomeScreen() {
       checkIns = await getAllCheckIns(activeFamilyId || undefined);
       diaries = await getDiaryEntries(activeFamilyId || undefined);
     }
-    // 用今天的日期过滤打卡（避免用昨天的打卡来判断今日状态）
+    // 跨时区兼容：主照顾者可能在不同时区，打卡 date 字段是主照顾者的本地日期
+    // Joiner 应在「今天」、「明天（主照顾者在东边时区）」、「昨天（主照顾者在西边时区）」三个日期内匹配
     const _todayNow = new Date();
     const _todayKey = `${_todayNow.getFullYear()}-${String(_todayNow.getMonth() + 1).padStart(2, '0')}-${String(_todayNow.getDate()).padStart(2, '0')}`;
-    const todayCheckIn = checkIns.find(c => c.date === _todayKey) ?? null;
+    const _tmDate = new Date(_todayNow); _tmDate.setDate(_tmDate.getDate() + 1);
+    const _tmKey = `${_tmDate.getFullYear()}-${String(_tmDate.getMonth() + 1).padStart(2, '0')}-${String(_tmDate.getDate()).padStart(2, '0')}`;
+    const _ydDate = new Date(_todayNow); _ydDate.setDate(_ydDate.getDate() - 1);
+    const _ydKey = `${_ydDate.getFullYear()}-${String(_ydDate.getMonth() + 1).padStart(2, '0')}-${String(_ydDate.getDate()).padStart(2, '0')}`;
+    // 优先匹配今天，其次匹配明天（主照顾者在东边时区），最后匹配昨天（主照顾者在西边时区）
+    const todayCheckIn = checkIns.find(c => c.date === _todayKey)
+      ?? checkIns.find(c => c.date === _tmKey)
+      ?? checkIns.find(c => c.date === _ydKey)
+      ?? null;
     const latest = checkIns[0] ?? null; // 保留最近打卡（用于状态指示器颜色）
     setLatestCheckIn(todayCheckIn ?? latest); // 优先用今天的打卡
     setAllCheckIns(checkIns);
@@ -492,16 +501,12 @@ export function JoinerHomeScreen() {
       announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
     }
     setLatestAnnounce(announcements[0] ?? null);
-    // Filter to today-only data for the activity feed (avoid showing historical records as "today")
-    // Use local date (same as todayStr() in storage.ts) to avoid UTC offset issues
-    const _d = new Date();
-    const todayKey = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
-    const todayCheckIns = checkIns.filter(c => c.date === todayKey).slice(0, 2);
-    const todayDiaries = cleanDiaries.filter(d => {
-      // Use date field (YYYY-MM-DD, local date) instead of createdAt (UTC timestamp)
-      return d.date === todayKey;
-    }).slice(0, 3);
-    const todayAnnouncements = announcements.filter(a => a.createdAt && a.createdAt.slice(0, 10) === todayKey).slice(0, 2);
+    // 跨时区兼容：activity feed 也用最近3天范围匹配（今天/明天/昨天）
+    // 避免主照顾者和 Joiner 时区不同导致活动流显示为空
+    const _feedValidDates = new Set([_todayKey, _tmKey, _ydKey]);
+    const todayCheckIns = checkIns.filter(c => _feedValidDates.has(c.date)).slice(0, 2);
+    const todayDiaries = cleanDiaries.filter(d => _feedValidDates.has(d.date)).slice(0, 3);
+    const todayAnnouncements = announcements.filter(a => a.createdAt && _feedValidDates.has(a.createdAt.slice(0, 10))).slice(0, 2);
     setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));
     // 读取今日简报缓存
     try {
@@ -509,7 +514,7 @@ export function JoinerHomeScreen() {
       const raw = await AsyncStorage.getItem(cacheKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.date === todayKey && parsed.briefing?.summary) {
+        if (parsed.date === _todayKey && parsed.briefing?.summary) {
           setBriefingSummary(parsed.briefing.summary);
         } else {
           setBriefingSummary(null);

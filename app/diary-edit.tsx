@@ -282,7 +282,7 @@ export default function DiaryEditScreen() {
 
   async function loadExistingEntry(id: string) {
     setLoadingEntry(true);
-    let entry: DiaryEntry | null = await getDiaryEntryById(id);
+    let entry: DiaryEntry | null = await getDiaryEntryById(id, familyId ?? undefined);
     // 本地找不到时（无论是 joiner 还是主照顾者）尝试从云端拉取
     // 注意：不能依赖 isReadOnly 状态（因为 loadProfile 是异步的，可能还没执行完）
     if (!entry) {
@@ -364,7 +364,7 @@ export default function DiaryEditScreen() {
 
   async function handleDeleteEntry() {
     if (!entryId) return;
-    await deleteDiaryEntry(entryId);
+    await deleteDiaryEntry(entryId, familyId ?? undefined);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowDeleteModal(false);
     router.replace('/(tabs)/diary' as any);
@@ -410,7 +410,7 @@ export default function DiaryEditScreen() {
       content: content.trim(),
       conversation: [],
       authorName: caregiverName || undefined,
-    });
+    }, familyId ?? undefined); // 传入 familyId 确保写入正确的 storage key
     setEntryId(savedEntry.id);
     entryRef.current = savedEntry;
     setSubmitted(true);

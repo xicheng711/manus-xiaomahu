@@ -548,7 +548,8 @@ export async function getWeeklySleepData(days = 7, roomId?: string): Promise<Arr
   for (let i = 0; i < days; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
+    // 使用本地日期（避免 toISOString 返回 UTC 日期，在 UTC+8 凌晨0-8点时与本地日期相差1天）
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const checkin = all.find(c => c.date === dateStr);
     const sleepHours = checkin?.sleepHours ?? 0;
     const awakeHours = checkin?.awakeHours ?? 0;
