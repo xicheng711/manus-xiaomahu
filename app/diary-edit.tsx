@@ -375,8 +375,11 @@ export default function DiaryEditScreen() {
   }
 
   async function persistConversation(conv: ConversationMessage[]) {
-    if (!entryId) return;
-    await updateDiaryEntry(entryId, { conversation: conv });
+    // 使用 entryRef.current?.id 作为主要来源，避免 React state 闭包问题导致 entryId 为 null
+    const eid = entryRef.current?.id ?? entryId;
+    if (!eid) return;
+    // 传入 familyId 作为 roomId，确保写入正确的 storage key
+    await updateDiaryEntry(eid, { conversation: conv }, familyId ?? undefined);
   }
 
   async function handleSubmit() {
@@ -450,8 +453,8 @@ export default function DiaryEditScreen() {
     const conv2 = [...conv1, aiMsg];
     setConversation(conv2);
     setAiLoading(false);
-    // Save locally first
-    await updateDiaryEntry(savedEntry.id, { aiReply: aiText, conversation: conv2 });
+    // Save locally first (传入 familyId 确保写入正确的 storage key)
+    await updateDiaryEntry(savedEntry.id, { aiReply: aiText, conversation: conv2 }, familyId ?? undefined);
     // Reliably sync conversation to server: wait for serverDiaryId (from saveDiaryEntry's cloud sync)
     // then explicitly push the full entry including conversation and aiReply
     waitForServerDiaryId(savedEntry.id).then(async (serverDiaryId) => {
@@ -527,10 +530,10 @@ export default function DiaryEditScreen() {
     // 使用 entryRef.current?.id 作为 fallback，避免 entryId state 闭包问题导致 id 为 null
     const eid = entryId ?? entryRef.current?.id ?? null;
     if (eid) {
-      // 先更新本地存储（同时触发异步云同步）
-      await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true });
+      // 先更新本地存储（传入 familyId 确保写入正确的 storage key）
+      await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true }, familyId ?? undefined);
       // 额外直接触发云同步：确保 conversationFinished:true 和完整对话一定被上传
-      const latestEntry = await getDiaryEntryById(eid);
+      const latestEntry = await getDiaryEntryById(eid, familyId ?? undefined);
       if (latestEntry?.serverDiaryId) {
         cloudSyncDiary(
           { ...latestEntry, conversation: latestConv, conversationFinished: true },

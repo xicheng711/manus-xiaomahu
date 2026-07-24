@@ -348,9 +348,20 @@ function DiaryScreenContent() {
   }, [familyId]));
 
   async function loadEntries() {
-    // 先显示本地缓存
+    // 先显示本地缓存（先排序再显示，确保最新日记在最上面）
     const local = await getDiaryEntries(familyId);
-    if (local.length > 0) setEntries(local);
+    if (local.length > 0) {
+      const localSorted = [...local].sort((a, b) => {
+        const da = a.createdAt || a.date;
+        const db = b.createdAt || b.date;
+        const cmp = db.localeCompare(da);
+        if (cmp !== 0) return cmp;
+        const ta = a.localTimeStr || '00:00';
+        const tb = b.localTimeStr || '00:00';
+        return tb.localeCompare(ta);
+      });
+      setEntries(localSorted);
+    }
     // 从云端拉取所有人的日记（主照顾者 + joiner），确保多设备同步
     try {
       const [cloudEntries, syncState] = await Promise.all([cloudGetDiaries(familyId ? Number(familyId) : undefined), getCloudSyncState()]);

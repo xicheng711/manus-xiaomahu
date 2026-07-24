@@ -1161,6 +1161,10 @@ export default function ShareScreen() {
 
             setTodayCi(today);
       setYesterdayCi(yesterday);
+      // 如果 checkIn 为 null（缓存命中路径且缓存中没有 checkIn），用 today 填充确保 BriefingCard 能正常渲染
+      if (today) {
+        setCheckIn(prev => prev ?? today);
+      }
     } catch {}
     finally {
       setWeeklyLoading(false); // 趋势图数据加载完成

@@ -458,8 +458,12 @@ export function JoinerHomeScreen() {
       checkIns = await getAllCheckIns(activeFamilyId || undefined);
       diaries = await getDiaryEntries(activeFamilyId || undefined);
     }
-    const latest = checkIns[0] ?? null;
-    setLatestCheckIn(latest);
+    // 用今天的日期过滤打卡（避免用昨天的打卡来判断今日状态）
+    const _todayNow = new Date();
+    const _todayKey = `${_todayNow.getFullYear()}-${String(_todayNow.getMonth() + 1).padStart(2, '0')}-${String(_todayNow.getDate()).padStart(2, '0')}`;
+    const todayCheckIn = checkIns.find(c => c.date === _todayKey) ?? null;
+    const latest = checkIns[0] ?? null; // 保留最近打卡（用于状态指示器颜色）
+    setLatestCheckIn(todayCheckIn ?? latest); // 优先用今天的打卡
     setAllCheckIns(checkIns);
     // 日记去重：按 serverDiaryId/id 去重，不再按 conversationFinished 过滤
     // （主照顾者如果没有点“结束并保存”，joiner 也应该能看到日记和 AI 对话）
@@ -756,14 +760,11 @@ export function JoinerHomeScreen() {
               <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>小马虎</Text>
             </View>
 
-            {/* 操作按钮：根据打卡状态显示不同内容 */}
+            {/* 操作按钮：根据今天打卡状态显示不同内容（latestCheckIn 已是今天的打卡） */}
             {latestCheckIn?.eveningDone ? (() => {
-              // 用本地日期判断最新打卡是否是今天（避免 UTC 时区偏差）
-              const _d = new Date();
-              const todayKey = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
-              const isToday = latestCheckIn.date === todayKey;
-              const btnLabel = isToday ? '📋 查看今日简报' : `📋 查看 ${latestCheckIn.date} 简报`;
-              const targetDate = isToday ? undefined : latestCheckIn.date;
+              // latestCheckIn 已经是今天的打卡（在 loadData 中用今天日期过滤）
+              const btnLabel = '📋 查看今日简报';
+              const targetDate = undefined; // 今天的简报不需要传日期参数
               return (
                 <TouchableOpacity
                   style={styles.briefingBtn}

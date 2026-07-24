@@ -26,7 +26,7 @@ import { COLORS } from '@/lib/animations';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { ScreenContainer } from '@/components/screen-container';
-import { sendFamilyAnnouncementNotification } from '@/lib/notifications';
+import { sendFamilyAnnouncementNotification, registerPushToken } from '@/lib/notifications';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { FamilySkeleton } from '@/components/skeleton-loader';
@@ -186,6 +186,8 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
         return;
       }
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // 加入家庭后立即注册 push token，确保 Joiner 能收到通知
+      registerPushToken().catch(() => {});
       onSetupComplete();
     } finally {
       setLoading(false);
