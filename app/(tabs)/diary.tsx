@@ -494,7 +494,17 @@ function DiaryScreenContent() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setDeleteTarget(null);
     const updated = await getDiaryEntries(familyId);
-    const next = updated.slice(0, 30);
+    // 删除后重新排序，确保列表顺序正确
+    const sorted = [...updated].sort((a, b) => {
+      const da = a.createdAt || a.date;
+      const db = b.createdAt || b.date;
+      const cmp = db.localeCompare(da);
+      if (cmp !== 0) return cmp;
+      const ta = a.localTimeStr || '00:00';
+      const tb = b.localTimeStr || '00:00';
+      return tb.localeCompare(ta);
+    });
+    const next = sorted.slice(0, 30);
     setEntries(next);
     if (next.length === 0) setEditMode(false);
   }
