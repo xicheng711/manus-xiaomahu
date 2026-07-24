@@ -458,21 +458,18 @@ export function JoinerHomeScreen() {
       checkIns = await getAllCheckIns(activeFamilyId || undefined);
       diaries = await getDiaryEntries(activeFamilyId || undefined);
     }
-    // 跨时区兼容：主照顾者可能在不同时区，打卡 date 字段是主照顾者的本地日期
-    // Joiner 应在「今天」、「明天（主照顾者在东边时区）」、「昨天（主照顾者在西边时区）」三个日期内匹配
+    // 跨时区设计：latestCheckIn 始终用最新的一条打卡（checkIns[0]）
+    // 服务端按 date 降序返回，checkIns[0] 就是最新打卡，不受 Joiner 本地日期影响
+    // 状态文字会显示打卡的实际日期，让 Joiner 知道是哪天的记录
     const _todayNow = new Date();
     const _todayKey = `${_todayNow.getFullYear()}-${String(_todayNow.getMonth() + 1).padStart(2, '0')}-${String(_todayNow.getDate()).padStart(2, '0')}`;
     const _tmDate = new Date(_todayNow); _tmDate.setDate(_tmDate.getDate() + 1);
     const _tmKey = `${_tmDate.getFullYear()}-${String(_tmDate.getMonth() + 1).padStart(2, '0')}-${String(_tmDate.getDate()).padStart(2, '0')}`;
     const _ydDate = new Date(_todayNow); _ydDate.setDate(_ydDate.getDate() - 1);
     const _ydKey = `${_ydDate.getFullYear()}-${String(_ydDate.getMonth() + 1).padStart(2, '0')}-${String(_ydDate.getDate()).padStart(2, '0')}`;
-    // 优先匹配今天，其次匹配明天（主照顾者在东边时区），最后匹配昨天（主照顾者在西边时区）
-    const todayCheckIn = checkIns.find(c => c.date === _todayKey)
-      ?? checkIns.find(c => c.date === _tmKey)
-      ?? checkIns.find(c => c.date === _ydKey)
-      ?? null;
-    const latest = checkIns[0] ?? null; // 保留最近打卡（用于状态指示器颜色）
-    setLatestCheckIn(todayCheckIn ?? latest); // 优先用今天的打卡
+    // 始终显示最新打卡（checkIns[0]），不按 Joiner 本地日期过滤
+    const latest = checkIns[0] ?? null;
+    setLatestCheckIn(latest); // 始终用最新打卡，状态文字会显示实际日期
     setAllCheckIns(checkIns);
     // 日记去重：按 serverDiaryId/id 去重，不再按 conversationFinished 过滤
     // （主照顾者如果没有点“结束并保存”，joiner 也应该能看到日记和 AI 对话）
@@ -562,19 +559,22 @@ export function JoinerHomeScreen() {
   })();
 
   const statusSummary = (() => {
-    if (!latestCheckIn) return '今天还没有打卡，等照顾者完成后这里会显示详情';
-    const parts: string[] = [];
+    if (!latestCheckIn) return '暂无打卡记录，等照顾者完成后这里会显示详情';
+    // 显示打卡的实际日期（跨时区友好：Joiner 能看到是哪天的记录）
+    const ciDateObj = latestCheckIn.date ? new Date(latestCheckIn.date + 'T00:00:00') : new Date();
+    const ciDateLabel = ciDateObj.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+    const parts: string[] = [`${ciDateLabel}打卡`];
     // 睡眠数据来自早间打卡，始终显示
     if (latestCheckIn.morningDone && latestCheckIn.sleepHours != null) {
       const h = latestCheckIn.sleepHours;
-      parts.push(`昨晚睡了 ${h} 小时`);
+      parts.push(`睡了 ${h} 小时`);
     }
     // 心情和用药只有晚间打卡完成后才显示真实数据
     if (latestCheckIn.eveningDone) {
       if (latestCheckIn.medicationTaken === false) {
-        parts.push('今日药还没吃');
+        parts.push('药还没吃');
       } else if (latestCheckIn.medicationTaken) {
-        parts.push('今日药已吃');
+        parts.push('药已吃');
       }
       if (latestCheckIn.moodScore != null) {
         parts.push(`心情 ${latestCheckIn.moodScore}/10`);
@@ -585,13 +585,13 @@ export function JoinerHomeScreen() {
       }
     } else if (latestCheckIn.morningDone) {
       // 仅早间打卡完成，提示晚间待记录
-      parts.push('晚间打卡待记录');
+      parts.push('晚间待记录');
       if (latestCheckIn.morningNotes) {
         const note = latestCheckIn.morningNotes.slice(0, 20);
         parts.push(`备注：${note}`);
       }
     }
-    return parts.length > 0 ? parts.join('，') : '打卡已记录';
+    return parts.join('，');
   })();
 
   return (
@@ -699,7 +699,7 @@ export function JoinerHomeScreen() {
                         const dateLabel = dateObj.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
                         return `${dateLabel} ${time}打卡已记录`;
                       })()
-                    : '今天还没有打卡记录'}
+                    : '暂无打卡记录'}
                 </Text>
               </View>
             </View>
@@ -772,17 +772,19 @@ export function JoinerHomeScreen() {
               <Text style={{ fontSize: 12, color: AppColors.text.tertiary }}>小马虎</Text>
             </View>
 
-            {/* 操作按钮：根据今天打卡状态显示不同内容（latestCheckIn 已是今天的打卡） */}
+            {/* 操作按钮：根据最新打卡状态显示不同内容
+                 跨时区设计：latestCheckIn 是最新打卡，不限制必须是今天
+                 只要有晚间打卡完成，就可以查看简报（传入打卡日期让 share.tsx 加载对应日期的简报） */}
             {latestCheckIn?.eveningDone ? (() => {
-              // latestCheckIn 已经是今天的打卡（在 loadData 中用今天日期过滤）
-              const btnLabel = '📋 查看今日简报';
-              const targetDate = undefined; // 今天的简报不需要传日期参数
+              // 显示打卡的实际日期（跨时区友好）
+              const ciDateObj = latestCheckIn.date ? new Date(latestCheckIn.date + 'T00:00:00') : new Date();
+              const ciDateLabel = ciDateObj.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+              const btnLabel = `📋 查看 ${ciDateLabel} 简报`;
               return (
                 <TouchableOpacity
                   style={styles.briefingBtn}
-                  onPress={() => router.push(targetDate
-                    ? { pathname: '/share', params: { date: targetDate } } as any
-                    : '/share' as any
+                  onPress={() => router.push(
+                    { pathname: '/share', params: { date: latestCheckIn.date } } as any
                   )}
                   activeOpacity={0.85}
                 >
@@ -801,7 +803,7 @@ export function JoinerHomeScreen() {
                 <Text style={styles.briefingBtnDisabledText}>
                   {latestCheckIn?.morningDone
                     ? '☕️ 等待晚间打卡完成后可查看简报'
-                    : '🌙 今日暂无打卡记录'}
+                    : '🌙 暂无打卡记录'}
                 </Text>
               </View>
             )}

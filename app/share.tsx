@@ -891,18 +891,9 @@ export default function ShareScreen() {
     try {
       let checkIn = await getTodayCheckIn(familyId);
       if (!checkIn && isJoiner) {
+        // 跨时区设计：始终用最新打卡（cloudCIs[0]），不受 Joiner 本地日期影响
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        // 跨时区兼容：用最近3天范围匹配
-        const _ns = new Date();
-        const _tK = `${_ns.getFullYear()}-${String(_ns.getMonth() + 1).padStart(2, '0')}-${String(_ns.getDate()).padStart(2, '0')}`;
-        const _tmS = new Date(_ns); _tmS.setDate(_tmS.getDate() + 1);
-        const _tmKS = `${_tmS.getFullYear()}-${String(_tmS.getMonth() + 1).padStart(2, '0')}-${String(_tmS.getDate()).padStart(2, '0')}`;
-        const _ydS = new Date(_ns); _ydS.setDate(_ydS.getDate() - 1);
-        const _ydKS = `${_ydS.getFullYear()}-${String(_ydS.getMonth() + 1).padStart(2, '0')}-${String(_ydS.getDate()).padStart(2, '0')}`;
-        checkIn = (cloudCIs as any[])?.find((ci: any) => ci.date === _tK)
-          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _tmKS)
-          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _ydKS)
-          ?? null;
+        checkIn = (cloudCIs as any[])?.[0] ?? null;
       }
       // 如果打卡已完成，则强制刷新内容
       if (checkIn?.morningDone && checkIn?.eveningDone) {
@@ -925,20 +916,10 @@ export default function ShareScreen() {
     try {
       let earlyCheckIn = await getTodayCheckIn(familyId);
       if (!earlyCheckIn && isJoiner) {
-        // Joiner: 从云端拉取打卡，明确传入 familyId 避免读到错误的 room
+        // Joiner: 从云端拉取打卡，始终用最新一条（cloudCIs[0]），不受 Joiner 本地日期影响
+        // 跨时区设计：主照顾者的打卡 date 是主照顾者的本地日期，Joiner 只关心"最新的"
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        // 跨时区兼容：主照顾者可能在不同时区，打卡 date 字段是主照顾者的本地日期
-        // Joiner 用「今天」、「明天（主照顾者在东边时区）」、「昨天（主照顾者在西边时区）」三个日期内匹配
-        const _n0 = new Date();
-        const _todayK = `${_n0.getFullYear()}-${String(_n0.getMonth() + 1).padStart(2, '0')}-${String(_n0.getDate()).padStart(2, '0')}`;
-        const _tmN0 = new Date(_n0); _tmN0.setDate(_tmN0.getDate() + 1);
-        const _tmK = `${_tmN0.getFullYear()}-${String(_tmN0.getMonth() + 1).padStart(2, '0')}-${String(_tmN0.getDate()).padStart(2, '0')}`;
-        const _ydN0 = new Date(_n0); _ydN0.setDate(_ydN0.getDate() - 1);
-        const _ydK = `${_ydN0.getFullYear()}-${String(_ydN0.getMonth() + 1).padStart(2, '0')}-${String(_ydN0.getDate()).padStart(2, '0')}`;
-        earlyCheckIn = (cloudCIs as any[])?.find((ci: any) => ci.date === _todayK)
-          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _tmK)
-          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === _ydK)
-          ?? null;
+        earlyCheckIn = (cloudCIs as any[])?.[0] ?? null;
       }
       if (!earlyCheckIn?.morningDone) {
         setLoading(false);
@@ -1038,26 +1019,14 @@ export default function ShareScreen() {
       let yesterday = await getYesterdayCheckIn(familyId || undefined);
       // Joiner 直接从云端拉取打卡数据（不依赖本地缓存，避免 room 错误导致空白）
       if (isJoiner) {
+        // 跨时区设计：Joiner 始终用最新打卡（cloudCIs[0]）作为"今天"的打卡
+        // 主照顾者的打卡 date 是主照顾者的本地日期，Joiner 不按自己的本地日期过滤
+        // 这样无论时区差多少，Joiner 都能看到最新的打卡内容
         const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
-        // 跨时区兼容：主照顾者可能在不同时区，打卡 date 字段是主照顾者的本地日期
-        // Joiner 用「今天」、「明天（主照顾者在东边时区）」、「昨天（主照顾者在西边时区）」三个日期匹配
-        const _now = new Date();
-        const todayKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
-        const _tmNow = new Date(_now); _tmNow.setDate(_tmNow.getDate() + 1);
-        const tmKey = `${_tmNow.getFullYear()}-${String(_tmNow.getMonth() + 1).padStart(2, '0')}-${String(_tmNow.getDate()).padStart(2, '0')}`;
-        const yd = new Date(_now); yd.setDate(yd.getDate() - 1);
-        const yKey = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, '0')}-${String(yd.getDate()).padStart(2, '0')}`;
-        // 今天匹配：优先今天，其次明天（主照顾者在东边时区），最后昨天（主照顾者在西边时区）
-        const cloudToday = (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey)
-          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === tmKey)
-          ?? null;
-        // 昨天匹配：今天的前一天和前两天
-        const cloudYesterday = (cloudCIs as any[])?.find((ci: any) => ci.date === yKey)
-          ?? (cloudCIs as any[])?.find((ci: any) => ci.date === todayKey)
-          ?? null;
-        // 云端数据优先（云端有 eveningDone 就用云端）
-        if (cloudToday) today = cloudToday;
-        if (cloudYesterday) yesterday = cloudYesterday;
+        const latestCI = (cloudCIs as any[])?.[0] ?? null;
+        const secondLatestCI = (cloudCIs as any[])?.[1] ?? null;
+        if (latestCI) today = latestCI;
+        if (secondLatestCI) yesterday = secondLatestCI;
       }
       setTodayCi(today);
       setYesterdayCi(yesterday);
@@ -1068,7 +1037,15 @@ export default function ShareScreen() {
       const hasTodayMorning = today?.morningDone;
 
       if (!hasTodayEvening) {
-        setError('完成晚间打卡后，就能看到今日完整简报了！'); errorRef.current = '完成晚间打卡后，就能看到今日完整简报了！';
+        // Joiner 看到的是最新打卡（可能是主照顾者的日期），提示要包含实际日期
+        const errDate = today?.date ? (() => {
+          const d = new Date(today!.date + 'T00:00:00');
+          return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+        })() : '今日';
+        const errMsg = isJoiner
+          ? `${errDate}晚间打卡尚未完成，完成后可查看完整简报`
+          : '完成晚间打卡后，就能看到今日完整简报了！';
+        setError(errMsg); errorRef.current = errMsg;
         setLoading(false);
       loadingRef.current = false;
         return;
