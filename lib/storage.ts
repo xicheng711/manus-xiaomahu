@@ -737,17 +737,22 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
       cloudSyncDiary(syncEntry, syncEntry.serverDiaryId, rid).catch(() => {});
     } else {
       // serverDiaryId not yet available (saveDiaryEntry's async .then() may still be in flight)
-      // Wait up to 5 seconds for serverDiaryId to be written, then sync once
+      // Wait up to 5 seconds for serverDiaryId to be written, then sync once.
+      // IMPORTANT: use the snapshot (syncEntry) captured at call time, NOT latestEntry re-read
+      // from storage. Re-reading could pick up a later write (e.g. conversationFinished:true from
+      // handleEndAndSave) and cause a duplicate push notification.
+      const syncSnapshot = { ...syncEntry }; // snapshot of data at this call
       ;(async () => {
-        let latestEntry: DiaryEntry | null = null;
+        let foundServerId: number | null = null;
         for (let attempt = 0; attempt < 5; attempt++) {
           await new Promise(r => setTimeout(r, 1000));
-          latestEntry = await getDiaryEntryById(id, rid ?? undefined);
-          if (latestEntry?.serverDiaryId) break;
+          const latestEntry = await getDiaryEntryById(id, rid ?? undefined);
+          if (latestEntry?.serverDiaryId) { foundServerId = latestEntry.serverDiaryId; break; }
         }
-        if (latestEntry?.serverDiaryId) {
-          // Now we have serverDiaryId — update existing cloud record (no push notification)
-          cloudSyncDiary(latestEntry, latestEntry.serverDiaryId, rid).catch(() => {});
+        if (foundServerId) {
+          // Sync using the snapshot — preserves conversationFinished state at call time,
+          // preventing a race-condition double-notification if handleEndAndSave ran concurrently.
+          cloudSyncDiary({ ...syncSnapshot, serverDiaryId: foundServerId }, foundServerId, rid).catch(() => {});
         }
         // If still no serverDiaryId after 5s, skip sync to avoid duplicate cloud entry
       })();

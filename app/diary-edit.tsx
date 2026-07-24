@@ -15,10 +15,10 @@ import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
-  getTodayCheckIn, DailyCheckIn, waitForServerDiaryId, getCurrentMember,
+  getTodayCheckIn, DailyCheckIn, getCurrentMember,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries, cloudSyncDiary } from '@/lib/cloud-sync';
+import { cloudGetDiaries } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
@@ -461,16 +461,9 @@ export default function DiaryEditScreen() {
     const conv2 = [...conv1, aiMsg];
     setConversation(conv2);
     setAiLoading(false);
-    // Save locally first (传入 familyId 确保写入正确的 storage key)
+    // Save locally and trigger cloud sync via updateDiaryEntry (which handles waiting for serverDiaryId
+    // internally and syncs using a snapshot — no extra explicit cloudSyncDiary call needed here).
     await updateDiaryEntry(savedEntry.id, { aiReply: aiText, conversation: conv2 }, familyId ?? undefined);
-    // Reliably sync conversation to server: wait for serverDiaryId (from saveDiaryEntry's cloud sync)
-    // then explicitly push the full entry including conversation and aiReply
-    waitForServerDiaryId(savedEntry.id).then(async (serverDiaryId) => {
-      if (serverDiaryId) {
-        const fullEntry = { ...savedEntry, aiReply: aiText, conversation: conv2 };
-        cloudSyncDiary(fullEntry, serverDiaryId, familyId).catch(() => {});
-      }
-    });
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
   }
 
