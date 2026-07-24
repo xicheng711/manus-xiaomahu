@@ -248,8 +248,8 @@ export default function DiaryEditScreen() {
   const formSlide = useRef(new Animated.Value(30)).current;
   const shimmerAnim = useRef(new Animated.Value(-1)).current;
 
-  const replyMutation = trpc.smart.replyToDiary.useMutation();
-  const followUpMutation = trpc.smart.followUpDiary.useMutation();
+  const replyMutation = trpc.ai.replyToDiary.useMutation();
+  const followUpMutation = trpc.ai.followUpDiary.useMutation();
 
   // 初始加载动画和日记条目（只运行一次）
   useEffect(() => {

@@ -49,7 +49,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
     ? entry.aiReply.length > 60 ? entry.aiReply.slice(0, 60) + '...' : entry.aiReply
     : null;
   const timeStr = entry.localTimeStr || (entry.createdAt
-    ? new Date(entry.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    ? (() => { const d = new Date(entry.createdAt!); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()
     : '');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -605,9 +605,20 @@ function DiaryScreenContent() {
                   .map(([monthKey, monthEntries]) => {
                     const [yr, mo] = monthKey.split('-');
                     const displayMonth = `${yr}年${parseInt(mo, 10)}月`;
-                    const sortedEntries = [...monthEntries].sort((a, b) =>
-                      new Date(b.date).getTime() - new Date(a.date).getTime()
-                    );
+                    const sortedEntries = [...monthEntries].sort((a, b) => {
+                      // 主排序：按 date（YYYY-MM-DD）降序
+                      const dateCmp = b.date.localeCompare(a.date);
+                      if (dateCmp !== 0) return dateCmp;
+                      // 同一天多条日记：按 createdAt（完整时间戳）降序
+                      const ca = a.createdAt || a.date;
+                      const cb = b.createdAt || b.date;
+                      const tsCmp = cb.localeCompare(ca);
+                      if (tsCmp !== 0) return tsCmp;
+                      // 最后用 localTimeStr 作为备用排序键
+                      const ta = a.localTimeStr || '00:00';
+                      const tb = b.localTimeStr || '00:00';
+                      return tb.localeCompare(ta);
+                    });
                     return (
                       <View key={monthKey}>
                         <View style={styles.monthDivider}>

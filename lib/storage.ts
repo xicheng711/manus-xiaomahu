@@ -693,7 +693,8 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: stri
   const key = roomKey(KEYS.DIARY, rid);
   const all = await getDiaryEntries(rid ?? undefined);
   const now = new Date();
-  const localTimeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  // 使用 getHours/getMinutes 生成本地时间字符串（避免 Hermes 引擎 toLocaleTimeString 返回 "下午2:30" 格式）
+  const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const entry: DiaryEntry = { id: generateId(), createdAt: now.toISOString(), localTimeStr, ...data };
   all.unshift(entry);
   await AsyncStorage.setItem(key, JSON.stringify(all));

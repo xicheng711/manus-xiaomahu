@@ -557,9 +557,8 @@ function CreatorHomeScreen() {
     setMemberPhotoUri(resolvedPhotoUri);
     if (resolvedPhotoUri) { setPhotoLoadError(false); }
     setCaregiverName(cgName);
-    // 传入当前城市名：城市未变化时跳过天气网络请求
-    const currentCity = familyProfile?.city || legacyProfile?.city || '';
-    refreshWeather(currentCity);
+    // 刷新天气数据（weather-context 会自动读取城市）
+    refreshWeather();
     setGreeting(buildGreeting(cgName || undefined));
     // Elder zodiac: prefer family-scoped birthDate
     const birthDate = familyProfile?.birthDate || legacyProfile?.birthDate;
