@@ -725,6 +725,14 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...data };
   await AsyncStorage.setItem(key, JSON.stringify(all));
+  // If the only field being updated is serverDiaryId (written back by saveDiaryEntry after cloud
+  // creation), skip cloud sync entirely. Triggering a sync here would read the current local state
+  // (which may already have conversationFinished:true if the user tapped "End & Save" concurrently)
+  // and cause a duplicate push notification.
+  const dataKeys = Object.keys(data);
+  if (dataKeys.length === 1 && dataKeys[0] === 'serverDiaryId') {
+    return all[idx];
+  }
   // Cloud sync: sync when conversation is finished OR when an AI reply has been added
   // This ensures joiner can see the conversation even if caregiver didn't tap "End & Save"
   const shouldSync = all[idx].conversationFinished ||
