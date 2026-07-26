@@ -273,6 +273,7 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [expandedMeal, setExpandedMeal] = React.useState(false);
+  const [photoError, setPhotoError] = React.useState(false);  // 头像加载失败时 fallback 到 emoji
   React.useEffect(() => {
     Animated.parallel([
       Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, damping: 16, stiffness: 100 }),
@@ -329,8 +330,12 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
       <View style={cardStyles.elderSection}>
         <View style={cardStyles.elderInfo}>
           <View style={cardStyles.elderAvatarWrap}>
-            {elderPhotoUri ? (
-              <Image source={{ uri: elderPhotoUri }} style={{ width: 50, height: 50, borderRadius: 25 }} />
+            {elderPhotoUri && !photoError ? (
+              <Image
+                source={{ uri: elderPhotoUri }}
+                style={{ width: 50, height: 50, borderRadius: 25 }}
+                onError={() => setPhotoError(true)}
+              />
             ) : (
               <Text style={cardStyles.elderEmoji}>{elderEmoji}</Text>
             )}
