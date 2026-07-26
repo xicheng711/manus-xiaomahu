@@ -508,6 +508,7 @@ export const familyRouter = router({
       emoji: z.string().optional(),
       type: z.enum(["news", "visit", "medical", "daily", "reminder"]).default("daily"),
       date: z.string(),
+      localTimeStr: z.string().optional(),  // HH:MM — 发布者本地时间
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
@@ -523,6 +524,7 @@ export const familyRouter = router({
         emoji: input.emoji ?? null,
         type: input.type,
         date: input.date,
+        localTimeStr: input.localTimeStr ?? null,
       });
 
       // Notify all other family members about the new announcement

@@ -230,6 +230,7 @@ export interface FamilyAnnouncement {
   type: 'news' | 'visit' | 'medical' | 'daily' | 'reminder';
   createdAt: string;
   date: string;        // YYYY-MM-DD
+  localTimeStr?: string; // HH:MM — 发布者本地时间，避免时区偏差
   reactions?: AnnouncementReaction[];
 }
 
@@ -1124,11 +1125,15 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
   const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
   const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+  const now = new Date();
+  // 使用 getHours/getMinutes 生成本地时间字符串（避免 Hermes 引擎 toLocaleTimeString 格式问题）
+  const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const announcement: FamilyAnnouncement = {
     id: generateId(),
     ...data,
     date: todayStr(),
-    createdAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
+    localTimeStr,
   };
   all.unshift(announcement);
   // Keep only last 200 announcements
@@ -1140,6 +1145,7 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
     emoji: announcement.emoji,
     type: announcement.type,
     date: announcement.date,
+    localTimeStr: announcement.localTimeStr,
   }).catch(() => {});
   return announcement;
 }

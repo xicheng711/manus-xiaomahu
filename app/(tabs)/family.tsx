@@ -570,8 +570,24 @@ export default function FamilyScreen() {
     const serverMe = r?.members?.find((mem: any) => mem.isCurrentUser || String(mem.id) === String(myMemberId));
     setCurrentMemberState(serverMe ?? m);
     // 优先使用云端公告（包含所有家庭成员发的），失败时降级读本地
-    const a = (cloudAnns && cloudAnns.length > 0)
-      ? cloudAnns as unknown as FamilyAnnouncement[]
+    // 注意：cloudAnns 的 createdAt 是 Date 对象（superjson 反序列化），需转为 ISO 字符串
+    const a: FamilyAnnouncement[] = (cloudAnns && cloudAnns.length > 0)
+      ? (cloudAnns as any[]).map((c: any) => ({
+          id: String(c.id),
+          authorId: String(c.authorUserId ?? c.authorId ?? ''),
+          authorName: c.authorName ?? '',
+          authorEmoji: c.authorEmoji ?? '😊',
+          authorColor: c.authorColor ?? '#888',
+          content: c.content ?? '',
+          emoji: c.emoji ?? undefined,
+          type: c.type ?? 'daily',
+          date: c.date ?? '',
+          localTimeStr: c.localTimeStr ?? undefined,
+          createdAt: c.createdAt instanceof Date
+            ? c.createdAt.toISOString()
+            : (typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString()),
+          reactions: c.reactions ?? [],
+        }))
       : localAnns;
     setAnnouncements(a);
     setIsCreator(creatorFlag);
@@ -1417,8 +1433,17 @@ function AnnouncementCard({
     }
   }
 
-  const _annDate = new Date(ann.createdAt);
-  const time = `${String(_annDate.getHours()).padStart(2, '0')}:${String(_annDate.getMinutes()).padStart(2, '0')}`;
+  // 优先使用 localTimeStr（发布者本地时间），避免服务端时区导致的时间偏差
+  // fallback 到 createdAt（兼容旧公告）
+  let time: string;
+  if ((ann as any).localTimeStr) {
+    time = (ann as any).localTimeStr;
+  } else {
+    const _annDate = new Date(String(ann.createdAt));
+    time = isNaN(_annDate.getTime())
+      ? '--:--'
+      : `${String(_annDate.getHours()).padStart(2, '0')}:${String(_annDate.getMinutes()).padStart(2, '0')}`;
+  }
   const date = ann.date !== todayStr()
     ? new Date(ann.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' '
     : '';

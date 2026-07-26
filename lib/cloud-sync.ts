@@ -318,6 +318,7 @@ export async function cloudPostAnnouncement(params: {
   emoji?: string;
   type?: 'news' | 'visit' | 'medical' | 'daily' | 'reminder';
   date: string;
+  localTimeStr?: string;
   roomId?: number;
 }) {
   const roomId = params.roomId ?? await getActiveRoomId();
@@ -330,6 +331,7 @@ export async function cloudPostAnnouncement(params: {
       emoji: params.emoji,
       type: params.type ?? 'daily',
       date: params.date,
+      localTimeStr: params.localTimeStr,
     });
   } catch (e) {
     console.warn('[CloudSync] postAnnouncement failed:', e);
