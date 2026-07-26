@@ -352,13 +352,12 @@ function DiaryScreenContent() {
     const local = await getDiaryEntries(familyId);
     if (local.length > 0) {
       const localSorted = [...local].sort((a, b) => {
-        const da = a.createdAt || a.date;
-        const db = b.createdAt || b.date;
-        const cmp = db.localeCompare(da);
-        if (cmp !== 0) return cmp;
-        const ta = a.localTimeStr || '00:00';
-        const tb = b.localTimeStr || '00:00';
-        return tb.localeCompare(ta);
+        const ta = new Date(a.createdAt || a.date).getTime();
+        const tb = new Date(b.createdAt || b.date).getTime();
+        if (tb !== ta) return tb - ta;
+        const lta = a.localTimeStr || '00:00';
+        const ltb = b.localTimeStr || '00:00';
+        return ltb.localeCompare(lta);
       });
       setEntries(localSorted);
     }
@@ -435,6 +434,11 @@ function DiaryScreenContent() {
       }
 
       // 全新条目：云端日记转换为本地格式
+      // 注意：c.createdAt 经 superjson 反序列化后是 Date 对象，需统一转为 ISO 字符串
+      // 否则与本地 createdAt（ISO 字符串）混合 localeCompare 排序结果不可预测
+      const cloudCreatedAt = c.createdAt instanceof Date
+        ? c.createdAt.toISOString()
+        : (typeof c.createdAt === 'string' ? c.createdAt : c.date);
       const newIdx = merged.length;
       merged.push({
         id: `cloud_${c.id}`,
@@ -445,7 +449,7 @@ function DiaryScreenContent() {
         moodLabel: c.moodLabel,
         moodScore: c.moodScore,
         tags: c.tags,
-        createdAt: c.createdAt,
+        createdAt: cloudCreatedAt,
         caregiverMoodEmoji: c.caregiverMoodEmoji,
         caregiverMoodLabel: c.caregiverMoodLabel,
         authorName: c.authorName || c.author?.name,
@@ -458,17 +462,16 @@ function DiaryScreenContent() {
       });
       localByServerId.set(c.id, newIdx);
     }
-    // 按 createdAt 降序排列（同日期多条时按时间排）
-    // 双键排序：先比 createdAt（完整时间戳），再比 localTimeStr（HH:MM），确保跨用户日记顺序正确
+    // 按时间降序排列（最新在最上面）
+    // 用 Date.getTime() 数字比较，避免 Date 对象和 ISO 字符串混合时 localeCompare 结果不可预测
     merged.sort((a, b) => {
-      const da = a.createdAt || a.date;
-      const db = b.createdAt || b.date;
-      const cmp = db.localeCompare(da);
-      if (cmp !== 0) return cmp;
+      const ta = new Date(a.createdAt || a.date).getTime();
+      const tb = new Date(b.createdAt || b.date).getTime();
+      if (tb !== ta) return tb - ta;  // 降序：新的在前
       // 相同时间戳时，用 localTimeStr 作为第二排序键（降序）
-      const ta = a.localTimeStr || '00:00';
-      const tb = b.localTimeStr || '00:00';
-      return tb.localeCompare(ta);
+      const lta = a.localTimeStr || '00:00';
+      const ltb = b.localTimeStr || '00:00';
+      return ltb.localeCompare(lta);
     });
     return merged;
   }
@@ -496,13 +499,12 @@ function DiaryScreenContent() {
     const updated = await getDiaryEntries(familyId);
     // 删除后重新排序，确保列表顺序正确
     const sorted = [...updated].sort((a, b) => {
-      const da = a.createdAt || a.date;
-      const db = b.createdAt || b.date;
-      const cmp = db.localeCompare(da);
-      if (cmp !== 0) return cmp;
-      const ta = a.localTimeStr || '00:00';
-      const tb = b.localTimeStr || '00:00';
-      return tb.localeCompare(ta);
+      const ta = new Date(a.createdAt || a.date).getTime();
+      const tb = new Date(b.createdAt || b.date).getTime();
+      if (tb !== ta) return tb - ta;
+      const lta = a.localTimeStr || '00:00';
+      const ltb = b.localTimeStr || '00:00';
+      return ltb.localeCompare(lta);
     });
     const next = sorted.slice(0, 30);
     setEntries(next);
@@ -630,15 +632,14 @@ function DiaryScreenContent() {
                       // 主排序：按 date（YYYY-MM-DD）降序
                       const dateCmp = b.date.localeCompare(a.date);
                       if (dateCmp !== 0) return dateCmp;
-                      // 同一天多条日记：按 createdAt（完整时间戳）降序
-                      const ca = a.createdAt || a.date;
-                      const cb = b.createdAt || b.date;
-                      const tsCmp = cb.localeCompare(ca);
-                      if (tsCmp !== 0) return tsCmp;
+                      // 同一天多条日记：按 createdAt 时间戳降序（用数字比较，避免 Date 对象与字符串混合）
+                      const ta = new Date(a.createdAt || a.date).getTime();
+                      const tb = new Date(b.createdAt || b.date).getTime();
+                      if (tb !== ta) return tb - ta;
                       // 最后用 localTimeStr 作为备用排序键
-                      const ta = a.localTimeStr || '00:00';
-                      const tb = b.localTimeStr || '00:00';
-                      return tb.localeCompare(ta);
+                      const lta = a.localTimeStr || '00:00';
+                      const ltb = b.localTimeStr || '00:00';
+                      return ltb.localeCompare(lta);
                     });
                     return (
                       <View key={monthKey}>
@@ -1002,13 +1003,12 @@ function JoinerDiaryReadOnly() {
       localByServerId.set(c.id, newIdx);
     }
     merged.sort((a, b) => {
-      const da = a.createdAt || a.date;
-      const db = b.createdAt || b.date;
-      const cmp = db.localeCompare(da);
-      if (cmp !== 0) return cmp;
-      const ta = a.localTimeStr || '00:00';
-      const tb = b.localTimeStr || '00:00';
-      return tb.localeCompare(ta);
+      const ta = new Date(a.createdAt || a.date).getTime();
+      const tb = new Date(b.createdAt || b.date).getTime();
+      if (tb !== ta) return tb - ta;
+      const lta = a.localTimeStr || '00:00';
+      const ltb = b.localTimeStr || '00:00';
+      return ltb.localeCompare(lta);
     });
     return merged;
   }
@@ -1034,26 +1034,24 @@ function JoinerDiaryReadOnly() {
         } else if (local.length > 0) {
           // 本地缓存也要按时间降序排列
           const localSorted = [...local].sort((a, b) => {
-            const da = a.createdAt || a.date;
-            const db = b.createdAt || b.date;
-            const cmp = db.localeCompare(da);
-            if (cmp !== 0) return cmp;
-            const ta = a.localTimeStr || '00:00';
-            const tb = b.localTimeStr || '00:00';
-            return tb.localeCompare(ta);
+            const ta = new Date(a.createdAt || a.date).getTime();
+            const tb = new Date(b.createdAt || b.date).getTime();
+            if (tb !== ta) return tb - ta;
+            const lta = a.localTimeStr || '00:00';
+            const ltb = b.localTimeStr || '00:00';
+            return ltb.localeCompare(lta);
           });
           setEntries(localSorted);
         }
       } catch {
         if (local.length > 0) {
           const localSorted = [...local].sort((a, b) => {
-            const da = a.createdAt || a.date;
-            const db = b.createdAt || b.date;
-            const cmp = db.localeCompare(da);
-            if (cmp !== 0) return cmp;
-            const ta = a.localTimeStr || '00:00';
-            const tb = b.localTimeStr || '00:00';
-            return tb.localeCompare(ta);
+            const ta = new Date(a.createdAt || a.date).getTime();
+            const tb = new Date(b.createdAt || b.date).getTime();
+            if (tb !== ta) return tb - ta;
+            const lta = a.localTimeStr || '00:00';
+            const ltb = b.localTimeStr || '00:00';
+            return ltb.localeCompare(lta);
           });
           setEntries(localSorted);
         }
