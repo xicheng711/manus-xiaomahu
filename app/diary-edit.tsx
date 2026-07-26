@@ -235,6 +235,7 @@ export default function DiaryEditScreen() {
   const [diaryCount, setDiaryCount] = useState(0);
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [saving, setSaving] = useState(false); // 防止「结束并保存」重复点击
 
   const entryRef = useRef<DiaryEntry | null>(null);
   // conversationRef 必须在 setConversation 包装函数之前声明，避免 TDZ 问题
@@ -526,19 +527,26 @@ export default function DiaryEditScreen() {
   }
 
   async function handleEndAndSave() {
-    // 使用 ref 获取最新对话内容（避免 React state 闭包问题）
-    const latestConv = conversationRef.current;
-    // 使用 entryRef.current?.id 作为 fallback，避免 entryId state 闭包问题导致 id 为 null
-    const eid = entryId ?? entryRef.current?.id ?? null;
-    if (eid) {
-      // updateDiaryEntry 内部已处理云同步（conversationFinished:true 时会触发带通知的 syncDiary）
-      // 不需要额外调用 cloudSyncDiary，否则会发送重复通知
-      await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true }, familyId ?? undefined);
+    // 防止重复点击（双击会触发两次云同步，导致主照顾者收到两条相同通知）
+    if (saving) return;
+    setSaving(true);
+    try {
+      // 使用 ref 获取最新对话内容（避免 React state 闭包问题）
+      const latestConv = conversationRef.current;
+      // 使用 entryRef.current?.id 作为 fallback，避免 entryId state 闭包问题导致 id 为 null
+      const eid = entryId ?? entryRef.current?.id ?? null;
+      if (eid) {
+        // updateDiaryEntry 内部已处理云同步（conversationFinished:true 时会触发带通知的 syncDiary）
+        // 不需要额外调用 cloudSyncDiary，否则会发送重复通知
+        await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true }, familyId ?? undefined);
+      }
+      // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
+      setFinished(true);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/(tabs)/diary' as any);
+    } finally {
+      setSaving(false);
     }
-    // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
-    setFinished(true);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace('/(tabs)/diary' as any);
   }
 
   const shimmerTranslate = shimmerAnim.interpolate({ inputRange: [-1, 1], outputRange: [-300, 300] });
@@ -835,11 +843,16 @@ export default function DiaryEditScreen() {
                 </View>
                 {/* 结束并保存按钮：与右上角「保存」功能完全一致，方便用户随时结束对话 */}
                 <TouchableOpacity
-                  style={styles.endAndSaveBtn}
+                  style={[styles.endAndSaveBtn, saving && { opacity: 0.6 }]}
                   onPress={handleEndAndSave}
+                  disabled={saving}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.endAndSaveBtnText}>✅ 结束并保存</Text>
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#4CAF50" />
+                  ) : (
+                    <Text style={styles.endAndSaveBtnText}>✅ 结束并保存</Text>
+                  )}
                 </TouchableOpacity>
               </>
             ) : (

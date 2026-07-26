@@ -64,6 +64,28 @@ async function sendExpoPushNotifications(
   }
 }
 
+// ─── Diary notification dedup cache ────────────────────────────────────────
+// Prevents duplicate push notifications when the client sends two concurrent
+// syncDiary requests with conversationFinished:true (e.g. double-tap on
+// "End & Save" or a race between handleSubmit's wait-loop and handleEndAndSave).
+const _diaryNotifiedAt = new Map<number, number>(); // serverDiaryId → timestamp
+const DIARY_NOTIFY_DEDUP_MS = 10_000; // 10 seconds
+
+function shouldSendDiaryNotification(serverDiaryId: number | undefined): boolean {
+  if (!serverDiaryId) return true; // new entry (no id yet) — always allow
+  const last = _diaryNotifiedAt.get(serverDiaryId);
+  const now = Date.now();
+  if (last && now - last < DIARY_NOTIFY_DEDUP_MS) return false; // dedup
+  _diaryNotifiedAt.set(serverDiaryId, now);
+  // Clean up old entries to avoid memory leak
+  if (_diaryNotifiedAt.size > 500) {
+    for (const [k, v] of _diaryNotifiedAt) {
+      if (now - v > DIARY_NOTIFY_DEDUP_MS * 6) _diaryNotifiedAt.delete(k);
+    }
+  }
+  return true;
+}
+
 // Helper: verify user is member of room
 async function requireRoomMember(userId: number, roomId: number) {
   const member = await getMemberByUserId(roomId, userId);
@@ -438,7 +460,7 @@ export const familyRouter = router({
           localTimeStr: input.localTimeStr ?? null,
         });
         // 对话结束时发送通知（更新路径同样需要发通知）
-        if (input.conversationFinished === true) {
+        if (input.conversationFinished === true && shouldSendDiaryNotification(input.serverDiaryId)) {
           const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
           const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
           await notifyRoomMembers(
@@ -473,7 +495,8 @@ export const familyRouter = router({
       });
 
       // 只有对话结束（日记正式保存）时才发推送通知，避免对话中途就发出通知
-      if (input.conversationFinished === true) {
+      // shouldSendDiaryNotification 确保同一条日记 10 秒内只发一次通知（防止客户端并发请求导致重复通知）
+      if (input.conversationFinished === true && shouldSendDiaryNotification(entry.id)) {
         const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
         const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
         await notifyRoomMembers(
