@@ -820,27 +820,22 @@ export default function ShareScreen() {
         getFamilyProfile(familyId),
         getProfile(),
       ]);
-      const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+      let nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       // Joiner 应显示主照顾者名字，从 room members 找 isCreator 成员
       let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
-      if (isJoiner) {
-        try {
-          const roomId0h = familyId ? parseInt(familyId) : null;
-          if (roomId0h && !isNaN(roomId0h)) {
-            const detail0h = await cloudGetRoomDetail(roomId0h);
-            const creatorMember = (detail0h?.members as any[])?.find((m: any) => m.isCreator);
+      let emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
+      let elderPhotoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
+      // 从云端获取被照者昵称、主照顾者名字、被照者头像（解决 Joiner 本地无档案时显示「家人」的问题）
+      try {
+        const roomIdH = familyId ? parseInt(familyId) : null;
+        if (roomIdH && !isNaN(roomIdH)) {
+          const detailH = await cloudGetRoomDetail(roomIdH);
+          if (detailH?.room?.elderName) nickname = detailH.room.elderName;
+          if (detailH?.room?.elderPhotoUri) elderPhotoUri = detailH.room.elderPhotoUri;
+          if (isJoiner) {
+            const creatorMember = (detailH?.members as any[])?.find((m: any) => m.isCreator);
             if (creatorMember?.name) caregiver = creatorMember.name;
           }
-        } catch (e) { /* 网络不可用时降级 */ }
-      }
-      const emoji = familyProfile?.zodiacEmoji || legacyProfile?.zodiacEmoji || '🐯';
-      // 主动从云端拉取最新被照者头像
-      let elderPhotoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
-      try {
-        const roomId = familyId ? parseInt(familyId) : null;
-        if (roomId && !isNaN(roomId)) {
-          const detail = await cloudGetRoomDetail(roomId);
-          if (detail?.room?.elderPhotoUri) elderPhotoUri = detail.room.elderPhotoUri;
         }
       } catch (e) { /* 网络不可用时降级到本地缓存 */ }
       setElderNickname(nickname);
@@ -850,14 +845,17 @@ export default function ShareScreen() {
 
       let ci = await getCheckInByDate(dateStr, familyId);
       // Joiner 本地可能没有历史打卡数据，从云端拉取
-      if (!ci && isJoiner) {
-        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        ci = (cloudCIs as any[])?.find((c: any) => c.date === dateStr) ?? null;
+      let cloudCIsHistory: any[] = [];
+      if (!ci || isJoiner) {
+        cloudCIsHistory = (await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30)) as any[];
+        if (!ci) {
+          ci = cloudCIsHistory.find((c: any) => c.date === dateStr) ?? null;
+        }
       }
       if (!ci) {
         setError(`${dateStr} 无打卡记录`); errorRef.current = `${dateStr} 无打卡记录`;
         setLoading(false);
-      loadingRef.current = false;
+        loadingRef.current = false;
         return;
       }
 
@@ -865,9 +863,27 @@ export default function ShareScreen() {
       setCheckIn(fixedCi);
       setViewMode('today'); // 展示模式不影响历史记录
 
-      // 加载周数据
-      const weekly = await getWeeklySleepData(7, familyId);
-            setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
+      // 加载周数据：Joiner 用云端打卡构建，主照顾者用本地数据
+      if (isJoiner && cloudCIsHistory.length > 0) {
+        const today7 = new Date();
+        const joinerWeekly = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(today7);
+          d.setDate(d.getDate() - i);
+          const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const cItem = cloudCIsHistory.find((c: any) => c.date === dStr);
+          return {
+            date: dStr,
+            sleepHours: cItem?.sleepHours ?? 0,
+            awakeHours: cItem?.awakeHours ?? 0,
+            nightWakings: cItem?.nightWakings ?? 0,
+            napMinutes: cItem?.napMinutes ?? (cItem?.daytimeNap ? 30 : 0),
+          };
+        });
+        setWeeklyData(joinerWeekly);
+      } else {
+        const weekly = await getWeeklySleepData(7, familyId);
+        setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
+      }
       setWeeklyLoading(false);
       // 使用本地构建简报（历史模式不调用 AI）
       const fallback = buildLocalBriefing(nickname, caregiver, fixedCi);
@@ -1198,7 +1214,7 @@ export default function ShareScreen() {
             ? (ci.mealOption.includes('正常') ? 'good' : ci.mealOption.includes('偏少') ? 'fair' : 'poor')
             : undefined,
         },
-        careScore: _score ?? 80,
+        // careScore 已从 AI router input schema 移除，无需传入
       });
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('智能助手超时')), 15000));
       const result = await Promise.race([aiPromise, timeout]) as any;
@@ -1343,7 +1359,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         {/* ── Header ── */}
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.title}>📋 {params.date ? `${params.date} 打卡总结` : viewMode === 'today' ? '今日' : '昨日'}打卡总结</Text>
+          <Text style={styles.title}>📋 {params.date ? `${params.date} 打卡总结` : (viewMode === 'today' ? '今日' : '昨日') + '打卡总结'}</Text>
           <View style={{ width: 40 }} />
         </View>
 

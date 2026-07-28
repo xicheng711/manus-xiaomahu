@@ -4,12 +4,39 @@ import { InsertUser, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _migrationDone = false;
+
+// Run lightweight schema migrations on first connect (idempotent ALTER TABLE IF NOT EXISTS)
+async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
+  if (_migrationDone) return;
+  _migrationDone = true;
+  const migrations = [
+    // 0003: add localTimeStr to announcements and diary_entries
+    `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS localTimeStr varchar(5)`,
+    `ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS localTimeStr varchar(5)`,
+    // 0002: add birthYear to family_members (idempotent)
+    `ALTER TABLE family_members ADD COLUMN IF NOT EXISTS birthYear int`,
+  ];
+  for (const sql of migrations) {
+    try {
+      await (db as any).execute(sql);
+    } catch (e: any) {
+      // Ignore "Duplicate column" errors (MySQL 5.x doesn't support IF NOT EXISTS)
+      if (!String(e?.message ?? '').includes('Duplicate column')) {
+        console.warn('[Database] Migration warning:', e?.message ?? e);
+      }
+    }
+  }
+  console.log('[Database] Auto-migrations complete');
+}
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
+      // Run auto-migrations on first connect (non-blocking, errors are logged not thrown)
+      runAutoMigrations(_db).catch(e => console.warn('[Database] Auto-migration failed:', e));
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

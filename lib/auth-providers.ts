@@ -278,6 +278,7 @@ async function navigateAfterLogin(router: Router) {
               authorEmoji: a.authorEmoji,
               authorColor: a.authorColor,
               reactions: a.reactions ?? {},
+              localTimeStr: a.localTimeStr ?? undefined,  // 保留发布者本地时间，避免 fallback 到 UTC createdAt
               createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
             }));
             await AsyncStorage.setItem(rk('family_announcements_v1'), JSON.stringify(localAnnouncements));

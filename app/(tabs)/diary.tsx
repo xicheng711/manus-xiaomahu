@@ -390,13 +390,18 @@ function DiaryScreenContent() {
       const existingIdx = localByServerId.get(c.id);
       if (existingIdx !== undefined) {
         // 已存在匹配条目：用云端最新数据更新本地（确保 conversation/aiReply 最新）
+        // conversationFinished 只允许从 false→true，不允许云端 false 覆盖本地 true
+        // （防止用户点击"结束并保存"后，云端异步同步尚未完成时重新打开日记仍可继续对话）
+        const localFinished = merged[existingIdx].conversationFinished;
+        const cloudFinished = c.conversationFinished;
+        const mergedFinished = localFinished === true ? true : (cloudFinished ?? localFinished);
         merged[existingIdx] = {
           ...merged[existingIdx],
           serverDiaryId: c.id,
           content: c.content || merged[existingIdx].content,
           aiReply: c.aiReply ?? merged[existingIdx].aiReply,
           conversation: c.conversation ?? merged[existingIdx].conversation,
-          conversationFinished: c.conversationFinished ?? merged[existingIdx].conversationFinished,
+          conversationFinished: mergedFinished,
           authorName: c.authorName || c.author?.name || merged[existingIdx].authorName,
           localTimeStr: c.localTimeStr ?? merged[existingIdx].localTimeStr,
         };
@@ -421,12 +426,16 @@ function DiaryScreenContent() {
       });
       if (unlinkedIdx >= 0) {
         // 将本地条目与云端关联，用云端数据补充
+        // conversationFinished 同样只允许 false→true
+        const ulLocalFinished = merged[unlinkedIdx].conversationFinished;
+        const ulCloudFinished = c.conversationFinished;
+        const ulMergedFinished = ulLocalFinished === true ? true : (ulCloudFinished ?? ulLocalFinished);
         merged[unlinkedIdx] = {
           ...merged[unlinkedIdx],
           serverDiaryId: c.id,
           aiReply: c.aiReply ?? merged[unlinkedIdx].aiReply,
           conversation: c.conversation ?? merged[unlinkedIdx].conversation,
-          conversationFinished: c.conversationFinished ?? merged[unlinkedIdx].conversationFinished,
+          conversationFinished: ulMergedFinished,
           localTimeStr: c.localTimeStr ?? merged[unlinkedIdx].localTimeStr,
         };
         localByServerId.set(c.id, unlinkedIdx);
@@ -944,13 +953,16 @@ function JoinerDiaryReadOnly() {
     for (const c of cloud) {
       const existingIdx = localByServerId.get(c.id);
       if (existingIdx !== undefined) {
+        // conversationFinished 只允许从 false→true，不允许云端 false 覆盖本地 true
+        const lf = merged[existingIdx].conversationFinished;
+        const cf = c.conversationFinished;
         merged[existingIdx] = {
           ...merged[existingIdx],
           serverDiaryId: c.id,
           content: c.content || merged[existingIdx].content,
           aiReply: c.aiReply ?? merged[existingIdx].aiReply,
           conversation: c.conversation ?? merged[existingIdx].conversation,
-          conversationFinished: c.conversationFinished ?? merged[existingIdx].conversationFinished,
+          conversationFinished: lf === true ? true : (cf ?? lf),
           authorName: c.authorName || c.author?.name || merged[existingIdx].authorName,
           localTimeStr: c.localTimeStr ?? merged[existingIdx].localTimeStr,
         };
@@ -968,17 +980,23 @@ function JoinerDiaryReadOnly() {
         return false;
       });
       if (unlinkedIdx >= 0) {
+        const ulf = merged[unlinkedIdx].conversationFinished;
+        const ucf = c.conversationFinished;
         merged[unlinkedIdx] = {
           ...merged[unlinkedIdx],
           serverDiaryId: c.id,
           aiReply: c.aiReply ?? merged[unlinkedIdx].aiReply,
           conversation: c.conversation ?? merged[unlinkedIdx].conversation,
-          conversationFinished: c.conversationFinished ?? merged[unlinkedIdx].conversationFinished,
+          conversationFinished: ulf === true ? true : (ucf ?? ulf),
           localTimeStr: c.localTimeStr ?? merged[unlinkedIdx].localTimeStr,
         };
         localByServerId.set(c.id, unlinkedIdx);
         continue;
       }
+      // 全新条目：将 createdAt 统一转为 ISO 字符串（防止 Date 对象和字符串混合导致排序错误）
+      const cloudCreatedAt = c.createdAt instanceof Date
+        ? c.createdAt.toISOString()
+        : (typeof c.createdAt === 'string' ? c.createdAt : c.date);
       const newIdx = merged.length;
       merged.push({
         id: `cloud_${c.id}`,
@@ -989,7 +1007,7 @@ function JoinerDiaryReadOnly() {
         moodLabel: c.moodLabel,
         moodScore: c.moodScore,
         tags: c.tags,
-        createdAt: c.createdAt,
+        createdAt: cloudCreatedAt,
         caregiverMoodEmoji: c.caregiverMoodEmoji,
         caregiverMoodLabel: c.caregiverMoodLabel,
         authorName: c.authorName || c.author?.name,

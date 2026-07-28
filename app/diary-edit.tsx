@@ -292,6 +292,19 @@ export default function DiaryEditScreen() {
   async function loadExistingEntry(id: string) {
     setLoadingEntry(true);
     let entry: DiaryEntry | null = await getDiaryEntryById(id, familyId ?? undefined);
+    // 本地找到了条目，但需要检查云端是否已将 conversationFinished 更新为 true
+    // （防止本地缓存过时，用户点击"结束并保存"后重新打开日记仍可继续对话）
+    if (entry && !entry.conversationFinished && entry.serverDiaryId) {
+      try {
+        const cloudEntries = await cloudGetDiaries(familyId ? Number(familyId) : undefined);
+        const cloudEntry = cloudEntries.find((e: any) => e.id === entry!.serverDiaryId);
+        if (cloudEntry?.conversationFinished) {
+          // 云端已结束，同步到本地
+          await updateDiaryEntry(entry.id, { conversationFinished: true }, familyId ?? undefined);
+          entry = { ...entry, conversationFinished: true };
+        }
+      } catch (e) { /* 网络不可用时降级，使用本地状态 */ }
+    }
     // 本地找不到时（无论是 joiner 还是主照顾者）尝试从云端拉取
     // 注意：不能依赖 isReadOnly 状态（因为 loadProfile 是异步的，可能还没执行完）
     if (!entry) {
