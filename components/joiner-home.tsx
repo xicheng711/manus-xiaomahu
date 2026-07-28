@@ -564,7 +564,8 @@ export function JoinerHomeScreen() {
   }, []);
 
   function goSetup() {
-    router.push('/(modals)/create-family' as any);
+    // 跳转到 onboarding 完整流程创建家庭，避免旧 modal 直接创建导致 setupComplete=false、首页卡死等问题
+    router.push({ pathname: '/onboarding', params: { fromProfile: '1', mode: 'create' } } as any);
   }
 
   const greetingText = (() => {
