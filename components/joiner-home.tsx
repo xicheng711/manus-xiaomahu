@@ -497,10 +497,15 @@ export function JoinerHomeScreen() {
       if (cloudAnns && cloudAnns.length > 0) {
         // 拉取本地缓存，用于补充云端缺失的 localTimeStr
         const localAnns = await getFamilyAnnouncements(30, activeFamilyId || undefined);
-        const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [la.id, la]));
+        // 本地 id 是 generateId() 随机字符串，云端 id 是数据库自增整数，两者永远不匹配
+        // 必须用 content+date+authorName 三元组匹配
+        const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [
+          `${la.content}|${la.date}|${la.authorName}`, la
+        ]));
         announcements = (cloudAnns as any[]).map((c: any) => {
           const cloudId = String(c.id);
-          const localMatch = localAnnsMap.get(cloudId);
+          const contentKey = `${c.content ?? ''}|${c.date ?? ''}|${c.authorName ?? ''}`;
+          const localMatch = localAnnsMap.get(contentKey);
           return {
             ...c,
             id: cloudId,

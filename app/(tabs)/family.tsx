@@ -571,13 +571,18 @@ export default function FamilyScreen() {
     setCurrentMemberState(serverMe ?? m);
     // 优先使用云端公告（包含所有家庭成员发的），失败时降级读本地
     // 注意：cloudAnns 的 createdAt 是 Date 对象（superjson 反序列化），需转为 ISO 字符串
-    // 关键修复：云端 localTimeStr 为空时（数据库迁移未完成 or 竞态），从本地缓存补充
-    // 这样刚发布的公告不会因为云端还没写入 localTimeStr 而显示错误的 UTC 时间
-    const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [la.id, la]));
+    // 关键修复：云端 localTimeStr 为空时，从本地缓存补充
+    // 重要：本地 id 是 generateId() 随机字符串，云端 id 是数据库自增整数，两者永远不匹配！
+    // 必须用 content+date+authorName 三元组匹配，而不是 id 匹配
+    const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [
+      `${la.content}|${la.date}|${la.authorName}`, la
+    ]));
     const a: FamilyAnnouncement[] = (cloudAnns && cloudAnns.length > 0)
       ? (cloudAnns as any[]).map((c: any) => {
           const cloudId = String(c.id);
-          const localMatch = localAnnsMap.get(cloudId);
+          // 用内容+日期+作者名匹配本地缓存（因为本地id和云端id不同命名空间）
+          const contentKey = `${c.content ?? ''}|${c.date ?? ''}|${c.authorName ?? ''}`;
+          const localMatch = localAnnsMap.get(contentKey);
           // 云端 localTimeStr 为空时，用本地缓存中同一条公告的 localTimeStr 补充
           const localTimeStr = c.localTimeStr ?? localMatch?.localTimeStr ?? undefined;
           return {
