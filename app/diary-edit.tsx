@@ -319,6 +319,10 @@ export default function DiaryEditScreen() {
         if (matched) {
           // 将云端日记规范化为本地格式，并写入本地存储，确保后续操作能正常进行
           const localId = `cloud_${matched.id}`;
+          // 将 createdAt 统一转为 ISO 字符串，防止 Date 对象和字符串混合导致排序错误
+          const normalizedCreatedAt = matched.createdAt instanceof Date
+            ? matched.createdAt.toISOString()
+            : (typeof matched.createdAt === 'string' ? matched.createdAt : matched.date);
           const normalized: any = {
             id: localId,
             serverDiaryId: matched.id,
@@ -328,7 +332,7 @@ export default function DiaryEditScreen() {
             moodLabel: matched.moodLabel,
             moodScore: matched.moodScore,
             tags: matched.tags,
-            createdAt: matched.createdAt,
+            createdAt: normalizedCreatedAt,
             caregiverMoodEmoji: matched.caregiverMoodEmoji,
             caregiverMoodLabel: matched.caregiverMoodLabel,
             authorName: matched.authorName || (matched as any).author?.name,
@@ -339,14 +343,24 @@ export default function DiaryEditScreen() {
             conversationFinished: matched.conversationFinished ?? true,
             localTimeStr: matched.localTimeStr,
           };
-          // 写入本地缓存（如果本地还没有这条）
+          // 写入本地缓存（如果本地还没有这条）并按 createdAt 降序排序
           try {
             const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
             const existingLocal = await getDiaryEntries(familyId);
             const alreadyExists = existingLocal.some(d => d.id === localId || d.serverDiaryId === matched.id);
             if (!alreadyExists) {
+              const merged = [normalized, ...existingLocal];
+              merged.sort((a: any, b: any) => {
+                const ta = new Date(a.createdAt || a.date).getTime();
+                const tb = new Date(b.createdAt || b.date).getTime();
+                if (isNaN(ta) && isNaN(tb)) return 0;
+                if (isNaN(ta)) return 1;
+                if (isNaN(tb)) return -1;
+                if (tb !== ta) return tb - ta;
+                return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
+              });
               const storageKey = familyId ? `diary_entries:${familyId}` : 'diary_entries';
-              await AsyncStorage.setItem(storageKey, JSON.stringify([normalized, ...existingLocal]));
+              await AsyncStorage.setItem(storageKey, JSON.stringify(merged));
             }
           } catch (saveErr) {
             console.warn('[DiaryEdit] failed to cache cloud entry locally:', saveErr);
