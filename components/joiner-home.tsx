@@ -111,9 +111,11 @@ function buildFeed(
   });
 
   announcements.slice(0, 3).forEach(a => {
+    // 优先用 localTimeStr（发布者本地时间），避免服务端 UTC 时间导致的时间偏差
+    const annTime = (a as any).localTimeStr || timeStr(a.createdAt);
     items.push({
       id: `ann-${a.id}`, type: 'announce',
-      time: timeStr(a.createdAt),
+      time: annTime,
       icon: '📢', color: AppColors.purple.strong, bg: AppColors.purple.soft, tag: '家庭公告',
       title: a.content.length > 24 ? a.content.slice(0, 24) + '…' : a.content,
       detail: a.emoji ? `${a.emoji} ${a.content}` : a.content,
@@ -146,7 +148,7 @@ function AnnouncementCard({ latest, onViewAll, onCompose }: {
             <View style={styles.announceFooter}>
               <Text style={styles.announceAuthorEmoji}>{latest.authorEmoji}</Text>
               <Text style={styles.announceAuthorName}>{latest.authorName}</Text>
-              <Text style={styles.announceTime}> · {timeStr(latest.createdAt)}</Text>
+              <Text style={styles.announceTime}> · {(latest as any).localTimeStr || timeStr(latest.createdAt)}</Text>
             </View>
           </View>
         ) : null}
