@@ -18,7 +18,7 @@ import {
   getTodayCheckIn, DailyCheckIn, getCurrentMember,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries } from '@/lib/cloud-sync';
+import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
@@ -291,17 +291,29 @@ export default function DiaryEditScreen() {
 
   async function loadExistingEntry(id: string) {
     setLoadingEntry(true);
+    // 获取当前登录用户 ID，用于判断日记是否是自己写的
+    const { userId: currentUserId } = await getCloudSyncState();
     let entry: DiaryEntry | null = await getDiaryEntryById(id, familyId ?? undefined);
-    // 本地找到了条目，但需要检查云端是否已将 conversationFinished 更新为 true
-    // （防止本地缓存过时，用户点击"结束并保存"后重新打开日记仍可继续对话）
-    if (entry && !entry.conversationFinished && entry.serverDiaryId) {
+    // 只要有 serverDiaryId，就去云端校验最新的 conversationFinished
+    // 对于他人写的日记（authorUserId 不等于当前用户），强制以云端状态为准
+    // 这样即使本地缓存了 false，也能正确反映他人日记的对话是否已结束
+    if (entry && entry.serverDiaryId) {
+      const isOthersPerson = entry.authorUserId && currentUserId && entry.authorUserId !== currentUserId;
       try {
         const cloudEntries = await cloudGetDiaries(familyId ? Number(familyId) : undefined);
         const cloudEntry = cloudEntries.find((e: any) => e.id === entry!.serverDiaryId);
-        if (cloudEntry?.conversationFinished) {
-          // 云端已结束，同步到本地
-          await updateDiaryEntry(entry.id, { conversationFinished: true }, familyId ?? undefined);
-          entry = { ...entry, conversationFinished: true };
+        if (cloudEntry) {
+          if (isOthersPerson) {
+            // 他人写的日记：强制以云端 conversationFinished 为准（不信任本地缓存）
+            if (cloudEntry.conversationFinished !== entry.conversationFinished) {
+              await updateDiaryEntry(entry.id, { conversationFinished: cloudEntry.conversationFinished }, familyId ?? undefined);
+            }
+            entry = { ...entry, conversationFinished: cloudEntry.conversationFinished };
+          } else if (cloudEntry.conversationFinished && !entry.conversationFinished) {
+            // 自己写的日记：云端已结束但本地未结束，同步到本地
+            await updateDiaryEntry(entry.id, { conversationFinished: true }, familyId ?? undefined);
+            entry = { ...entry, conversationFinished: true };
+          }
         }
       } catch (e) { /* 网络不可用时降级，使用本地状态 */ }
     }

@@ -175,6 +175,7 @@ export interface DiaryEntry {
   caregiverMoodLabel?: string;
   serverDiaryId?: number;
   authorName?: string;           // 记录人姓名（本地写入时填充 caregiverName，云端同步时也会填充）
+  authorUserId?: number;          // 记录人的用户 ID（云端同步时填充，用于判断是否是当前用户写的日记）
   // AI reply fields (legacy — kept for backward compatibility)
   aiReply?: string;
   aiEmoji?: string;

@@ -386,7 +386,10 @@ export const familyRouter = router({
 
       // Notify family members about the check-in
       const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
-      const period = input.morningDone ? '早间' : '晚间';
+      // 用 eveningDone 判断是否为晚间打卡（比 morningDone 更准确）
+      // 原因：晚间打卡时整个 checkIn 对象会携带之前早间打卡写入的 morningDone:true
+      // 所以不能用 morningDone 判断——只要 eveningDone 为 true 就是晚间打卡
+      const period = input.eveningDone ? '晚间' : '早间';
       await notifyRoomMembers(
         input.roomId,
         userId,

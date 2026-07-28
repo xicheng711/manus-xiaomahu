@@ -403,6 +403,7 @@ function DiaryScreenContent() {
           conversation: c.conversation ?? merged[existingIdx].conversation,
           conversationFinished: mergedFinished,
           authorName: c.authorName || c.author?.name || merged[existingIdx].authorName,
+          authorUserId: c.authorUserId ?? merged[existingIdx].authorUserId,
           localTimeStr: c.localTimeStr ?? merged[existingIdx].localTimeStr,
         };
         continue;
@@ -462,6 +463,7 @@ function DiaryScreenContent() {
         caregiverMoodEmoji: c.caregiverMoodEmoji,
         caregiverMoodLabel: c.caregiverMoodLabel,
         authorName: c.authorName || c.author?.name,
+        authorUserId: c.authorUserId,
         aiReply: c.aiReply,
         aiEmoji: c.aiEmoji,
         aiTip: c.aiTip,
@@ -1011,6 +1013,7 @@ function JoinerDiaryReadOnly() {
         caregiverMoodEmoji: c.caregiverMoodEmoji,
         caregiverMoodLabel: c.caregiverMoodLabel,
         authorName: c.authorName || c.author?.name,
+        authorUserId: c.authorUserId,
         aiReply: c.aiReply,
         aiEmoji: c.aiEmoji,
         aiTip: c.aiTip,
