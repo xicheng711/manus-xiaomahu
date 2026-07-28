@@ -281,8 +281,11 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
     ]).start();
   }, []);
 
-  const today = historyDate
-    ? (() => { const d = new Date(historyDate + 'T00:00:00'); return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }); })()
+  // 日期显示优先级：historyDate 参数 > checkIn.date（打卡记录的实际日期）> 本地 new Date()
+  // 这样 Joiner 跨时区时，卡片日期显示的是主照顾者打卡的实际日期，而不是 Joiner 本地日期
+  const _dateForDisplay = historyDate || checkIn.date;
+  const today = _dateForDisplay
+    ? (() => { const d = new Date(_dateForDisplay + 'T00:00:00'); return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }); })()
     : new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
   // 严格基于实际记录判断：早间字段需要 morningDone，晚间字段需要 eveningDone
