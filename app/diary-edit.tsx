@@ -348,6 +348,7 @@ export default function DiaryEditScreen() {
             caregiverMoodEmoji: matched.caregiverMoodEmoji,
             caregiverMoodLabel: matched.caregiverMoodLabel,
             authorName: matched.authorName || (matched as any).author?.name,
+            authorUserId: matched.authorUserId,
             aiReply: matched.aiReply,
             aiEmoji: matched.aiEmoji,
             aiTip: matched.aiTip,
@@ -396,7 +397,11 @@ export default function DiaryEditScreen() {
       setSelectedTags(entry.tags ?? []);
       setContent(entry.content ?? '');
       setSubmitted(true);
-      setFinished(entry.conversationFinished ?? false);
+      // 判断是否是他人写的日记
+      // 他人写的日记：无论 conversationFinished 是什么，一律锁定对话框（不能继续对话）
+      // 自己写的日记：以 conversationFinished 为准
+      const isOthersDiary = !!(entry.authorUserId && currentUserId && entry.authorUserId !== currentUserId);
+      setFinished(isOthersDiary ? true : (entry.conversationFinished ?? false));
       if (entry.conversation && entry.conversation.length > 0) {
         setConversation(entry.conversation);
       } else if (entry.aiReply) {
