@@ -497,7 +497,10 @@ function CreatorHomeScreen() {
       getProfile(),
     ]);
     // Guard: if no setup has been done at all, redirect to onboarding
-    if (!legacyProfile?.setupComplete && !familyProfile?.setupComplete) {
+    // 例外：Joiner 身份时（已加入他人家庭）本地没有 profile 是正常的，不跳转
+    // 避免用户作为 joiner 时被错误引导到 onboarding
+    const isJoinerOnly = activeMembership != null && activeMembership.role !== 'creator';
+    if (!isJoinerOnly && !legacyProfile?.setupComplete && !familyProfile?.setupComplete) {
       router.replace('/onboarding' as any);
       return;
     }

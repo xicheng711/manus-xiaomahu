@@ -117,9 +117,11 @@ function ScrollPickerSimple({
 export default function OnboardingScreen() {
   const { refresh, memberships } = useFamilyContext();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ fromProfile?: string }>();
+  const params = useLocalSearchParams<{ fromProfile?: string; mode?: string }>();
   const fromProfile = params.fromProfile === '1';
-  const [step, setStep] = useState(0);
+  const modeCreate = params.mode === 'create';
+  // 带 mode=create 时：从 profile 页直接创建家庭，跳过欢迎页从角色选择开始
+  const [step, setStep] = useState(modeCreate ? 1 : 0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const sparkle1 = useRef(new Animated.Value(1)).current;
   const sparkle2 = useRef(new Animated.Value(1)).current;
@@ -447,7 +449,13 @@ export default function OnboardingScreen() {
     await refresh();
     // 新用户注册完成后立即注册 push token，确保不需退出再登录就能收到推送通知
     registerPushToken().catch(() => {});
-    router.replace('/(tabs)');
+    // fromProfile 时（从设置页创建家庭）：返回设置页，而不是跳到首页
+    // 这样用户可以在设置页看到新建家庭并切换
+    if (fromProfile) {
+      router.replace('/profile' as any);
+    } else {
+      router.replace('/(tabs)');
+    }
   }
 
   async function handleJoinerFinish() {
@@ -1255,8 +1263,13 @@ export default function OnboardingScreen() {
       {/* Navigation buttons */}
       <View style={[styles.navButtons, { paddingBottom: insets.bottom + 8 }]}>
         {(step > 0 || fromProfile) && (
-          <TouchableOpacity style={styles.backBtn} onPress={step > 0 ? prevStep : () => router.back()}>
-            <Text style={styles.backBtnText}>{step > 0 ? '← 上一步' : '← 返回'}</Text>
+          <TouchableOpacity style={styles.backBtn} onPress={
+            // modeCreate 且在 step 1（角色选择）：返回到 profile 页（取消创建）
+            modeCreate && step === 1 ? () => router.back()
+            : step > 0 ? prevStep
+            : () => router.back()
+          }>
+            <Text style={styles.backBtnText}>{(step > 0 && !(modeCreate && step === 1)) ? '← 上一步' : '← 返回'}</Text>
           </TouchableOpacity>
         )}
         {/* Step 1 = role selection: no next button, user taps cards */}

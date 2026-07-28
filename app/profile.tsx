@@ -821,7 +821,11 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.familyActionBtn, styles.familyActionBtnPrimary]}
-            onPress={() => { setFamilyModalTab('create'); setShowFamilyModal(true); setJoinError(''); }}
+            onPress={() => {
+              // 跳转到 onboarding 完整流程创建家庭，避免在 Modal 里简单创建后
+              // 触发首页 setupComplete guard 导致用户卡在"您好我是小马虎"页面
+              router.push({ pathname: '/onboarding', params: { fromProfile: '1', mode: 'create' } } as any);
+            }}
           >
             <Text style={styles.familyActionIcon}>🏠</Text>
             <Text style={[styles.familyActionText, { color: AppColors.surface.whiteStrong }]}>创建家庭</Text>
