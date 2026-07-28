@@ -571,23 +571,32 @@ export default function FamilyScreen() {
     setCurrentMemberState(serverMe ?? m);
     // 优先使用云端公告（包含所有家庭成员发的），失败时降级读本地
     // 注意：cloudAnns 的 createdAt 是 Date 对象（superjson 反序列化），需转为 ISO 字符串
+    // 关键修复：云端 localTimeStr 为空时（数据库迁移未完成 or 竞态），从本地缓存补充
+    // 这样刚发布的公告不会因为云端还没写入 localTimeStr 而显示错误的 UTC 时间
+    const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [la.id, la]));
     const a: FamilyAnnouncement[] = (cloudAnns && cloudAnns.length > 0)
-      ? (cloudAnns as any[]).map((c: any) => ({
-          id: String(c.id),
-          authorId: String(c.authorUserId ?? c.authorId ?? ''),
-          authorName: c.authorName ?? '',
-          authorEmoji: c.authorEmoji ?? '😊',
-          authorColor: c.authorColor ?? '#888',
-          content: c.content ?? '',
-          emoji: c.emoji ?? undefined,
-          type: c.type ?? 'daily',
-          date: c.date ?? '',
-          localTimeStr: c.localTimeStr ?? undefined,
-          createdAt: c.createdAt instanceof Date
-            ? c.createdAt.toISOString()
-            : (typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString()),
-          reactions: c.reactions ?? [],
-        }))
+      ? (cloudAnns as any[]).map((c: any) => {
+          const cloudId = String(c.id);
+          const localMatch = localAnnsMap.get(cloudId);
+          // 云端 localTimeStr 为空时，用本地缓存中同一条公告的 localTimeStr 补充
+          const localTimeStr = c.localTimeStr ?? localMatch?.localTimeStr ?? undefined;
+          return {
+            id: cloudId,
+            authorId: String(c.authorUserId ?? c.authorId ?? ''),
+            authorName: c.authorName ?? '',
+            authorEmoji: c.authorEmoji ?? '😊',
+            authorColor: c.authorColor ?? '#888',
+            content: c.content ?? '',
+            emoji: c.emoji ?? undefined,
+            type: c.type ?? 'daily',
+            date: c.date ?? '',
+            localTimeStr,
+            createdAt: c.createdAt instanceof Date
+              ? c.createdAt.toISOString()
+              : (typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString()),
+            reactions: c.reactions ?? [],
+          };
+        })
       : localAnns;
     setAnnouncements(a);
     setIsCreator(creatorFlag);

@@ -489,13 +489,30 @@ export function JoinerHomeScreen() {
     });
     setAllDiaries(cleanDiaries);
     // 公告也从云端拉取，确保看到所有家庭成员发的公告
+    // 关键修复：云端 localTimeStr 为空时，从本地缓存补充（防止数据库迁移未完成或竞态导致时间显示错误）
     let announcements: FamilyAnnouncement[] = [];
     try {
       const roomIdNum2 = activeFamilyId ? parseInt(activeFamilyId) : undefined;
       const cloudAnns = await cloudGetAnnouncements(roomIdNum2, 30);
-      announcements = (cloudAnns && cloudAnns.length > 0)
-        ? cloudAnns as unknown as FamilyAnnouncement[]
-        : await getFamilyAnnouncements(30, activeFamilyId || undefined);
+      if (cloudAnns && cloudAnns.length > 0) {
+        // 拉取本地缓存，用于补充云端缺失的 localTimeStr
+        const localAnns = await getFamilyAnnouncements(30, activeFamilyId || undefined);
+        const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [la.id, la]));
+        announcements = (cloudAnns as any[]).map((c: any) => {
+          const cloudId = String(c.id);
+          const localMatch = localAnnsMap.get(cloudId);
+          return {
+            ...c,
+            id: cloudId,
+            localTimeStr: c.localTimeStr ?? localMatch?.localTimeStr ?? undefined,
+            createdAt: c.createdAt instanceof Date
+              ? c.createdAt.toISOString()
+              : (typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString()),
+          } as FamilyAnnouncement;
+        });
+      } else {
+        announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
+      }
     } catch {
       announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
     }
