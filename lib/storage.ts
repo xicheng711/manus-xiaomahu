@@ -680,6 +680,19 @@ export async function getDiaryEntriesForHome(roomId?: string, limit = 20): Promi
     return true;
   });
 
+  // Step 3: 按 createdAt 降序排序，确保首页始终显示最新日记
+  deduped.sort((a, b) => {
+    const ta = new Date(a.createdAt || a.date).getTime();
+    const tb = new Date(b.createdAt || b.date).getTime();
+    if (isNaN(ta) && isNaN(tb)) return 0;
+    if (isNaN(ta)) return 1;
+    if (isNaN(tb)) return -1;
+    if (tb !== ta) return tb - ta;
+    const lta = a.localTimeStr || '00:00';
+    const ltb = b.localTimeStr || '00:00';
+    return ltb.localeCompare(lta);
+  });
+
   return deduped.slice(0, limit);
 }
 
@@ -725,6 +738,18 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   const idx = all.findIndex(e => e.id === id);
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...data };
+  // 写回前按 createdAt 降序重新排序，防止字段更新（如 serverDiaryId/conversationFinished）后破坏列表顺序
+  all.sort((a: DiaryEntry, b: DiaryEntry) => {
+    const ta = new Date(a.createdAt || a.date).getTime();
+    const tb = new Date(b.createdAt || b.date).getTime();
+    if (isNaN(ta) && isNaN(tb)) return 0;
+    if (isNaN(ta)) return 1;
+    if (isNaN(tb)) return -1;
+    if (tb !== ta) return tb - ta;
+    const lta = a.localTimeStr || '00:00';
+    const ltb = b.localTimeStr || '00:00';
+    return ltb.localeCompare(lta);
+  });
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // If the only field being updated is serverDiaryId (written back by saveDiaryEntry after cloud
   // creation), skip cloud sync entirely. Triggering a sync here would read the current local state
