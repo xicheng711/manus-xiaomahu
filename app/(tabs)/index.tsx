@@ -5,7 +5,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
@@ -461,6 +461,7 @@ export default function HomeScreen() {
 }
 
 function CreatorHomeScreen() {
+  const params = useLocalSearchParams<{ refresh?: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { memberships, activeMembership, switchFamily, refresh: refreshFamily } = useFamilyContext();
@@ -695,6 +696,12 @@ function CreatorHomeScreen() {
 
   // 修复：只保留 useFocusEffect 一个加载入口，删除 useEffect([familyId]) 避免切换家庭时重复触发双重 IO
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  // 点击通知时强制刷新
+  useEffect(() => {
+    if (params.refresh) loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.refresh]);
 
   useEffect(() => {
     if (caregiverName || buildGreeting) {

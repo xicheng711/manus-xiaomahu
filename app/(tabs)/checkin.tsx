@@ -691,7 +691,7 @@ const MEAL_ICONS = ['🍽️', '🥢', '🚫'];
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function CheckinScreenContent() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ backfillDate?: string }>();
+  const params = useLocalSearchParams<{ backfillDate?: string; refresh?: string }>();
   const backfillDate = params.backfillDate || null;
   const { activeMembership } = useFamilyContext();
   const familyId = activeMembership?.familyId;
@@ -872,6 +872,12 @@ function CheckinScreenContent() {
       setDone(false);
     })();
   }, [backfillDate]));
+
+  // 点击通知时强制刷新
+  useEffect(() => {
+    if (params.refresh) loadCheckInData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.refresh]);
 
   const selectedMood = MOODS[moodIdx];
 

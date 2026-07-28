@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { getMedications, saveMedication, updateMedication, deleteMedication, Medication, getProfile, getUserProfile, getFamilyProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
@@ -92,6 +93,7 @@ function MedCard({ med, onToggle, onDelete, onEdit, index, isCreator }: { med: M
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function MedicationScreenContent() {
+  const params = useLocalSearchParams<{ refresh?: string }>();
   const { activeMembership } = useFamilyContext();
   const familyId = activeMembership?.familyId;
   const [meds, setMeds] = useState<Medication[]>([]);
@@ -157,6 +159,12 @@ function MedicationScreenContent() {
   useFocusEffect(useCallback(() => {
     loadMeds();
   }, [loadMeds]));
+
+  // 点击通知时强制刷新
+  useEffect(() => {
+    if (params.refresh) loadMeds();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.refresh]);
 
   function resetForm() {
     setAdding(false);

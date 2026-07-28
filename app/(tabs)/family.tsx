@@ -405,7 +405,7 @@ function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; 
 
 export default function FamilyScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ openCompose?: string; joinCode?: string }>();
+  const params = useLocalSearchParams<{ openCompose?: string; joinCode?: string; refresh?: string }>();
   const [room, setRoom] = useState<FamilyRoom | null>(null);
   const [currentMember, setCurrentMemberState] = useState<FamilyMember | null>(null);
   const [announcements, setAnnouncements] = useState<FamilyAnnouncement[]>([]);
@@ -457,6 +457,12 @@ export default function FamilyScreen() {
   }, [params.openCompose, familyId]);
 
   useFocusEffect(loadDataCallback);
+
+  // 点击通知时强制刷新
+  useEffect(() => {
+    if (params.refresh) loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.refresh]);
 
   useEffect(() => {
     Animated.loop(
