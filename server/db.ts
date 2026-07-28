@@ -10,21 +10,32 @@ let _migrationDone = false;
 async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
   if (_migrationDone) return;
   _migrationDone = true;
-  const migrations = [
-    // 0003: add localTimeStr to announcements and diary_entries
-    `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS localTimeStr varchar(5)`,
-    `ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS localTimeStr varchar(5)`,
-    // 0002: add birthYear to family_members (idempotent)
-    `ALTER TABLE family_members ADD COLUMN IF NOT EXISTS birthYear int`,
+
+  // MySQL 8.0 does NOT support ADD COLUMN IF NOT EXISTS.
+  // We check information_schema first, then add only if missing.
+  const columnsToAdd: Array<{ table: string; column: string; definition: string }> = [
+    { table: 'announcements',  column: 'localTimeStr', definition: 'varchar(10)' },
+    { table: 'diary_entries',  column: 'localTimeStr', definition: 'varchar(10)' },
+    { table: 'family_members', column: 'birthYear',    definition: 'int' },
   ];
-  for (const sql of migrations) {
+
+  for (const { table, column, definition } of columnsToAdd) {
     try {
-      await (db as any).execute(sql);
-    } catch (e: any) {
-      // Ignore "Duplicate column" errors (MySQL 5.x doesn't support IF NOT EXISTS)
-      if (!String(e?.message ?? '').includes('Duplicate column')) {
-        console.warn('[Database] Migration warning:', e?.message ?? e);
+      const rows: any[] = await (db as any).execute(
+        `SELECT 1 FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME   = '${table}'
+           AND COLUMN_NAME  = '${column}'
+         LIMIT 1`
+      );
+      // drizzle returns [rows, fields]; rows is the first element
+      const exists = Array.isArray(rows[0]) ? rows[0].length > 0 : rows.length > 0;
+      if (!exists) {
+        await (db as any).execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        console.log(`[Database] Migration: added ${table}.${column}`);
       }
+    } catch (e: any) {
+      console.warn(`[Database] Migration warning (${table}.${column}):`, e?.message ?? e);
     }
   }
   console.log('[Database] Auto-migrations complete');
