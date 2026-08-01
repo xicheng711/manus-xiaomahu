@@ -519,8 +519,8 @@ export default function DiaryEditScreen() {
     setFollowUpInput('');
     setFollowUpLoading(true);
     const userMsg: ConversationMessage = { id: generateId(), role: 'user', text: q, createdAt: new Date().toISOString() };
-    // 先构建包含新消息的完整对话列表
-    const conv1 = [...conversation, userMsg];
+    // 使用 conversationRef.current 而不是 conversation state，避免 React 闭包问题导致对话丢失
+    const conv1 = [...conversationRef.current, userMsg];
     setConversation(conv1);
     await persistConversation(conv1);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
