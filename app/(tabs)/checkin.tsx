@@ -1508,7 +1508,8 @@ function CheckinScreenContent() {
               onChangeText={setMorningNotes}
               multiline numberOfLines={3}
               placeholderTextColor="#B8BCC0"
-              returnKeyType="done"
+              blurOnSubmit={false}
+              returnKeyType="default"
             />
           </View>
         </View>
@@ -1586,12 +1587,14 @@ function CheckinScreenContent() {
             </TouchableOpacity>
           ))}
           <TextInput
-            style={styles.mealCustomInput}
+            style={[styles.mealCustomInput, { minHeight: 80, textAlignVertical: 'top' }]}
             placeholder={`补充${elderNickname}今天吃的东西…`}
             value={mealCustom}
             onChangeText={setMealCustom}
             placeholderTextColor="#B8BCC0"
-            returnKeyType="done"
+            multiline
+            blurOnSubmit={false}
+            returnKeyType="default"
           />
         </View>
       ),
@@ -1669,7 +1672,8 @@ function CheckinScreenContent() {
           onChangeText={setEveningNotes}
           multiline numberOfLines={4}
           placeholderTextColor="#B8BCC0"
-          returnKeyType="done"
+          blurOnSubmit={false}
+          returnKeyType="default"
         />
       ),
     },
