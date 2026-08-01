@@ -760,10 +760,11 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   if (dataKeys.length === 1 && dataKeys[0] === 'serverDiaryId') {
     return all[idx];
   }
-  // Cloud sync: sync when conversation is finished OR when an AI reply has been added
-  // This ensures joiner can see the conversation even if caregiver didn't tap "End & Save"
+  // Cloud sync: sync when conversation is finished, when an AI reply has been added,
+  // OR when the conversation has been updated at all (including user follow-up messages)
+  // This ensures follow-up messages are saved even if AI hasn't replied yet or user navigates away
   const shouldSync = all[idx].conversationFinished ||
-    (data.conversation !== undefined && (all[idx].conversation ?? []).some((m: any) => m.role === 'ai')) ||
+    data.conversation !== undefined ||
     (data.aiReply !== undefined && !!all[idx].aiReply);
   if (shouldSync) {
     const syncEntry = all[idx];
