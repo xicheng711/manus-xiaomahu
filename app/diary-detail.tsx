@@ -264,7 +264,7 @@ export default function DiaryDetailScreen() {
                 <View style={styles.bubbleRowRight}>
                   <View style={styles.bubbleGreen}>
                     <Text style={styles.bubbleGreenText}>
-                      {entry.moodEmoji} {entry.content ? entry.content.slice(0, 100) + (entry.content.length > 100 ? '…' : '') : '已记录今日护理情况 📖'}
+                      {entry.moodEmoji} {entry.content || '已记录今日护理情况 📖'}
                     </Text>
                   </View>
                 </View>

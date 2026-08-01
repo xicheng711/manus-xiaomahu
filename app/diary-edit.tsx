@@ -786,7 +786,7 @@ export default function DiaryEditScreen() {
                     )}
                   </View>
                   {content.trim() ? (
-                    <Text style={styles.summaryContent} numberOfLines={3}>{content.trim()}</Text>
+                    <Text style={styles.summaryContent}>{content.trim()}</Text>
                   ) : (
                     <Text style={styles.summaryNoContent}>（未写详细内容）</Text>
                   )}
