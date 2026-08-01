@@ -406,7 +406,7 @@ export default function DiaryEditScreen() {
         setConversation(entry.conversation);
       } else if (entry.aiReply) {
         const legacyConv: ConversationMessage[] = [
-          { id: generateId(), role: 'user', text: entry.content ? entry.content.slice(0, 80) : '已记录今日护理情况', createdAt: entry.createdAt ?? new Date().toISOString() },
+          { id: generateId(), role: 'user', text: entry.content || '已记录今日护理情况', createdAt: entry.createdAt ?? new Date().toISOString() },
           { id: generateId(), role: 'ai', text: entry.aiReply, createdAt: entry.createdAt ?? new Date().toISOString() },
         ];
         setConversation(legacyConv);
