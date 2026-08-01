@@ -60,11 +60,12 @@ export default function DiaryDetailScreen() {
     setElderNickname(nickname);
     setCaregiverName(caregiver);
     if (id) {
-      let e: DiaryEntry | null = await getDiaryEntryById(id);
+      // 传入 familyId 确保读取正确的 storage key（diary_entries:${familyId})
+      let e: DiaryEntry | null = await getDiaryEntryById(id, familyId ?? undefined);
       // readOnly 模式（joiner 查看）：本地找不到时从云端拉取
       if (!e) {
         try {
-          const cloudEntries = await cloudGetDiaries();
+          const cloudEntries = await cloudGetDiaries(familyId ? Number(familyId) : undefined);
           // 剥离 cloud_ 前缀后再与云端数字 id 比较
           const numericId = String(id).replace(/^cloud_/, '');
           const matched = cloudEntries.find((ce: any) => String(ce.id) === numericId);
