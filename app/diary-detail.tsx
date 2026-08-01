@@ -85,8 +85,11 @@ export default function DiaryDetailScreen() {
         if (!Array.isArray(e.tags)) e.tags = [];
         // 从 conversation 字段恢复对话历史（主照顾者重开页面 / joiner 查看时都能看到完整对话）
         if (Array.isArray((e as any).conversation) && (e as any).conversation.length > 0) {
+          // conversation[0] = 用户初始日记内容，conversation[1] = AI 第一条回复
+          // 这两条已经在上方「智能对话」区块显示，追问区块只渲染第 3 条起
+          const followUps = (e as any).conversation.slice(2);
           setFollowUpHistory(
-            (e as any).conversation.map((m: any) => ({ role: m.role as 'user' | 'ai', text: m.text }))
+            followUps.map((m: any) => ({ role: m.role as 'user' | 'ai', text: m.text }))
           );
         }
       }
