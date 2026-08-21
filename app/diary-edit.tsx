@@ -284,7 +284,7 @@ export default function DiaryEditScreen() {
     getDiaryDraft(familyId).then(draft => {
       if (!draft) return;
       const draftAgeMs = Date.now() - new Date(draft.savedAt).getTime();
-      const draftAgeDays = Math.floor(draftAgeMs / (1000 * 60 * 60 * 24));
+      const draftAgeDays = Number.isFinite(draftAgeMs) ? Math.floor(draftAgeMs / (1000 * 60 * 60 * 24)) : 0;
       const restoreDraft = () => {
         setContent(draft.content ?? '');
         setSelectedMood(typeof draft.selectedMood === 'number' ? draft.selectedMood : 0);

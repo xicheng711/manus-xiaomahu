@@ -375,12 +375,13 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
       <View style={cardStyles.footer}>
         <View>
           <Text style={cardStyles.footerLeft}>记录人：{caregiverName}</Text>
-          {checkIn?.completedAt ? (
-            <Text style={[cardStyles.footerLeft, { marginTop: 2 }]}>简报基于 {(() => {
-              const d = new Date(checkIn.completedAt);
-              return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-            })()} 的打卡记录</Text>
-          ) : null}
+          {checkIn?.completedAt ? (() => {
+            const d = new Date(checkIn.completedAt);
+            if (isNaN(d.getTime())) return null;
+            return (
+              <Text style={[cardStyles.footerLeft, { marginTop: 2 }]}>简报基于 {`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`} 的打卡记录</Text>
+            );
+          })() : null}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <View style={{ width: 14, height: 14, borderRadius: 3, overflow: 'hidden' }}>
