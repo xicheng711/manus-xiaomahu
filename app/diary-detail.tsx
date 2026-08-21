@@ -109,9 +109,9 @@ export default function DiaryDetailScreen() {
     const newHistory = [...followUpHistory, { role: 'user' as const, text: q }];
     setFollowUpHistory(newHistory);
     try {
-      // 传递历史时跳过前两条（第一轮日记内容 + AI首次回复，已通过 originalContent/originalAiReply 单独传递）
-      // 同时跳过最后一条（本次用户消息，由 question 字段单独传递）
-      const historyForApi = followUpHistory.slice(2).map(m => ({
+      // followUpHistory 已经是 conversation.slice(2) 的结果，不包含初始日记和首次 AI 回复。
+      // 只需跳过最后一条（本次用户消息，由 question 字段单独传递）。
+      const historyForApi = followUpHistory.map(m => ({
         role: (m.role === 'ai' ? 'ai' : 'user') as 'user' | 'ai',
         text: m.text,
       }));

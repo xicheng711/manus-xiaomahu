@@ -115,7 +115,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
         )}
 
         {entry.content ? (
-          <Text style={styles.diaryContent}>{entry.content}</Text>
+          <Text style={styles.diaryContent} numberOfLines={3}>{entry.content}</Text>
         ) : null}
 
         {hasAiReply ? (
@@ -124,7 +124,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
               <Text style={styles.aiPreviewIcon}>🩺</Text>
               <Text style={styles.aiPreviewLabel}>小马虎护理回复</Text>
             </View>
-            <Text style={styles.aiPreviewText}>{aiPreview}</Text>
+            <Text style={styles.aiPreviewText} numberOfLines={2}>{aiPreview}</Text>
           </View>
         ) : null}
 
@@ -283,7 +283,7 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
               <TouchableOpacity key={e.id} style={calStyles.miniCard} onPress={() => onOpenEntry(e.id)} activeOpacity={0.8}>
                 <Text style={calStyles.miniMood}>{e.moodEmoji || '📔'}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={calStyles.miniContent}>{e.content}</Text>
+                  <Text style={calStyles.miniContent} numberOfLines={2}>{e.content}</Text>
                   {cg && (
                     <Text style={calStyles.miniCaregiverMood}>我的心情：{e.caregiverMoodEmoji} {cg.label}</Text>
                   )}
@@ -939,93 +939,6 @@ function JoinerDiaryReadOnly() {
   const [showAll, setShowAll] = useState(false);
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
-
-  /** 合并云端日记到本地：以 serverDiaryId 为主键去重，云端数据优先 */
-  function mergeJoinerDiaries(local: DiaryEntry[], cloud: any[], currentUserId?: number | null): DiaryEntry[] {
-    const localByServerId = new Map<number, number>();
-    const merged = [...local];
-    merged.forEach((d, i) => { if (d.serverDiaryId) localByServerId.set(d.serverDiaryId, i); });
-    for (const c of cloud) {
-      const existingIdx = localByServerId.get(c.id);
-      if (existingIdx !== undefined) {
-        // conversationFinished 只允许从 false→true，不允许云端 false 覆盖本地 true
-        const lf = merged[existingIdx].conversationFinished;
-        const cf = c.conversationFinished;
-        merged[existingIdx] = {
-          ...merged[existingIdx],
-          serverDiaryId: c.id,
-          content: c.content || merged[existingIdx].content,
-          aiReply: c.aiReply ?? merged[existingIdx].aiReply,
-          conversation: c.conversation ?? merged[existingIdx].conversation,
-          conversationFinished: lf === true ? true : (cf ?? lf),
-          authorName: c.authorName || c.author?.name || merged[existingIdx].authorName,
-          localTimeStr: c.localTimeStr ?? merged[existingIdx].localTimeStr,
-        };
-        continue;
-      }
-      const cloudAuthorName = (c.authorName || c.author?.name || '').toLowerCase();
-      const cloudAuthorUserId = c.authorUserId;
-      const cloudDate = c.date;
-      const unlinkedIdx = merged.findIndex(d => {
-        if (d.serverDiaryId) return false;
-        if (d.date !== cloudDate) return false;
-        const localAuthor = (d.authorName || '').toLowerCase();
-        if (cloudAuthorName && localAuthor && localAuthor === cloudAuthorName) return true;
-        if (!localAuthor && currentUserId && cloudAuthorUserId === currentUserId) return true;
-        return false;
-      });
-      if (unlinkedIdx >= 0) {
-        const ulf = merged[unlinkedIdx].conversationFinished;
-        const ucf = c.conversationFinished;
-        merged[unlinkedIdx] = {
-          ...merged[unlinkedIdx],
-          serverDiaryId: c.id,
-          aiReply: c.aiReply ?? merged[unlinkedIdx].aiReply,
-          conversation: c.conversation ?? merged[unlinkedIdx].conversation,
-          conversationFinished: ulf === true ? true : (ucf ?? ulf),
-          localTimeStr: c.localTimeStr ?? merged[unlinkedIdx].localTimeStr,
-        };
-        localByServerId.set(c.id, unlinkedIdx);
-        continue;
-      }
-      // 全新条目：将 createdAt 统一转为 ISO 字符串（防止 Date 对象和字符串混合导致排序错误）
-      const cloudCreatedAt = c.createdAt instanceof Date
-        ? c.createdAt.toISOString()
-        : (typeof c.createdAt === 'string' ? c.createdAt : c.date);
-      const newIdx = merged.length;
-      merged.push({
-        id: `cloud_${c.id}`,
-        serverDiaryId: c.id,
-        date: c.date,
-        content: c.content || '',
-        moodEmoji: c.moodEmoji || '😊',
-        moodLabel: c.moodLabel,
-        moodScore: c.moodScore,
-        tags: c.tags,
-        createdAt: cloudCreatedAt,
-        caregiverMoodEmoji: c.caregiverMoodEmoji,
-        caregiverMoodLabel: c.caregiverMoodLabel,
-        authorName: c.authorName || c.author?.name,
-        authorUserId: c.authorUserId,
-        aiReply: c.aiReply,
-        aiEmoji: c.aiEmoji,
-        aiTip: c.aiTip,
-        conversation: c.conversation,
-        conversationFinished: c.conversationFinished ?? true,
-        localTimeStr: c.localTimeStr,
-      });
-      localByServerId.set(c.id, newIdx);
-    }
-    merged.sort((a, b) => {
-      const ta = new Date(a.createdAt || a.date).getTime();
-      const tb = new Date(b.createdAt || b.date).getTime();
-      if (tb !== ta) return tb - ta;
-      const lta = a.localTimeStr || '00:00';
-      const ltb = b.localTimeStr || '00:00';
-      return ltb.localeCompare(lta);
-    });
-    return merged;
-  }
 
   useEffect(() => { fadeInUp(headerFade, headerSlide, { duration: 500 }); }, []);
   useFocusEffect(useCallback(() => {

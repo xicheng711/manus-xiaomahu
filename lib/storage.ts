@@ -512,7 +512,7 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
   else all.unshift(checkIn);
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync check-in to server
-  cloudSyncCheckIn(checkIn).catch(() => {});
+  cloudSyncCheckIn(checkIn).catch((e) => console.warn('[xiaomahu] 打卡云端同步失败，已保存到本地', e));
   return checkIn;
 }
 
@@ -884,7 +884,7 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
     const syncEntry = all[idx];
     if (syncEntry.serverDiaryId) {
       // serverDiaryId already known — update existing cloud record (no push notification)
-      cloudSyncDiary(syncEntry, syncEntry.serverDiaryId, rid).catch(() => {});
+      cloudSyncDiary(syncEntry, syncEntry.serverDiaryId, rid).catch((e) => console.warn('[xiaomahu] 日记云端同步失败，已保存到本地', e));
     } else {
       // serverDiaryId not yet available (saveDiaryEntry's async .then() may still be in flight)
       // Wait up to 5 seconds for serverDiaryId to be written, then sync once.
@@ -902,7 +902,7 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
         if (foundServerId) {
           // Sync using the snapshot — preserves conversationFinished state at call time,
           // preventing a race-condition double-notification if handleEndAndSave ran concurrently.
-          cloudSyncDiary({ ...syncSnapshot, serverDiaryId: foundServerId }, foundServerId, rid).catch(() => {});
+          cloudSyncDiary({ ...syncSnapshot, serverDiaryId: foundServerId }, foundServerId, rid).catch((e) => console.warn('[xiaomahu] 日记云端同步失败，已保存到本地', e));
         }
         // If still no serverDiaryId after 5s, skip sync to avoid duplicate cloud entry
       })();

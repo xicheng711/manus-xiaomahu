@@ -283,11 +283,27 @@ export default function DiaryEditScreen() {
     setDraftRestoredAt(null);
     getDiaryDraft(familyId).then(draft => {
       if (!draft) return;
-      setContent(draft.content ?? '');
-      setSelectedMood(typeof draft.selectedMood === 'number' ? draft.selectedMood : 0);
-      setCaregiverMoodIdx(typeof draft.caregiverMoodIdx === 'number' ? draft.caregiverMoodIdx : -1);
-      setSelectedTags(Array.isArray(draft.selectedTags) ? draft.selectedTags : []);
-      setDraftRestoredAt(draft.savedAt);
+      const draftAgeMs = Date.now() - new Date(draft.savedAt).getTime();
+      const draftAgeDays = Math.floor(draftAgeMs / (1000 * 60 * 60 * 24));
+      const restoreDraft = () => {
+        setContent(draft.content ?? '');
+        setSelectedMood(typeof draft.selectedMood === 'number' ? draft.selectedMood : 0);
+        setCaregiverMoodIdx(typeof draft.caregiverMoodIdx === 'number' ? draft.caregiverMoodIdx : -1);
+        setSelectedTags(Array.isArray(draft.selectedTags) ? draft.selectedTags : []);
+        setDraftRestoredAt(draft.savedAt);
+      };
+      if (draftAgeDays >= 7) {
+        Alert.alert(
+          `\u53d1\u73b0 ${draftAgeDays} \u5929\u524d\u7684\u8349\u7a3f`,
+          '\u8981\u6062\u590d\u8fd9\u7bc7\u8349\u7a3f\u5417\uff1f\u4e0d\u6062\u590d\u5c06\u6c38\u4e45\u5220\u9664\u3002',
+          [
+            { text: '\u4e0d\u6062\u590d\uff0c\u5220\u9664\u8349\u7a3f', style: 'destructive', onPress: () => clearDiaryDraft(familyId).catch(() => {}) },
+            { text: '\u6062\u590d\u8349\u7a3f', onPress: restoreDraft },
+          ],
+        );
+      } else {
+        restoreDraft();
+      }
     }).catch(() => {});
   }, [existingId, familyReady, familyId]);
 

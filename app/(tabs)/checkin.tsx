@@ -2505,19 +2505,21 @@ function JoinerCheckinView() {
   const loadJoinerData = useCallback(async () => {
     const todayDate = new Date();
     const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+    // 本地优先：先立即显示缓存数据，再后台拉取云端
+    const localCheckIns = await getAllCheckIns(familyId);
+    const localToday = localCheckIns.find(ci => ci.date === todayKey) ?? null;
+    setCheckIn(localToday);
+    setAllCheckIns(localCheckIns);
+    // 后台拉取云端最新数据
     const { cloudGetCheckIns } = await import('@/lib/cloud-sync');
     try {
       const cloudCIs: any[] = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
       if (cloudCIs && cloudCIs.length > 0) {
         setCheckIn(cloudCIs.find((ci: any) => ci.date === todayKey) ?? null);
         setAllCheckIns(cloudCIs as DailyCheckIn[]);
-      } else {
-        getTodayCheckIn(familyId).then(setCheckIn);
-        getAllCheckIns(familyId).then(setAllCheckIns);
       }
     } catch {
-      getTodayCheckIn(familyId).then(setCheckIn);
-      getAllCheckIns(familyId).then(setAllCheckIns);
+      // 网络不可用时保持已展示的本地缓存
     }
     const [, fp, lp] = await Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]);
     setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
