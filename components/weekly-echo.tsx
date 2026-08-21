@@ -44,6 +44,8 @@ function WaveBar({ delay = 0 }: { delay?: number }) {
 interface WeeklyEchoProps {
   caregiverName: string;
   elderNickname: string;
+  /** 当前家庭 ID；所有周回顾源数据必须按该家庭隔离。 */
+  familyId?: string;
   forceShow?: boolean;
 }
 
@@ -65,7 +67,7 @@ function getWeekDateRange(): { start: string; end: string } {
   return { start: fmt(monday), end: fmt(sunday) };
 }
 
-export function WeeklyEcho({ caregiverName, elderNickname, forceShow = false }: WeeklyEchoProps) {
+export function WeeklyEcho({ caregiverName, elderNickname, familyId, forceShow = false }: WeeklyEchoProps) {
   const [visible, setVisible] = useState(false);
   const [echo, setEcho] = useState<{ title: string; echo: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -156,7 +158,7 @@ export function WeeklyEcho({ caregiverName, elderNickname, forceShow = false }: 
     setLoading(true);
     try {
       const { start, end } = getWeekDateRange();
-      const allDiaries: DiaryEntry[] = await getDiaryEntries();
+      const allDiaries: DiaryEntry[] = await getDiaryEntries(familyId);
       const weekDiaries = allDiaries
         .filter(d => d.date >= start && d.date <= end)
         .map(d => ({
@@ -166,7 +168,7 @@ export function WeeklyEcho({ caregiverName, elderNickname, forceShow = false }: 
           tags: d.tags,
         }));
 
-      const allCheckins: DailyCheckIn[] = await getRecentCheckIns(7);
+      const allCheckins: DailyCheckIn[] = await getRecentCheckIns(7, familyId);
       const weekCheckins = allCheckins
         .filter(c => c.date >= start && c.date <= end)
         .map(c => ({

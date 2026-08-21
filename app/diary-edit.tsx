@@ -15,7 +15,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
-  getTodayCheckIn, DailyCheckIn, getCurrentMember,
+  getTodayCheckIn, DailyCheckIn, getCurrentMember, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
@@ -236,6 +236,7 @@ export default function DiaryEditScreen() {
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [saving, setSaving] = useState(false); // 防止「结束并保存」重复点击
+  const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null);
 
   const entryRef = useRef<DiaryEntry | null>(null);
   // conversationRef 必须在 setConversation 包装函数之前声明，避免 TDZ 问题
@@ -254,6 +255,7 @@ export default function DiaryEditScreen() {
 
   // 初始加载动画（只运行一次）
   const entryLoadedRef = useRef(false);
+  const draftLoadedFamilyRef = useRef<string | null>(null);
   useEffect(() => {
     fadeInUp(formFade, formSlide, { duration: 400 });
     Animated.loop(
@@ -268,6 +270,40 @@ export default function DiaryEditScreen() {
       loadExistingEntry(existingId);
     }
   }, [familyReady, existingId]);
+
+  // 新建日记时，按当前家庭读取本机草稿；已发布日记绝不读取草稿覆盖内容。
+  useEffect(() => {
+    if (existingId || !familyReady || draftLoadedFamilyRef.current === (familyId ?? null)) return;
+    draftLoadedFamilyRef.current = familyId ?? null;
+    // 切换家庭后先清空编辑状态，再只恢复该家庭自己的草稿。
+    setContent('');
+    setSelectedMood(0);
+    setCaregiverMoodIdx(-1);
+    setSelectedTags([]);
+    setDraftRestoredAt(null);
+    getDiaryDraft(familyId).then(draft => {
+      if (!draft) return;
+      setContent(draft.content ?? '');
+      setSelectedMood(typeof draft.selectedMood === 'number' ? draft.selectedMood : 0);
+      setCaregiverMoodIdx(typeof draft.caregiverMoodIdx === 'number' ? draft.caregiverMoodIdx : -1);
+      setSelectedTags(Array.isArray(draft.selectedTags) ? draft.selectedTags : []);
+      setDraftRestoredAt(draft.savedAt);
+    }).catch(() => {});
+  }, [existingId, familyReady, familyId]);
+
+  // 输入后短暂防抖自动保存。草稿只写入本机且带 familyId，不推送、不影响其他家庭成员。
+  useEffect(() => {
+    if (existingId || submitted || !familyReady || draftLoadedFamilyRef.current !== (familyId ?? null)) return;
+    const hasDraftContent = Boolean(content.trim() || selectedTags.length || caregiverMoodIdx >= 0 || selectedMood !== 0);
+    const timer = setTimeout(() => {
+      if (hasDraftContent) {
+        saveDiaryDraft({ content, selectedMood, caregiverMoodIdx, selectedTags }, familyId).catch(() => {});
+      } else {
+        clearDiaryDraft(familyId).catch(() => {});
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [content, selectedMood, caregiverMoodIdx, selectedTags, existingId, submitted, familyReady, familyId]);
 
   // 当 familyId 变化时重新加载称谓和头像（包括初始进入页面）
   useEffect(() => {
@@ -415,6 +451,38 @@ export default function DiaryEditScreen() {
     setLoadingEntry(false);
   }
 
+  const hasUnsavedDraft = !existingId && !submitted && Boolean(
+    content.trim() || selectedTags.length || caregiverMoodIdx >= 0 || selectedMood !== 0
+  );
+
+  async function saveDraftAndLeave() {
+    await saveDiaryDraft({ content, selectedMood, caregiverMoodIdx, selectedTags }, familyId);
+    router.replace('/(tabs)/diary' as any);
+  }
+
+  function requestLeaveEditor() {
+    if (!hasUnsavedDraft) {
+      router.replace('/(tabs)/diary' as any);
+      return;
+    }
+    Alert.alert(
+      '要先保存草稿吗？',
+      '草稿只保存在这台设备和当前家庭中，稍后可继续编辑；未发布前不会通知其他家人。',
+      [
+        { text: '继续写', style: 'cancel' },
+        {
+          text: '不保存并离开',
+          style: 'destructive',
+          onPress: () => {
+            clearDiaryDraft(familyId).catch(() => {});
+            router.replace('/(tabs)/diary' as any);
+          },
+        },
+        { text: '保存草稿', onPress: () => { saveDraftAndLeave().catch(() => {}); } },
+      ],
+    );
+  }
+
   async function handleDeleteEntry() {
     if (!entryId) return;
     await deleteDiaryEntry(entryId, familyId ?? undefined);
@@ -464,6 +532,8 @@ export default function DiaryEditScreen() {
       conversation: [],
       authorName: caregiverName || undefined,
     }, familyId ?? undefined); // 传入 familyId 确保写入正确的 storage key
+    await clearDiaryDraft(familyId);
+    setDraftRestoredAt(null);
     setEntryId(savedEntry.id);
     entryRef.current = savedEntry;
     setSubmitted(true);
@@ -619,7 +689,7 @@ export default function DiaryEditScreen() {
 
         {/* ── Header ── */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.headerBack} onPress={() => router.replace('/(tabs)/diary' as any)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.headerBack} onPress={requestLeaveEditor} activeOpacity={0.7}>
             <Text style={styles.headerBackText}>‹ 日记本</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -635,7 +705,7 @@ export default function DiaryEditScreen() {
               <Text style={styles.headerDeleteBtnText}>🗑️ 删除</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.headerHomeBtn} onPress={() => router.replace('/(tabs)/diary' as any)} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.headerHomeBtn} onPress={requestLeaveEditor} activeOpacity={0.7}>
               <Text style={styles.headerHomeBtnText}>✕ 取消</Text>
             </TouchableOpacity>
           )}
@@ -663,6 +733,11 @@ export default function DiaryEditScreen() {
                   <Text style={styles.datePillText}>📅 {todayLabel} ☀️</Text>
                 </View>
               </View>
+              {!submitted && draftRestoredAt ? (
+                <View style={styles.draftRestoredBanner}>
+                  <Text style={styles.draftRestoredText}>📝 已恢复本机草稿，可继续编辑</Text>
+                </View>
+              ) : null}
 
               {/* ── FORM (only before submission) ── */}
               {!submitted && (
@@ -753,7 +828,6 @@ export default function DiaryEditScreen() {
                       value={content}
                       onChangeText={setContent}
                       multiline
-                      numberOfLines={5}
                       placeholderTextColor="#C4A0B8"
                       textAlignVertical="top"
                       onFocus={() => {
@@ -841,20 +915,29 @@ export default function DiaryEditScreen() {
                 </TouchableOpacity>
               </View>
             ) : !submitted ? (
-              <TouchableOpacity
-                style={[styles.submitBtnWrap, submitting && { opacity: 0.6 }]}
-                onPress={handleSubmit}
-                disabled={submitting}
-                activeOpacity={0.85}
-              >
-                <LinearGradient colors={['#B07858', '#8B5E3C', '#A07050']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitBtn}>
-                  {submitting ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.submitBtnText}>记录好了，听小马虎说说 💕</Text>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
+              <View style={styles.draftActionGroup}>
+                <TouchableOpacity
+                  style={[styles.submitBtnWrap, submitting && { opacity: 0.6 }]}
+                  onPress={handleSubmit}
+                  disabled={submitting}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient colors={['#B07858', '#8B5E3C', '#A07050']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitBtn}>
+                    {submitting ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.submitBtnText}>记录好了，听小马虎说说 💕</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveDraftBtn}
+                  onPress={() => { saveDraftAndLeave().catch(() => {}); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.saveDraftBtnText}>📝 保存草稿，稍后继续</Text>
+                </TouchableOpacity>
+              </View>
             ) : !finished ? (
               <>
                 <View style={styles.inputRow}>
@@ -968,6 +1051,8 @@ const styles = StyleSheet.create({
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3,
   },
   headerSaveBtnText: { fontSize: 13, fontWeight: '700', color: AppColors.surface.whiteStrong },
+  draftRestoredBanner: { alignSelf: 'center', marginBottom: 10, backgroundColor: '#EAF7EE', borderWidth: 1, borderColor: '#B7E2C2', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  draftRestoredText: { color: '#287A43', fontSize: 12, fontWeight: '600' },
   headerHomeBtn: {
     backgroundColor: AppColors.bg.secondary, borderRadius: 999,
     paddingHorizontal: 12, paddingVertical: 7,
@@ -1174,6 +1259,9 @@ const styles = StyleSheet.create({
   finishedText: { fontSize: 13, color: '#16A34A', fontWeight: '600' },
 
   // Bottom bar
+  draftActionGroup: { gap: 8 },
+  saveDraftBtn: { alignItems: 'center', paddingVertical: 9 },
+  saveDraftBtnText: { color: '#8B5E3C', fontSize: 13, fontWeight: '700' },
   bottomBar: {
     backgroundColor: 'rgba(253,249,247,0.97)',
     borderTopWidth: 1, borderTopColor: AppColors.border.soft,

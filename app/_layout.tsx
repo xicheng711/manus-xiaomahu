@@ -164,6 +164,9 @@ export default function RootLayout() {
                 <Stack.Screen name="assistant" />
                 <Stack.Screen name="profile" />
                 <Stack.Screen name="share" />
+                {/* 编辑日记时禁用 iOS 左滑返回；用户必须通过页面内的保存/取消确认离开。 */}
+                <Stack.Screen name="diary-edit" options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
+                <Stack.Screen name="diary-detail" />
                 <Stack.Screen name="join" />
               </Stack>
             </WeatherProvider>

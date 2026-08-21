@@ -295,9 +295,13 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     if (!target) return;
 
     // ── Optimistic switch: 立即切换本地 UI，再后台刷新云端 ─────────────────────
-    // Step 1: 立即更新本地持久化状态
+    // Step 1: 先更新本地与云端当前房间指针，避免切换瞬间的任何写操作落到旧家庭。
     await setActiveFamilyId(familyId);
     setActiveRoomIdCache(familyId);
+    const serverRoomId = parseInt(familyId);
+    if (!isNaN(serverRoomId)) {
+      await setCloudSyncState({ activeRoomId: serverRoomId });
+    }
 
     // Step 2: 立即切换 UI（用缓存的 room 数据，不等待网络）
     const cachedMember =
@@ -308,13 +312,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     setActiveMembership({ ...target, room: target.room });
 
     // Step 3: 后台异步刷新云端数据（不阻塞 UI）
-    const serverRoomId = parseInt(familyId);
     ;(async () => {
-      // 同步 cloud activeRoomId
-      if (!isNaN(serverRoomId)) {
-        try { await setCloudSyncState({ activeRoomId: serverRoomId }); } catch {}
-      }
-
       // 拉取最新 room detail
       if (isNaN(serverRoomId)) return;
       try {

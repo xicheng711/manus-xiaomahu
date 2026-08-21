@@ -8,9 +8,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator } from '@/lib/storage';
+import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator, mergeCloudDiariesIntoLocal } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
+import { cloudGetDiaries, getCloudSyncState, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -45,9 +45,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
   const mood = MOOD_OPTIONS.find(m => m.emoji === entry.moodEmoji) || MOOD_OPTIONS[2];
   const cgMood = entry.caregiverMoodEmoji ? CAREGIVER_MOOD_MAP[entry.caregiverMoodEmoji] : null;
   const hasAiReply = !!entry.aiReply;
-  const aiPreview = entry.aiReply
-    ? entry.aiReply.length > 60 ? entry.aiReply.slice(0, 60) + '...' : entry.aiReply
-    : null;
+  const aiPreview = entry.aiReply ?? null;
   const timeStr = entry.localTimeStr || (entry.createdAt
     ? (() => { const d = new Date(entry.createdAt!); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })()
     : '');
@@ -117,7 +115,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
         )}
 
         {entry.content ? (
-          <Text style={styles.diaryContent} numberOfLines={2}>{entry.content}</Text>
+          <Text style={styles.diaryContent}>{entry.content}</Text>
         ) : null}
 
         {hasAiReply ? (
@@ -126,7 +124,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
               <Text style={styles.aiPreviewIcon}>🩺</Text>
               <Text style={styles.aiPreviewLabel}>小马虎护理回复</Text>
             </View>
-            <Text style={styles.aiPreviewText} numberOfLines={2}>{aiPreview}</Text>
+            <Text style={styles.aiPreviewText}>{aiPreview}</Text>
           </View>
         ) : null}
 
@@ -285,7 +283,7 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
               <TouchableOpacity key={e.id} style={calStyles.miniCard} onPress={() => onOpenEntry(e.id)} activeOpacity={0.8}>
                 <Text style={calStyles.miniMood}>{e.moodEmoji || '📔'}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={calStyles.miniContent} numberOfLines={2}>{e.content}</Text>
+                  <Text style={calStyles.miniContent}>{e.content}</Text>
                   {cg && (
                     <Text style={calStyles.miniCaregiverMood}>我的心情：{e.caregiverMoodEmoji} {cg.label}</Text>
                   )}
@@ -328,7 +326,7 @@ function DiaryScreenContent() {
   // 通知点击时传入 refresh 参数，触发强制刷新
   useEffect(() => {
     if (refreshParam) {
-      loadEntries();
+      loadEntries(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshParam]);
@@ -336,7 +334,7 @@ function DiaryScreenContent() {
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await loadEntries(); } finally { setRefreshing(false); }
+    try { await loadEntries(true); } finally { setRefreshing(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyId]);
 
@@ -347,33 +345,28 @@ function DiaryScreenContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyId]));
 
-  async function loadEntries() {
-    // 先显示本地缓存（先排序再显示，确保最新日记在最上面）
+  async function loadEntries(forceCloud = false) {
+    // 立即展示当前家庭的本地缓存；即使网络慢也不会出现空白或卡顿。
     const local = await getDiaryEntries(familyId);
-    if (local.length > 0) {
-      const localSorted = [...local].sort((a, b) => {
-        const ta = new Date(a.createdAt || a.date).getTime();
-        const tb = new Date(b.createdAt || b.date).getTime();
-        if (tb !== ta) return tb - ta;
-        const lta = a.localTimeStr || '00:00';
-        const ltb = b.localTimeStr || '00:00';
-        return ltb.localeCompare(lta);
-      });
-      setEntries(localSorted);
-    }
-    // 从云端拉取所有人的日记（主照顾者 + joiner），确保多设备同步
+    const localSorted = [...local].sort((a, b) => {
+      const ta = new Date(a.createdAt || a.date).getTime();
+      const tb = new Date(b.createdAt || b.date).getTime();
+      if (tb !== ta) return tb - ta;
+      return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
+    });
+    setEntries(localSorted);
+
+    const roomId = familyId ? Number(familyId) : NaN;
+    if (!Number.isFinite(roomId) || !await shouldRefreshCloudCache(roomId, 'diary', undefined, forceCloud)) return;
+
+    // 缓存过期、下拉刷新或通知点击时才校验云端，并安全合并而非覆盖本地完整对话。
     try {
-      const [cloudEntries, syncState] = await Promise.all([cloudGetDiaries(familyId ? Number(familyId) : undefined), getCloudSyncState()]);
-      const currentUserId = syncState.userId;
-      if (cloudEntries && cloudEntries.length > 0) {
-        // 将云端日记转换为本地格式并合并
-        const merged = mergeCloudDiaries(local, cloudEntries, currentUserId);
+      const cloudEntries = await cloudGetDiaries(roomId);
+      if (Array.isArray(cloudEntries)) {
+        const merged = await mergeCloudDiariesIntoLocal(cloudEntries, familyId);
         setEntries(merged);
-        // 同时写入本地缓存，下次打开时立即可见
-        const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-        const key = familyId ? `diary_entries:${familyId}` : 'diary_entries';
-        await AsyncStorage.setItem(key, JSON.stringify(merged));
       }
+      await markCloudCacheFresh(roomId, 'diary');
     } catch (e) {
       console.warn('[Diary] cloudGetDiaries failed, using local only:', e);
     }
@@ -1036,46 +1029,28 @@ function JoinerDiaryReadOnly() {
 
   useEffect(() => { fadeInUp(headerFade, headerSlide, { duration: 500 }); }, []);
   useFocusEffect(useCallback(() => {
-    // joiner 视角：从云端拉取全家庭日记（主照顾者 + 所有 joiner）
     async function loadJoinerEntries() {
+      // 始终只读取当前 active family 的 key，先让页面秒开。
       const local = await getDiaryEntries(familyId);
+      const localSorted = [...local].sort((a, b) => {
+        const ta = new Date(a.createdAt || a.date).getTime();
+        const tb = new Date(b.createdAt || b.date).getTime();
+        if (tb !== ta) return tb - ta;
+        return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
+      });
+      setEntries(localSorted);
+
+      const roomId = familyId ? Number(familyId) : NaN;
+      if (!Number.isFinite(roomId) || !await shouldRefreshCloudCache(roomId, 'diary')) return;
       try {
-        const [cloudEntries, syncState] = await Promise.all([
-          cloudGetDiaries(familyId ? Number(familyId) : undefined),
-          getCloudSyncState(),
-        ]);
-        if (cloudEntries && cloudEntries.length > 0) {
-          // 使用与主照顾者相同的合并逻辑，确保所有人的日记都显示
-          const merged = mergeJoinerDiaries(local, cloudEntries, syncState.userId);
+        const cloudEntries = await cloudGetDiaries(roomId);
+        if (Array.isArray(cloudEntries)) {
+          const merged = await mergeCloudDiariesIntoLocal(cloudEntries, familyId);
           setEntries(merged);
-          // 写入本地缓存
-          const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-          const key = familyId ? `diary_entries:${familyId}` : 'diary_entries';
-          await AsyncStorage.setItem(key, JSON.stringify(merged));
-        } else if (local.length > 0) {
-          // 本地缓存也要按时间降序排列
-          const localSorted = [...local].sort((a, b) => {
-            const ta = new Date(a.createdAt || a.date).getTime();
-            const tb = new Date(b.createdAt || b.date).getTime();
-            if (tb !== ta) return tb - ta;
-            const lta = a.localTimeStr || '00:00';
-            const ltb = b.localTimeStr || '00:00';
-            return ltb.localeCompare(lta);
-          });
-          setEntries(localSorted);
         }
+        await markCloudCacheFresh(roomId, 'diary');
       } catch {
-        if (local.length > 0) {
-          const localSorted = [...local].sort((a, b) => {
-            const ta = new Date(a.createdAt || a.date).getTime();
-            const tb = new Date(b.createdAt || b.date).getTime();
-            if (tb !== ta) return tb - ta;
-            const lta = a.localTimeStr || '00:00';
-            const ltb = b.localTimeStr || '00:00';
-            return ltb.localeCompare(lta);
-          });
-          setEntries(localSorted);
-        }
+        // 网络不可用时保留当前家庭的本地缓存。
       }
     }
     loadJoinerEntries();

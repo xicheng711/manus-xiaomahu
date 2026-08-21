@@ -162,6 +162,14 @@ export interface ConversationMessage {
   createdAt: string;
 }
 
+export interface DiaryDraft {
+  content: string;
+  selectedMood: number;
+  caregiverMoodIdx: number;
+  selectedTags: string[];
+  savedAt: string;
+}
+
 export interface DiaryEntry {
   id: string;
   date: string;
@@ -300,6 +308,7 @@ const KEYS = {
   CHECK_INS: 'daily_checkins_v2',
   MEDICATIONS: 'medications',
   DIARY: 'diary_entries',
+  DIARY_DRAFT: 'diary_draft_v1',
   FAMILY_ANNOUNCEMENTS: 'family_announcements_v1',
   BRIEFINGS: 'care_briefings_v1',
 } as const;
@@ -634,6 +643,121 @@ export async function deleteMedication(id: string, roomId?: string): Promise<voi
 
 // ─── Diary Entries ────────────────────────────────────────────────────────────
 
+/** 将云端日记统一为本地结构；保留服务器 ID 以便后续更新同一条记录。 */
+export function normalizeCloudDiaryEntry(diary: any): DiaryEntry {
+  const createdAt = diary.createdAt instanceof Date
+    ? diary.createdAt.toISOString()
+    : (typeof diary.createdAt === 'string' ? diary.createdAt : new Date().toISOString());
+  return {
+    id: `server_${diary.id}`,
+    serverDiaryId: Number(diary.id),
+    date: diary.date,
+    content: diary.content ?? '',
+    moodEmoji: diary.moodEmoji ?? '😊',
+    moodLabel: diary.moodLabel,
+    moodScore: diary.moodScore,
+    tags: Array.isArray(diary.tags) ? diary.tags : [],
+    caregiverMoodEmoji: diary.caregiverMoodEmoji,
+    caregiverMoodLabel: diary.caregiverMoodLabel,
+    aiReply: diary.aiReply,
+    aiEmoji: diary.aiEmoji,
+    aiTip: diary.aiTip,
+    conversation: Array.isArray(diary.conversation) ? diary.conversation : [],
+    conversationFinished: diary.conversationFinished ?? true,
+    localTimeStr: diary.localTimeStr,
+    authorName: diary.authorName ?? diary.author?.name,
+    authorUserId: diary.authorUserId,
+    createdAt,
+  };
+}
+
+function sortDiaryEntries(entries: DiaryEntry[]): DiaryEntry[] {
+  return [...entries].sort((a, b) => {
+    const ta = new Date(a.createdAt || a.date).getTime();
+    const tb = new Date(b.createdAt || b.date).getTime();
+    if (isNaN(ta) && isNaN(tb)) return 0;
+    if (isNaN(ta)) return 1;
+    if (isNaN(tb)) return -1;
+    if (tb !== ta) return tb - ta;
+    return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
+  });
+}
+
+/**
+ * 将云端日记合并到指定家庭的本地缓存。
+ * 不直接覆盖缓存：如果本地对话更多或本地已结束，说明刚保存的数据可能尚未上传，必须保留。
+ */
+export async function mergeCloudDiariesIntoLocal(cloudDiaries: any[], roomId?: string): Promise<DiaryEntry[]> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.DIARY, rid);
+  const localEntries = await getDiaryEntries(rid ?? undefined);
+  const localByServerId = new Map<number, DiaryEntry>();
+  localEntries.forEach(entry => {
+    if (entry.serverDiaryId) localByServerId.set(Number(entry.serverDiaryId), entry);
+  });
+
+  const cloudIds = new Set<number>();
+  const mergedCloudEntries = (cloudDiaries ?? []).map((raw: any) => {
+    const remote = normalizeCloudDiaryEntry(raw);
+    const remoteId = Number(remote.serverDiaryId);
+    cloudIds.add(remoteId);
+    const local = localByServerId.get(remoteId);
+    if (!local) return remote;
+
+    const localConversation = Array.isArray(local.conversation) ? local.conversation : [];
+    const remoteConversation = Array.isArray(remote.conversation) ? remote.conversation : [];
+    const conversation = localConversation.length > remoteConversation.length
+      ? localConversation
+      : remoteConversation;
+
+    return {
+      ...local,
+      ...remote,
+      // 保留本地 id，所有现有详情页路由和待同步操作仍能正确找到该条记录。
+      id: local.id,
+      conversation,
+      // 云端明确结束或本地已经结束都不能被较旧响应回滚。
+      conversationFinished: Boolean(local.conversationFinished || remote.conversationFinished),
+      // 本地的 AI 回复存在而云端暂未返回时，保留本地值。
+      aiReply: remote.aiReply ?? local.aiReply,
+      aiEmoji: remote.aiEmoji ?? local.aiEmoji,
+      aiTip: remote.aiTip ?? local.aiTip,
+    };
+  });
+
+  // 保留尚未取得 serverDiaryId 的本地新建/草稿日记，避免网络慢时被后台拉取丢失。
+  const localOnly = localEntries.filter(entry => !entry.serverDiaryId || !cloudIds.has(Number(entry.serverDiaryId)));
+  const merged = sortDiaryEntries([...mergedCloudEntries, ...localOnly]);
+  await AsyncStorage.setItem(key, JSON.stringify(merged));
+  return merged;
+}
+
+/** 读取当前家庭未发布日记草稿；草稿只保存在本机，不会推送或同步给其他成员。 */
+export async function getDiaryDraft(roomId?: string): Promise<DiaryDraft | null> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const raw = await AsyncStorage.getItem(roomKey(KEYS.DIARY_DRAFT, rid));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as DiaryDraft;
+  } catch {
+    return null;
+  }
+}
+
+/** 保存当前家庭的未发布日记草稿。 */
+export async function saveDiaryDraft(draft: Omit<DiaryDraft, 'savedAt'>, roomId?: string): Promise<DiaryDraft> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const saved: DiaryDraft = { ...draft, savedAt: new Date().toISOString() };
+  await AsyncStorage.setItem(roomKey(KEYS.DIARY_DRAFT, rid), JSON.stringify(saved));
+  return saved;
+}
+
+/** 发布或放弃草稿时清除；只影响当前家庭。 */
+export async function clearDiaryDraft(roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  await AsyncStorage.removeItem(roomKey(KEYS.DIARY_DRAFT, rid));
+}
+
 export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.DIARY, rid);
@@ -740,17 +864,7 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...data };
   // 写回前按 createdAt 降序重新排序，防止字段更新（如 serverDiaryId/conversationFinished）后破坏列表顺序
-  all.sort((a: DiaryEntry, b: DiaryEntry) => {
-    const ta = new Date(a.createdAt || a.date).getTime();
-    const tb = new Date(b.createdAt || b.date).getTime();
-    if (isNaN(ta) && isNaN(tb)) return 0;
-    if (isNaN(ta)) return 1;
-    if (isNaN(tb)) return -1;
-    if (tb !== ta) return tb - ta;
-    const lta = a.localTimeStr || '00:00';
-    const ltb = b.localTimeStr || '00:00';
-    return ltb.localeCompare(lta);
-  });
+  all.splice(0, all.length, ...sortDiaryEntries(all));
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // If the only field being updated is serverDiaryId (written back by saveDiaryEntry after cloud
   // creation), skip cloud sync entirely. Triggering a sync here would read the current local state
@@ -1298,6 +1412,7 @@ export async function clearScopedFamilyData(roomId: string): Promise<void> {
     roomKey(KEYS.CHECK_INS, roomId),
     roomKey(KEYS.MEDICATIONS, roomId),
     roomKey(KEYS.DIARY, roomId),
+    roomKey(KEYS.DIARY_DRAFT, roomId),
     roomKey(KEYS.FAMILY_ANNOUNCEMENTS, roomId),
     roomKey(KEYS.BRIEFINGS, roomId),
   ];

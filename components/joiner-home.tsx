@@ -16,9 +16,9 @@ import {
   getCurrentMember,
   saveFamilyAnnouncement,
   upsertCheckIn,
-  DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember,
+  DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember, mergeCloudDiariesIntoLocal,
 } from '@/lib/storage';
-import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements, cloudGetRoomDetail } from '@/lib/cloud-sync';
+import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements, cloudGetRoomDetail, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { TrendChart } from '@/components/trend-chart';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { SHADOWS } from '@/lib/animations';
@@ -340,7 +340,7 @@ function PostAnnouncementModal({ visible, onClose, onPosted, member }: {
   );
 }
 
-export function JoinerHomeScreen() {
+export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { memberships, activeMembership, switchFamily } = useFamilyContext();
@@ -369,7 +369,7 @@ export function JoinerHomeScreen() {
 
   const activeFamilyId = activeMembership?.familyId ?? null;
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceCloud = false) => {
     if (activeMembership) {
       setElderNickname(activeMembership.room.elderName || '家人');
       // 被照顾者头像：优先使用 elderPhotoUri（自定义上传的照片）
@@ -431,34 +431,37 @@ export function JoinerHomeScreen() {
       setZodiacEmoji(profile?.caregiverZodiacEmoji || member?.emoji || '👤');
     }
 
-     // joiner 视角：从云端拉取主照顾者的打卡、日记和老人档案
-    let checkIns: DailyCheckIn[] = [];
-    let diaries: DiaryEntry[] = [];
+    // Joiner 也先读取当前家庭的本地缓存；正常切换页面不会每次都等待云端。
+    let checkIns: DailyCheckIn[] = await getAllCheckIns(activeFamilyId || undefined);
+    let diaries: DiaryEntry[] = await getDiaryEntries(activeFamilyId || undefined);
     let creatorName = profile?.caregiverName || '照顾者';
-    try {
-      const roomIdNum = activeFamilyId ? parseInt(activeFamilyId) : undefined;
-      const [cloudCheckIns, cloudDiaries, cloudProfile] = await Promise.all([
-        cloudGetCheckIns(roomIdNum, 50),
-        cloudGetDiaries(roomIdNum, 50),
-        cloudGetElderProfile(),
-      ]);
-        checkIns = (cloudCheckIns && cloudCheckIns.length > 0)
-        ? cloudCheckIns as DailyCheckIn[]
-        : await getAllCheckIns(activeFamilyId || undefined);
-      diaries = (cloudDiaries && cloudDiaries.length > 0)
-        ? cloudDiaries as DiaryEntry[]
-        : await getDiaryEntries(activeFamilyId || undefined);
-      if (cloudProfile?.nickname) setElderNickname(cloudProfile.nickname);
-      if (cloudProfile?.elderPhotoUri) setElderPhotoUri(cloudProfile.elderPhotoUri);
-      // 被照顾者没有照片时，用 zodiacEmoji 显示生肖 emoji
-      if (cloudProfile?.zodiacEmoji && !cloudProfile?.elderPhotoUri) setElderEmoji(cloudProfile.zodiacEmoji);
-      if (cloudProfile?.caregiverName) {
-        creatorName = cloudProfile.caregiverName;
-        setCaregiverName(cloudProfile.caregiverName);
+    const roomIdNum = activeFamilyId ? parseInt(activeFamilyId) : undefined;
+    if (roomIdNum && !isNaN(roomIdNum) && await shouldRefreshCloudCache(roomIdNum, 'joiner-home', undefined, forceCloud)) {
+      try {
+        const [cloudCheckIns, cloudDiaries, cloudProfile] = await Promise.all([
+          cloudGetCheckIns(roomIdNum, 50),
+          cloudGetDiaries(roomIdNum, 50),
+          cloudGetElderProfile(roomIdNum),
+        ]);
+        if (Array.isArray(cloudCheckIns) && cloudCheckIns.length > 0) {
+          checkIns = cloudCheckIns as DailyCheckIn[];
+          await AsyncStorage.setItem(`daily_checkins_v2:${activeFamilyId}`, JSON.stringify(checkIns));
+        }
+        if (Array.isArray(cloudDiaries)) {
+          diaries = await mergeCloudDiariesIntoLocal(cloudDiaries, activeFamilyId || undefined);
+        }
+        if (cloudProfile?.nickname) setElderNickname(cloudProfile.nickname);
+        if (cloudProfile?.elderPhotoUri) setElderPhotoUri(cloudProfile.elderPhotoUri);
+        // 被照顾者没有照片时，用 zodiacEmoji 显示生肖 emoji
+        if (cloudProfile?.zodiacEmoji && !cloudProfile?.elderPhotoUri) setElderEmoji(cloudProfile.zodiacEmoji);
+        if (cloudProfile?.caregiverName) {
+          creatorName = cloudProfile.caregiverName;
+          setCaregiverName(cloudProfile.caregiverName);
+        }
+        await markCloudCacheFresh(roomIdNum, 'joiner-home');
+      } catch {
+        // 网络不可用时保持已展示的当前家庭本地缓存。
       }
-    } catch {
-      checkIns = await getAllCheckIns(activeFamilyId || undefined);
-      diaries = await getDiaryEntries(activeFamilyId || undefined);
     }
     // 跨时区设计：latestCheckIn 始终用最新的一条打卡（checkIns[0]）
     // 服务端按 date 降序返回，checkIns[0] 就是最新打卡，不受 Joiner 本地日期影响
@@ -546,8 +549,13 @@ export function JoinerHomeScreen() {
     } catch { setBriefingSummary(null); }
   }, [activeFamilyId]);
 
-  // 修复：只保留 useFocusEffect 一个加载入口（loadData deps=[activeFamilyId]，切换家庭时自动重新执行）
+  // 切换 Tab 时使用当前家庭缓存；缓存过期后才后台校验云端。
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  // 点击推送通知时跳过缓存，确保即使已停留在首页也能立刻看到最新数据。
+  useEffect(() => {
+    if (refreshToken) loadData(true);
+  }, [refreshToken, loadData]);
   // 仅在 activeFamilyId 变为 null 时清空 UI（不再重复调用 loadData）
   useEffect(() => {
     if (!activeFamilyId) {

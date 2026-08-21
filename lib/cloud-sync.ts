@@ -29,6 +29,60 @@ const SYNC_KEYS = {
   LAST_SYNC: 'cloud_last_sync',
 } as const;
 
+/**
+ * 本地缓存采用 stale-while-revalidate 策略：先显示当前家庭缓存，再按需刷新云端。
+ * 缓存时间必须携带 roomId，避免同一用户切换多个家庭后复用错误的刷新状态。
+ */
+const CACHE_FRESHNESS_PREFIX = 'cloud_cache_freshness_v1';
+export const DEFAULT_CACHE_MAX_AGE_MS = 45_000;
+
+function cacheFreshnessKey(roomId: number, scope: string): string {
+  return `${CACHE_FRESHNESS_PREFIX}:${roomId}:${scope}`;
+}
+
+/** 正常进入页面时仅在缓存过期后刷新；force=true 用于下拉刷新和通知跳转。 */
+export async function shouldRefreshCloudCache(
+  roomId: number | null | undefined,
+  scope: string,
+  maxAgeMs = DEFAULT_CACHE_MAX_AGE_MS,
+  force = false,
+): Promise<boolean> {
+  if (!roomId || force) return true;
+  try {
+    const raw = await AsyncStorage.getItem(cacheFreshnessKey(roomId, scope));
+    const refreshedAt = raw ? Number(raw) : 0;
+    return !Number.isFinite(refreshedAt) || Date.now() - refreshedAt >= maxAgeMs;
+  } catch {
+    // 缓存元数据读取失败时宁可刷新，保证数据正确性。
+    return true;
+  }
+}
+
+/** 仅在云端请求成功返回后写入新鲜度时间。 */
+export async function markCloudCacheFresh(roomId: number, scope: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(cacheFreshnessKey(roomId, scope), String(Date.now()));
+  } catch {
+    // 元数据写入失败不影响已展示的数据；下次自然会重新刷新。
+  }
+}
+
+/** 在家庭切换等场景下使缓存立即过期，下一次进入会重新校验云端。 */
+export async function invalidateCloudCache(roomId: number, scope?: string): Promise<void> {
+  try {
+    if (scope) {
+      await AsyncStorage.removeItem(cacheFreshnessKey(roomId, scope));
+      return;
+    }
+    const keys = await AsyncStorage.getAllKeys();
+    const prefix = `${CACHE_FRESHNESS_PREFIX}:${roomId}:`;
+    const targets = keys.filter(key => key.startsWith(prefix));
+    if (targets.length) await AsyncStorage.multiRemove(targets);
+  } catch {
+    // 不阻断用户操作；下次刷新仍会以本地/云端兜底。
+  }
+}
+
 let _trpcClient: any = null;
 
 /** Initialize the sync layer with the tRPC client */

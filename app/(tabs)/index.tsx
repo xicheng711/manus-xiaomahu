@@ -9,8 +9,8 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile } from '@/lib/storage';
-import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries } from '@/lib/cloud-sync';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal } from '@/lib/storage';
+import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiacFromDate } from '@/lib/zodiac';
 import { TrendChart } from '@/components/trend-chart';
@@ -449,12 +449,13 @@ function getPersonalizedSmartSuggestion(checkIn: DailyCheckIn): string {
 
 // ─── 主页面 ─────────────────────────────────────────────────────────────
 export default function HomeScreen() {
+  const params = useLocalSearchParams<{ refresh?: string }>();
   const { activeMembership, ready } = useFamilyContext();
 
   if (!ready) return null;
 
   if (activeMembership && activeMembership.role !== 'creator') {
-    return <JoinerHomeScreen />;
+    return <JoinerHomeScreen refreshToken={params.refresh} />;
   }
 
   return <CreatorHomeScreen />;
@@ -489,7 +490,8 @@ function CreatorHomeScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadData = useCallback(async () => {
+  // 本地数据先渲染；仅在缓存过期、手动下拉或通知跳转时请求云端。
+  const loadData = useCallback(async (forceCloud = false) => {
     // P1 fix: read from scoped profiles (family-scoped for elder, global for caregiver)
     // Fall back to legacy getProfile() only for setupComplete guard and missing fields.
     const [userProfile, familyProfile, legacyProfile] = await Promise.all([
@@ -586,7 +588,7 @@ function CreatorHomeScreen() {
     // 这样即使本地缓存为空（如退出登录后）也能展示最新数据
     if (fid) {
       const fidNum = Number(fid);
-      if (!isNaN(fidNum)) {
+      if (!isNaN(fidNum) && await shouldRefreshCloudCache(fidNum, 'home', undefined, forceCloud)) {
         Promise.all([
           cloudGetCheckIns(fidNum, 60),
           cloudGetDiaries(fidNum, 100),
@@ -667,30 +669,10 @@ function CreatorHomeScreen() {
             });
             await AsyncStorage.setItem(`daily_checkins_v2:${fid}`, JSON.stringify(localCheckIns));
           }
-          // 将云端日记数据写入本地缓存
-          if (Array.isArray(cloudDiaries) && cloudDiaries.length > 0) {
-            const localDiaries = cloudDiaries.map((d: any) => ({
-              id: `server_${d.id}`,
-              serverDiaryId: d.id,
-              date: d.date,
-              content: d.content ?? '',
-              moodEmoji: d.moodEmoji,
-              moodLabel: d.moodLabel,
-              moodScore: d.moodScore,
-              tags: d.tags ?? [],
-              caregiverMoodEmoji: d.caregiverMoodEmoji,
-              caregiverMoodLabel: d.caregiverMoodLabel,
-              aiReply: d.aiReply,
-              aiEmoji: d.aiEmoji,
-              aiTip: d.aiTip,
-              conversation: d.conversation ?? [],
-              conversationFinished: d.conversationFinished ?? true,
-              localTimeStr: d.localTimeStr,
-              authorName: d.authorName,
-              authorUserId: d.authorUserId,
-              createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
-            }));
-            await AsyncStorage.setItem(`diary_entries:${fid}`, JSON.stringify(localDiaries));
+          // 云端日记合并到当前家庭缓存，而不是直接覆盖。
+          // 这样网络慢时，本地更完整的对话和尚未拿到 serverDiaryId 的草稿也不会丢失。
+          if (Array.isArray(cloudDiaries)) {
+            await mergeCloudDiariesIntoLocal(cloudDiaries, fid);
           }
           // 重新读取本地数据更新 UI
           const [freshToday, freshAll, freshDiaries] = await Promise.all([
@@ -703,6 +685,7 @@ function CreatorHomeScreen() {
           setLatestCheckIn(freshToday ?? freshYesterday);
           setAllCheckIns(freshAll);
           setAllDiaryEntries(freshDiaries);
+          await markCloudCacheFresh(fidNum, 'home');
         }).catch(() => {
           // 云端拉取失败时不影响已显示的本地数据
         });
@@ -730,7 +713,7 @@ function CreatorHomeScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await loadData(); } finally { setRefreshing(false); }
+    try { await loadData(true); } finally { setRefreshing(false); }
   }, [loadData]);
 
   // 修复：只保留 useFocusEffect 一个加载入口，删除 useEffect([familyId]) 避免切换家庭时重复触发双重 IO
@@ -738,7 +721,7 @@ function CreatorHomeScreen() {
 
   // 点击通知时强制刷新
   useEffect(() => {
-    if (params.refresh) loadData();
+    if (params.refresh) loadData(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.refresh]);
 
@@ -944,7 +927,7 @@ function CreatorHomeScreen() {
           </View>
         </View>
 
-        <WeeklyEcho caregiverName={caregiverName} elderNickname={elderNickname} />
+        <WeeklyEcho caregiverName={caregiverName} elderNickname={elderNickname} familyId={activeMembership?.familyId} />
 
         {/* ── 暖心底部签名 ── */}
         <View style={styles.warmFooter}>

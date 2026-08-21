@@ -1593,6 +1593,8 @@ function CheckinScreenContent() {
             onChangeText={setMealCustom}
             placeholderTextColor="#B8BCC0"
             multiline
+            // React Native 0.81+: 明确要求回车插入换行，不提交、不失焦、不收起键盘。
+            submitBehavior="newline"
             blurOnSubmit={false}
             returnKeyType="default"
           />
