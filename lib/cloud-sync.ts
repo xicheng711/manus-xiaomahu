@@ -30,17 +30,19 @@ const SYNC_KEYS = {
 } as const;
 
 /**
- * 本地缓存采用 stale-while-revalidate 策略：先显示当前家庭缓存，再按需刷新云端。
+ * 本地缓存采用 stale-while-revalidate 策略：先显示当前家庭缓存，再在每次页面进入时后台校验云端。
+ * 因此页面不会因网络等待而卡顿，但重新打开时仍会获取最新数据。
  * 缓存时间必须携带 roomId，避免同一用户切换多个家庭后复用错误的刷新状态。
  */
 const CACHE_FRESHNESS_PREFIX = 'cloud_cache_freshness_v1';
-export const DEFAULT_CACHE_MAX_AGE_MS = 45_000;
+// 0 表示每次进入页面都后台拉取；本地缓存仍会先于网络结果立即显示。
+export const DEFAULT_CACHE_MAX_AGE_MS = 0;
 
 function cacheFreshnessKey(roomId: number, scope: string): string {
   return `${CACHE_FRESHNESS_PREFIX}:${roomId}:${scope}`;
 }
 
-/** 正常进入页面时仅在缓存过期后刷新；force=true 用于下拉刷新和通知跳转。 */
+/** 正常进入页面也会后台校验云端；force=true 用于通知跳转等需要明确跳过任何优化的场景。 */
 export async function shouldRefreshCloudCache(
   roomId: number | null | undefined,
   scope: string,
