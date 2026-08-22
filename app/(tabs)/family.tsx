@@ -718,31 +718,52 @@ export default function FamilyScreen() {
     setElderNickname(profile?.nickname || profile?.name || '家人');
     setElderEmoji(profile?.zodiacEmoji || '🐯');
 
-    // Build briefing history (today + past 6 days)
-    // 新逻辑：简报只展示有晚间打卡（eveningDone）的日期
-    // 今日始终显示（即使还没有晚间打卡）
+    // Build briefing history: always show the latest 3 calendar days.
+    // DailyCheckIn.date is the caregiver device's local calendar date. When a Joiner is
+    // in another timezone, the caregiver's newest date can be one day ahead, so use the
+    // newest of the viewer's local date and the latest recorded check-in date as the anchor.
     const checkInMap = new Map<string, DailyCheckIn>();
     for (const ci of allCheckIns) { checkInMap.set(ci.date, ci); }
 
+    const viewerTodayKey = todayStr();
+    const viewerTomorrow = new Date();
+    viewerTomorrow.setDate(viewerTomorrow.getDate() + 1);
+    const viewerTomorrowKey = `${viewerTomorrow.getFullYear()}-${String(viewerTomorrow.getMonth() + 1).padStart(2, '0')}-${String(viewerTomorrow.getDate()).padStart(2, '0')}`;
+    const latestRecordedDate = allCheckIns
+      .map(ci => ci.date)
+      .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
+      .sort((left, right) => right.localeCompare(left))[0];
+    // A real timezone difference can move the caregiver's date ahead by at most one day.
+    // Ignore dates further in the future so one malformed record cannot hide recent history.
+    const anchorDateKey = latestRecordedDate && latestRecordedDate > viewerTodayKey && latestRecordedDate <= viewerTomorrowKey
+      ? latestRecordedDate
+      : viewerTodayKey;
+    const [anchorYear, anchorMonth, anchorDay] = anchorDateKey.split('-').map(Number);
+    const anchorDate = new Date(anchorYear, anchorMonth - 1, anchorDay, 12);
+
+    const viewerYesterday = new Date();
+    viewerYesterday.setDate(viewerYesterday.getDate() - 1);
+    const viewerYesterdayKey = `${viewerYesterday.getFullYear()}-${String(viewerYesterday.getMonth() + 1).padStart(2, '0')}-${String(viewerYesterday.getDate()).padStart(2, '0')}`;
+
     const history: { date: string; label: string; checkIn: DailyCheckIn | null; diary: any; announcements: any[] }[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(anchorDate);
+      d.setDate(anchorDate.getDate() - i);
       const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const label = i === 0 ? '今日' : i === 1 ? '昨日' : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+      const label = dateKey === viewerTodayKey
+        ? '今日'
+        : dateKey === viewerYesterdayKey
+          ? '昨日'
+          : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
       const dayCheckIn = checkInMap.get(dateKey) || null;
       const dayDiary = diaryEntries.find(e => e.date === dateKey);
       const dayAnnouncements = a.filter(ann => ann.date === dateKey);
-      // 今日始终展示；历史日期只展示有晚间打卡的
-      if (i === 0 || dayCheckIn?.eveningDone) {
-        history.push({ date: dateKey, label, checkIn: dayCheckIn, diary: dayDiary, announcements: dayAnnouncements });
-      }
+      history.push({ date: dateKey, label, checkIn: dayCheckIn, diary: dayDiary, announcements: dayAnnouncements });
     }
     setBriefingHistory(history);
 
-    // Auto-select the most recent day with evening check-in data
-    const latestWithEvening = history.find(item => item.checkIn?.eveningDone);
-    const latestWithData = latestWithEvening || history[0]; // fallback to today
+    // Select the newest day that has any check-in data; otherwise show the first day.
+    const latestWithData = history.find(item => item.checkIn) || history[0];
     if (latestWithData) setSelectedBriefingDate(latestWithData.date);
 
     setLoading(false);
@@ -1074,13 +1095,11 @@ export default function FamilyScreen() {
                         <Text style={styles.briefingCardDate}>
                           {isToday
                             ? new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
-                            : item.date}
+                            : (() => {
+                                const [year, month, day] = item.date.split('-').map(Number);
+                                return new Date(year, month - 1, day, 12).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
+                              })()}
                         </Text>
-                        {!isToday && (
-                          <View style={styles.latestBadge}>
-                            <Text style={styles.latestBadgeText}>最新记录</Text>
-                          </View>
-                        )}
                       </View>
                     </View>
                   </View>
@@ -1100,11 +1119,17 @@ export default function FamilyScreen() {
                     <View style={styles.briefingDataGrid}>
                       <View style={styles.briefingDataBadge}>
                         <Text style={styles.briefingDataEmoji}>😴</Text>
-                        <Text style={styles.briefingDataValue}>{item.checkIn.sleepHours}h</Text>
+                        <Text style={styles.briefingDataValue}>
+                          {item.checkIn.morningDone && item.checkIn.sleepHours != null
+                            ? `${item.checkIn.sleepHours}h`
+                            : '未记录'}
+                        </Text>
                         <Text style={styles.briefingDataLabel}>睡眠</Text>
                       </View>
                       <View style={styles.briefingDataBadge}>
-                        <Text style={styles.briefingDataEmoji}>{item.checkIn.moodEmoji || '😊'}</Text>
+                        <Text style={styles.briefingDataEmoji}>
+                          {item.checkIn.eveningDone ? (item.checkIn.moodEmoji || '😊') : '—'}
+                        </Text>
                         <Text style={styles.briefingDataValue}>{item.checkIn.eveningDone ? '已记录' : '未记录'}</Text>
                         <Text style={styles.briefingDataLabel}>心情</Text>
                       </View>
@@ -1123,22 +1148,16 @@ export default function FamilyScreen() {
                 ) : (
                   <View style={styles.briefingEmpty}>
                     <Text style={styles.emptyEmoji}>🌙</Text>
-                    <Text style={styles.emptyText}>
-                      {isToday
-                        ? ((item.checkIn as DailyCheckIn | null)?.morningDone ? '晚间打卡后生成简报' : '今日尚未打卡')
-                        : '该日无晚间打卡记录'}
+                    <Text style={styles.emptyText}>{item.label}尚无打卡记录</Text>
+                    <Text style={styles.emptySubText}>
+                      {isCreator
+                        ? (isToday ? '完成打卡后，这里会自动显示护理简报' : '这一天没有保存早间或晚间打卡')
+                        : '主照顾者完成打卡后，这里会自动更新'}
                     </Text>
-                    {isToday && (
-                      <>
-                        <Text style={styles.emptySubText}>
-                          {(item.checkIn as DailyCheckIn | null)?.morningDone
-                            ? `睡眠已记录！完成晚间打卡后，${elderNickname}的今日简报就会自动生成`
-                            : '完成晚间打卡，记录心情、用药和饮食，就能看到今日完整简报'}
-                        </Text>
-                        <TouchableOpacity style={styles.goCheckinBtn} onPress={() => router.push('/(tabs)/checkin')}>
-                          <Text style={styles.goCheckinBtnText}>去完成晚间打卡 →</Text>
-                        </TouchableOpacity>
-                      </>
+                    {isToday && isCreator && (
+                      <TouchableOpacity style={styles.goCheckinBtn} onPress={() => router.push('/(tabs)/checkin')}>
+                        <Text style={styles.goCheckinBtnText}>去打卡 →</Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 )}
@@ -1168,14 +1187,16 @@ export default function FamilyScreen() {
                 </View>
 
                 {/* ── Actions ── */}
-                <View style={styles.briefingActions}>
-                  <TouchableOpacity style={styles.exportBtn} onPress={() => router.push(({ pathname: '/share', params: { date: item.date } }) as any)}>
-                    <Text style={styles.exportBtnText}>📋 查看简报</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.shareBtn, isGeneratingShare && { opacity: 0.6 }]} onPress={handleShareBriefing} disabled={isGeneratingShare}>
-                    <Text style={styles.shareBtnText}>{isGeneratingShare ? '⏳ 生成中...' : '📤 一键分享'}</Text>
-                  </TouchableOpacity>
-                </View>
+                {item.checkIn && (
+                  <View style={styles.briefingActions}>
+                    <TouchableOpacity style={styles.exportBtn} onPress={() => router.push(({ pathname: '/share', params: { date: item.date } }) as any)}>
+                      <Text style={styles.exportBtnText}>📋 查看简报</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.shareBtn, isGeneratingShare && { opacity: 0.6 }]} onPress={handleShareBriefing} disabled={isGeneratingShare}>
+                      <Text style={styles.shareBtnText}>{isGeneratingShare ? '⏳ 生成中...' : '📤 一键分享'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
               );
             })}
