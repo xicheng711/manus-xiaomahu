@@ -422,3 +422,25 @@ describe('Diary draft list management', () => {
     expect(diaryList).toContain('clearDiaryDraft(requestedFamilyId)');
   });
 });
+
+
+describe('Warm local-time Joiner greeting', () => {
+  const joinerHome = read('components/joiner-home.tsx');
+
+  it('uses the current family member name and the device local hour', () => {
+    expect(joinerHome).toContain('const h = new Date().getHours()');
+    expect(joinerHome).toContain('activeMembership?.room.members.find(member => member.id === activeMembership.myMemberId)');
+    expect(joinerHome).toContain('currentMember?.name?.trim()');
+    expect(joinerHome).toContain('`早上好，${userName}`');
+    expect(joinerHome).toContain('`中午好，${userName}`');
+    expect(joinerHome).toContain('`下午好，${userName}`');
+    expect(joinerHome).toContain('`晚上好，${userName}`');
+  });
+
+  it('separates the short title from the warm subtitle and keeps both on one line', () => {
+    expect(joinerHome).toContain('因为有你，每一天都充满爱 🌙');
+    expect(joinerHome).toContain('numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}');
+    expect(joinerHome).toContain('numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}');
+    expect(joinerHome).toContain('greetingBlock: { flex: 1, minWidth: 0, paddingRight: 12 }');
+  });
+});

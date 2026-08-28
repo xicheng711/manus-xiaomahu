@@ -589,14 +589,15 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     router.push({ pathname: '/onboarding', params: { fromProfile: '1', mode: 'create' } } as any);
   }
 
-  const greetingText = (() => {
+  const greeting = (() => {
     const h = new Date().getHours();
-    const name = elderNickname || '家人';
-    if (h < 6) return `${name}正在安睡，你的牵挂是最好的守护 💛`;
-    if (h < 11) return `新的一天，${name}有你的关心更温暖 ☀️`;
-    if (h < 14) return `午间小憩，记得也关心一下自己 🌿`;
-    if (h < 18) return `下午好，有你在${name}不孤单 🧡`;
-    return `晚上好，感谢每一天对${name}的惦念 🌙`;
+    const membershipMember = activeMembership?.room.members.find(member => member.id === activeMembership.myMemberId);
+    const userName = currentMember?.name?.trim() || membershipMember?.name?.trim() || '家人';
+    if (h < 5) return { title: `夜深了，${userName}`, subtitle: '你的牵挂，让每一天都被温柔守护 🌙' };
+    if (h < 11) return { title: `早上好，${userName}`, subtitle: '因为有你，新的一天也充满爱 ☀️' };
+    if (h < 14) return { title: `中午好，${userName}`, subtitle: '因为有你，平凡的日子也满是温暖 🌿' };
+    if (h < 18) return { title: `下午好，${userName}`, subtitle: '因为有你，每一天都充满爱 🧡' };
+    return { title: `晚上好，${userName}`, subtitle: '因为有你，每一天都充满爱 🌙' };
   })();
 
   const statusSummary = (() => {
@@ -649,13 +650,14 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.greetingBlock}>
             <View style={styles.dateRow}>
               <Text style={styles.dateText}>{todayLabel}</Text>
               <Text style={styles.lunarDot}>·</Text>
               <Text style={styles.lunarText}>{lunarDate.full}</Text>
             </View>
-            <Text style={styles.pageTitle}>{greetingText}</Text>
+            <Text style={styles.pageTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{greeting.title}</Text>
+            <Text style={styles.greetingSubtitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>{greeting.subtitle}</Text>
             {/* 家庭切换胶囊 — 与主照顾者首页保持一致 */}
             <TouchableOpacity
               onPress={() => memberships.length > 1 && setShowSwitcher(true)}
@@ -954,13 +956,15 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
 
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 20, paddingBottom: 18 },
+  greetingBlock: { flex: 1, minWidth: 0, paddingRight: 12 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   dateText: { fontSize: 12, fontWeight: '600', color: AppColors.text.tertiary, letterSpacing: 0.3 },
   lunarDot: { fontSize: 12, color: AppColors.border.soft },
   lunarText: { fontSize: 11, color: AppColors.peach.primary, fontWeight: '500' },
-  pageTitle: { fontSize: 18, fontWeight: '700', color: AppColors.purple.strong, letterSpacing: -0.2, lineHeight: 26, marginBottom: 10 },
+  pageTitle: { fontSize: 20, fontWeight: '800', color: AppColors.purple.strong, letterSpacing: -0.25, lineHeight: 27 },
+  greetingSubtitle: { marginTop: 3, fontSize: 13, fontWeight: '500', color: AppColors.text.secondary, lineHeight: 19 },
   familyPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10,
     backgroundColor: AppColors.green.soft,
     borderWidth: 1.5, borderColor: AppColors.green.primary,
     borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
