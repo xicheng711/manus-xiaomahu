@@ -366,6 +366,58 @@ export async function cloudGetDiaries(roomId?: number, limit = 100) {
   }
 }
 
+/** Record that the current family member opened a published diary. */
+export async function cloudMarkDiaryRead(diaryId: number, roomId?: number) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return null;
+  try {
+    const client = getClient();
+    return await client.family.markDiaryRead.mutate({ roomId: rid, diaryId });
+  } catch (e) {
+    console.warn('[CloudSync] markDiaryRead failed:', e);
+    return null;
+  }
+}
+
+/** Fetch readers and family comments for one diary. */
+export async function cloudGetDiaryInteractions(diaryId: number, roomId?: number) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return { readers: [], comments: [] };
+  try {
+    const client = getClient();
+    return await client.family.getDiaryInteractions.query({ roomId: rid, diaryId });
+  } catch (e) {
+    console.warn('[CloudSync] getDiaryInteractions failed:', e);
+    return { readers: [], comments: [] };
+  }
+}
+
+/** Add a family comment below a published diary. */
+export async function cloudAddDiaryComment(diaryId: number, content: string, roomId?: number) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return null;
+  try {
+    const client = getClient();
+    return await client.family.addDiaryComment.mutate({ roomId: rid, diaryId, content });
+  } catch (e) {
+    console.warn('[CloudSync] addDiaryComment failed:', e);
+    return null;
+  }
+}
+
+/** Fetch reader names and comment counts for diary list cards in one request. */
+export async function cloudGetDiaryInteractionSummaries(diaryIds: number[], roomId?: number) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid || diaryIds.length === 0) return [];
+  try {
+    const client = getClient();
+    return await client.family.getDiaryInteractionSummaries.query({ roomId: rid, diaryIds });
+  } catch (e) {
+    console.warn('[CloudSync] getDiaryInteractionSummaries failed:', e);
+    return [];
+  }
+}
+
 // ─── Announcement Sync ───────────────────────────────────────────────────────
 
 /** Post a family announcement */

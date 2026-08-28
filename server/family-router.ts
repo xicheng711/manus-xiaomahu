@@ -12,6 +12,8 @@ import {
   upsertElderProfile, getElderProfile,
   upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
   createDiaryEntry, updateDiaryEntry, getDiaryEntriesByRoom,
+  getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
+  getDiaryInteractionSummaries,
   createAnnouncement, getAnnouncementsByRoom,
   deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
@@ -524,6 +526,71 @@ export const familyRouter = router({
       return getDiaryEntriesByRoom(input.roomId, input.limit);
     }),
 
+  /** Mark a diary as read by the current family member (authors do not read-receipt themselves) */
+  markDiaryRead: protectedProcedure
+    .input(z.object({ roomId: z.number(), diaryId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const member = await requireRoomMember(userId, input.roomId);
+      const diary = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
+      if (!diary) throw new Error("日记不存在");
+      if (diary.authorUserId === userId) return { success: true, recorded: false };
+      await markDiaryRead({
+        roomId: input.roomId,
+        diaryId: input.diaryId,
+        readerUserId: userId,
+        readerName: member.name,
+        readerEmoji: member.emoji,
+      });
+      return { success: true, recorded: true };
+    }),
+
+  /** Get read receipts and family comments for one diary */
+  getDiaryInteractions: protectedProcedure
+    .input(z.object({ roomId: z.number(), diaryId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      await requireRoomMember(userId, input.roomId);
+      const diary = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
+      if (!diary) throw new Error("日记不存在");
+      return getDiaryInteractions(input.roomId, input.diaryId);
+    }),
+
+  /** Add a family comment below a published diary */
+  addDiaryComment: protectedProcedure
+    .input(z.object({
+      roomId: z.number(),
+      diaryId: z.number(),
+      content: z.string().trim().min(1).max(500),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const member = await requireRoomMember(userId, input.roomId);
+      const diary = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
+      if (!diary) throw new Error("日记不存在");
+      const comment = await addDiaryComment({
+        roomId: input.roomId,
+        diaryId: input.diaryId,
+        authorUserId: userId,
+        authorName: member.name,
+        authorEmoji: member.emoji,
+        content: input.content,
+      });
+      return { success: true, comment };
+    }),
+
+  /** Batch summaries used by diary cards (readers + comment count) */
+  getDiaryInteractionSummaries: protectedProcedure
+    .input(z.object({
+      roomId: z.number(),
+      diaryIds: z.array(z.number()).max(100),
+    }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      await requireRoomMember(userId, input.roomId);
+      return getDiaryInteractionSummaries(input.roomId, [...new Set(input.diaryIds)]);
+    }),
+
   // ─── Announcements ─────────────────────────────────────────────────────
 
   /** Post a family announcement / broadcast */
@@ -784,6 +851,9 @@ export const familyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
+      const announcementsInRoom = await getAnnouncementsByRoom(input.roomId, 200);
+      const targetAnnouncement = announcementsInRoom.find(a => a.id === input.announcementId);
+      if (!targetAnnouncement) throw new Error("公告不存在");
       const reactions = await toggleReaction(
         input.announcementId,
         member.id,
@@ -801,8 +871,8 @@ export const familyRouter = router({
         await notifyRoomMembers(
           input.roomId,
           userId,
-          `${senderName} 对你的公告回应了 ${input.emoji}`,
-          '点击查看家庭动态',
+          `${senderName} 对 ${targetAnnouncement.authorName || '家人'} 的公告回应了 ${input.emoji}`,
+          '点击查看这条家庭公告',
           { type: 'reaction', screen: 'family', announcementId: input.announcementId, roomId: input.roomId },
           'toggleReaction',
         );

@@ -468,10 +468,6 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     // 状态文字会显示打卡的实际日期，让 Joiner 知道是哪天的记录
     const _todayNow = new Date();
     const _todayKey = `${_todayNow.getFullYear()}-${String(_todayNow.getMonth() + 1).padStart(2, '0')}-${String(_todayNow.getDate()).padStart(2, '0')}`;
-    const _tmDate = new Date(_todayNow); _tmDate.setDate(_tmDate.getDate() + 1);
-    const _tmKey = `${_tmDate.getFullYear()}-${String(_tmDate.getMonth() + 1).padStart(2, '0')}-${String(_tmDate.getDate()).padStart(2, '0')}`;
-    const _ydDate = new Date(_todayNow); _ydDate.setDate(_ydDate.getDate() - 1);
-    const _ydKey = `${_ydDate.getFullYear()}-${String(_ydDate.getMonth() + 1).padStart(2, '0')}-${String(_ydDate.getDate()).padStart(2, '0')}`;
     // 始终显示最新打卡（checkIns[0]），不按 Joiner 本地日期过滤
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest); // 始终用最新打卡，状态文字会显示实际日期
@@ -525,12 +521,11 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
     }
     setLatestAnnounce(announcements[0] ?? null);
-    // 跨时区兼容：activity feed 也用最近3天范围匹配（今天/明天/昨天）
-    // 避免主照顾者和 Joiner 时区不同导致活动流显示为空
-    const _feedValidDates = new Set([_todayKey, _tmKey, _ydKey]);
-    const todayCheckIns = checkIns.filter(c => _feedValidDates.has(c.date)).slice(0, 2);
-    const todayDiaries = cleanDiaries.filter(d => _feedValidDates.has(d.date)).slice(0, 3);
-    const todayAnnouncements = announcements.filter(a => a.createdAt && _feedValidDates.has(a.createdAt.slice(0, 10))).slice(0, 2);
+    // 「今日活动记录」必须只显示今天，不再混入昨天或明天的记录。
+    // 所有共享记录都已经保存发布者写入的 YYYY-MM-DD date，因此统一按 date 精确匹配。
+    const todayCheckIns = checkIns.filter(c => c.date === _todayKey).slice(0, 2);
+    const todayDiaries = cleanDiaries.filter(d => d.date === _todayKey).slice(0, 3);
+    const todayAnnouncements = announcements.filter(a => a.date === _todayKey).slice(0, 2);
     setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));
     // 读取今日简报缓存
     try {
@@ -849,26 +844,30 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
           onCompose={() => router.push({ pathname: '/(tabs)/family', params: { openCompose: '1' } } as any)}
         />
 
-        {feed.length > 0 && (
-          <View style={styles.feedSection}>
-            <View style={styles.feedLabelRow}>
-              <Text style={styles.feedLabelIcon}>📋</Text>
-              <Text style={styles.feedSectionLabel}>今日活动记录</Text>
-            </View>
-            {feed.map((item, i) => (
-              <FeedRow
-                key={item.id}
-                item={item}
-                isLast={i === feed.length - 1}
-                onPress={item.type === 'diary' ? () => {
-                  const diaryId = item.id.replace('diary-', '');
-                  // joiner 和主照顾者都用同一页面查看日记
-                  router.push({ pathname: '/diary-edit', params: { id: diaryId } } as any);
-                } : undefined}
-              />
-            ))}
+        <View style={styles.feedSection}>
+          <View style={styles.feedLabelRow}>
+            <Text style={styles.feedLabelIcon}>📋</Text>
+            <Text style={styles.feedSectionLabel}>今日活动记录 · {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })}</Text>
           </View>
-        )}
+          {feed.length > 0 ? feed.map((item, i) => (
+            <FeedRow
+              key={item.id}
+              item={item}
+              isLast={i === feed.length - 1}
+              onPress={item.type === 'diary' ? () => {
+                const diaryId = item.id.replace('diary-', '');
+                // joiner 和主照顾者都用同一页面查看日记
+                router.push({ pathname: '/diary-edit', params: { id: diaryId } } as any);
+              } : undefined}
+            />
+          )) : (
+            <View style={styles.emptyFeed}>
+              <Text style={styles.emptyFeedEmoji}>📋</Text>
+              <Text style={styles.emptyFeedTitle}>今天暂无活动记录</Text>
+              <Text style={styles.emptyFeedSub}>当天的打卡、日记和公告会显示在这里</Text>
+            </View>
+          )}
+        </View>
 
         {/* 趋势图表 — 与主照顾者首页完全一致，显示被照顾者的睡眠/心情等趋势 */}
         {allCheckIns.length > 0 && (
@@ -880,13 +879,6 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
           />
         )}
 
-        {feed.length === 0 && !latestCheckIn && (
-          <View style={styles.emptyFeed}>
-            <Text style={styles.emptyFeedEmoji}>📋</Text>
-            <Text style={styles.emptyFeedTitle}>今日暂无更新</Text>
-            <Text style={styles.emptyFeedSub}>主要照顾者完成打卡后，{'\n'}这里会显示{elderNickname}的最新状况</Text>
-          </View>
-        )}
 
         {/* 只有当用户完全没有任何 membership（既未创建也未加入任何家庭）时，才显示创建家庭档案卡片。已加入家庭的 joiner 不应再看到此提示 */}
         {memberships.length === 0 && (

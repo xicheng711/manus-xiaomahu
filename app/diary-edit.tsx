@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
+import { DiaryInteractions } from '@/components/diary-interactions';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
@@ -28,6 +29,22 @@ import { AppColors, Gradients } from '@/lib/design-tokens';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SW = Dimensions.get('window').width;
+
+function formatDiaryPublishedLabel(entry?: DiaryEntry | null): string {
+  const dateStr = entry?.date || todayStr();
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
+    ? new Date(year, month - 1, day)
+    : new Date();
+  const dateLabel = date.toLocaleDateString('zh-CN', {
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+  });
+  const fallbackTime = entry?.createdAt
+    ? new Date(entry.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  const timeLabel = entry?.localTimeStr || fallbackTime;
+  return entry && timeLabel ? `${dateLabel} · ${timeLabel}` : dateLabel;
+}
 
 const MOOD_OPTIONS = [
   { emoji: '😄', label: '很开心', color: '#22C55E' },
@@ -207,8 +224,9 @@ function TagOption({ tag, selected, onPress }: { tag: string; selected: boolean;
 
 export default function DiaryEditScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; readOnly?: string }>();
+  const params = useLocalSearchParams<{ id?: string; readOnly?: string; fromDiary?: string }>();
   const existingId = params.id;
+  const fromDiaryList = params.fromDiary === '1';
   const { activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
   const [roleReadOnly, setRoleReadOnly] = useState(params.readOnly === '1');
@@ -471,14 +489,20 @@ export default function DiaryEditScreen() {
     content.trim() || selectedTags.length || caregiverMoodIdx >= 0 || selectedMood !== 0
   );
 
+  function returnToDiaryList() {
+    // 从日记列表 push 进来时使用 back，保留列表组件、展开状态和滚动位置。
+    if (fromDiaryList && router.canGoBack()) router.back();
+    else router.replace('/(tabs)/diary' as any);
+  }
+
   async function saveDraftAndLeave() {
     await saveDiaryDraft({ content, selectedMood, caregiverMoodIdx, selectedTags }, familyId);
-    router.replace('/(tabs)/diary' as any);
+    returnToDiaryList();
   }
 
   function requestLeaveEditor() {
     if (!hasUnsavedDraft) {
-      router.replace('/(tabs)/diary' as any);
+      returnToDiaryList();
       return;
     }
     Alert.alert(
@@ -491,7 +515,7 @@ export default function DiaryEditScreen() {
           style: 'destructive',
           onPress: () => {
             clearDiaryDraft(familyId).catch(() => {});
-            router.replace('/(tabs)/diary' as any);
+            returnToDiaryList();
           },
         },
         { text: '保存草稿', onPress: () => { saveDraftAndLeave().catch(() => {}); } },
@@ -504,7 +528,7 @@ export default function DiaryEditScreen() {
     await deleteDiaryEntry(entryId, familyId ?? undefined);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowDeleteModal(false);
-    router.replace('/(tabs)/diary' as any);
+    returnToDiaryList();
   }
 
   function toggleTag(tag: string) {
@@ -673,13 +697,16 @@ export default function DiaryEditScreen() {
       // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
       setFinished(true);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/(tabs)/diary' as any);
+      returnToDiaryList();
     } finally {
       setSaving(false);
     }
   }
 
   const shimmerTranslate = shimmerAnim.interpolate({ inputRange: [-1, 1], outputRange: [-300, 300] });
+  const interactionDiaryId = entryRef.current?.serverDiaryId
+    ?? (existingId && /^cloud_\d+$/.test(existingId) ? Number(existingId.replace('cloud_', '')) : null);
+  const interactionRoomId = familyId ? Number(familyId) : null;
 
   if (loadingEntry) {
     return (
@@ -692,7 +719,8 @@ export default function DiaryEditScreen() {
     );
   }
 
-  const todayLabel = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+  // 已有日记显示该日记的真实发布时间；只有新建日记才显示当前日期。
+  const publishedLabel = formatDiaryPublishedLabel(entryRef.current);
 
   return (
     <ScreenContainer containerClassName="bg-[#FAF8F5]">
@@ -746,7 +774,7 @@ export default function DiaryEditScreen() {
               {/* Date pill */}
               <View style={styles.datePillRow}>
                 <View style={styles.datePill}>
-                  <Text style={styles.datePillText}>📅 {todayLabel} ☀️</Text>
+                  <Text style={styles.datePillText}>📅 {publishedLabel} ☀️</Text>
                 </View>
               </View>
               {!submitted && draftRestoredAt ? (
@@ -918,6 +946,14 @@ export default function DiaryEditScreen() {
                 </View>
               )}
 
+              {/* 正式发布后显示阅读回执和家庭留言；作者本人不会被计入阅读者。 */}
+              {submitted && finished && (
+                <DiaryInteractions
+                  diaryId={interactionDiaryId}
+                  roomId={interactionRoomId}
+                />
+              )}
+
             </Animated.View>
           </ScrollView>
 
@@ -926,7 +962,7 @@ export default function DiaryEditScreen() {
             {isReadOnly ? (
               <View style={styles.finishedBottomBanner}>
                 <Text style={styles.finishedBottomText}>👀 只读模式</Text>
-                <TouchableOpacity onPress={() => router.replace('/(tabs)/diary' as any)}>
+                <TouchableOpacity onPress={returnToDiaryList}>
                   <Text style={styles.goBackText}>返回日记本 →</Text>
                 </TouchableOpacity>
               </View>
@@ -1001,7 +1037,7 @@ export default function DiaryEditScreen() {
             ) : (
               <View style={styles.finishedBottomBanner}>
                 <Text style={styles.finishedBottomText}>✅ 日记已保存</Text>
-                <TouchableOpacity onPress={() => router.replace('/(tabs)/diary' as any)}>
+                <TouchableOpacity onPress={returnToDiaryList}>
                   <Text style={styles.goBackText}>返回日记本 →</Text>
                 </TouchableOpacity>
               </View>

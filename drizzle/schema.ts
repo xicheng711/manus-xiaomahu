@@ -1,4 +1,4 @@
-import { int, float, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json } from "drizzle-orm/mysql-core";
+import { int, float, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, json, index, uniqueIndex } from "drizzle-orm/mysql-core";
 
 // ─── Users (existing) ────────────────────────────────────────────────────────
 
@@ -145,6 +145,40 @@ export const diaryEntries = mysqlTable("diary_entries", {
 
 export type DiaryEntry = typeof diaryEntries.$inferSelect;
 export type InsertDiaryEntry = typeof diaryEntries.$inferInsert;
+
+// ─── Diary Interactions ──────────────────────────────────────────────────────
+
+// 每位家庭成员对每篇日记只保留一条阅读回执（服务端以 diaryId + readerUserId 做幂等更新）
+export const diaryReads = mysqlTable("diary_reads", {
+  id: int("id").autoincrement().primaryKey(),
+  roomId: int("roomId").notNull(),
+  diaryId: int("diaryId").notNull(),
+  readerUserId: int("readerUserId").notNull(),
+  readerName: varchar("readerName", { length: 100 }).notNull(),
+  readerEmoji: varchar("readerEmoji", { length: 20 }).notNull(),
+  readAt: timestamp("readAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("uq_diary_reader").on(table.diaryId, table.readerUserId),
+  index("idx_diary_reads_room_diary").on(table.roomId, table.diaryId),
+]);
+export type DiaryRead = typeof diaryReads.$inferSelect;
+export type InsertDiaryRead = typeof diaryReads.$inferInsert;
+
+export const diaryComments = mysqlTable("diary_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  roomId: int("roomId").notNull(),
+  diaryId: int("diaryId").notNull(),
+  authorUserId: int("authorUserId").notNull(),
+  authorName: varchar("authorName", { length: 100 }).notNull(),
+  authorEmoji: varchar("authorEmoji", { length: 20 }).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("idx_diary_comments_room_diary").on(table.roomId, table.diaryId),
+  index("idx_diary_comments_created").on(table.createdAt),
+]);
+export type DiaryComment = typeof diaryComments.$inferSelect;
+export type InsertDiaryComment = typeof diaryComments.$inferInsert;
 
 // ─── Family Announcements ────────────────────────────────────────────────────
 

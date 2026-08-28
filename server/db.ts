@@ -5,6 +5,7 @@ import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _migrationDone = false;
+let _migrationPromise: Promise<void> | null = null;
 
 // Run lightweight schema migrations on first connect (idempotent ALTER TABLE IF NOT EXISTS)
 async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
@@ -38,6 +39,40 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
       console.warn(`[Database] Migration warning (${table}.${column}):`, e?.message ?? e);
     }
   }
+
+  // 日记互动表：CREATE TABLE IF NOT EXISTS 在 MySQL 8.0 可安全重复执行。
+  const tablesToCreate = [
+    `CREATE TABLE IF NOT EXISTS diary_reads (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      roomId INT NOT NULL,
+      diaryId INT NOT NULL,
+      readerUserId INT NOT NULL,
+      readerName VARCHAR(100) NOT NULL,
+      readerEmoji VARCHAR(20) NOT NULL,
+      readAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_diary_reader (diaryId, readerUserId),
+      KEY idx_diary_reads_room_diary (roomId, diaryId)
+    )`,
+    `CREATE TABLE IF NOT EXISTS diary_comments (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      roomId INT NOT NULL,
+      diaryId INT NOT NULL,
+      authorUserId INT NOT NULL,
+      authorName VARCHAR(100) NOT NULL,
+      authorEmoji VARCHAR(20) NOT NULL,
+      content TEXT NOT NULL,
+      createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_diary_comments_room_diary (roomId, diaryId),
+      KEY idx_diary_comments_created (createdAt)
+    )`,
+  ];
+  for (const statement of tablesToCreate) {
+    try {
+      await (db as any).execute(statement);
+    } catch (e: any) {
+      console.warn('[Database] Migration warning (diary interactions):', e?.message ?? e);
+    }
+  }
   console.log('[Database] Auto-migrations complete');
 }
 
@@ -46,13 +81,16 @@ export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
-      // Run auto-migrations on first connect (non-blocking, errors are logged not thrown)
-      runAutoMigrations(_db).catch(e => console.warn('[Database] Auto-migration failed:', e));
+      // 首次连接时等待轻量迁移完成，避免紧接着查询新表时出现 table not found。
+      _migrationPromise = runAutoMigrations(_db).catch(e => {
+        console.warn('[Database] Auto-migration failed:', e);
+      });
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
   }
+  if (_migrationPromise) await _migrationPromise;
   return _db;
 }
 

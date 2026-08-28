@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
+import { DiaryInteractions } from '@/components/diary-interactions';
 import { getDiaryEntryById, DiaryEntry, getProfile, getUserProfile, getFamilyProfile, formatDate } from '@/lib/storage';
 import { cloudGetDiaries } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
@@ -69,7 +70,14 @@ export default function DiaryDetailScreen() {
           // 剥离 cloud_ 前缀后再与云端数字 id 比较
           const numericId = String(id).replace(/^cloud_/, '');
           const matched = cloudEntries.find((ce: any) => String(ce.id) === numericId);
-          if (matched) e = matched as unknown as DiaryEntry;
+          if (matched) {
+            e = {
+              ...matched,
+              id: `cloud_${matched.id}`,
+              serverDiaryId: matched.id,
+              createdAt: matched.createdAt instanceof Date ? matched.createdAt.toISOString() : matched.createdAt,
+            } as DiaryEntry;
+          }
         } catch (err) {
           console.warn('[DiaryDetail] cloud fallback failed:', err);
         }
@@ -376,6 +384,12 @@ export default function DiaryDetailScreen() {
               )}
             </View>
           )}
+
+          <DiaryInteractions
+            diaryId={entry.serverDiaryId ?? (/^(?:cloud_)?\d+$/.test(String(id)) ? Number(String(id).replace('cloud_', '')) : null)}
+            roomId={familyId ? Number(familyId) : null}
+            enabled={entry.conversationFinished !== false}
+          />
 
           {/* Bottom actions */}
           <View style={styles.bottomActions}>

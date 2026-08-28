@@ -3,7 +3,7 @@
  * All family-related CRUD operations for cloud sync
  */
 
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, asc, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import {
   familyRooms, InsertFamilyRoom,
@@ -11,6 +11,8 @@ import {
   elderProfiles, InsertElderProfile,
   checkIns, InsertCheckIn,
   diaryEntries, InsertDiaryEntry,
+  diaryReads, InsertDiaryRead,
+  diaryComments, InsertDiaryComment,
   announcements, InsertAnnouncement,
   briefings, InsertBriefing,
   medications, InsertMedication,
@@ -213,6 +215,82 @@ export async function getDiaryEntriesByRoom(roomId: number, limit = 100) {
   return rows;
 }
 
+export async function getDiaryEntryForInteraction(roomId: number, diaryId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(diaryEntries)
+    .where(and(eq(diaryEntries.id, diaryId), eq(diaryEntries.roomId, roomId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function markDiaryRead(data: InsertDiaryRead) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // 唯一键 (diaryId, readerUserId) + upsert，确保页面重复挂载或并发请求不会生成重复回执。
+  await db.insert(diaryReads).values(data).onDuplicateKeyUpdate({
+    set: {
+      readerName: data.readerName,
+      readerEmoji: data.readerEmoji,
+      readAt: new Date(),
+    },
+  });
+  const rows = await db.select().from(diaryReads)
+    .where(and(eq(diaryReads.diaryId, data.diaryId!), eq(diaryReads.readerUserId, data.readerUserId!)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function getDiaryInteractions(roomId: number, diaryId: number) {
+  const db = await getDb();
+  if (!db) return { readers: [], comments: [] };
+  const [readers, comments] = await Promise.all([
+    db.select().from(diaryReads)
+      .where(and(eq(diaryReads.roomId, roomId), eq(diaryReads.diaryId, diaryId)))
+      .orderBy(desc(diaryReads.readAt)),
+    db.select().from(diaryComments)
+      .where(and(eq(diaryComments.roomId, roomId), eq(diaryComments.diaryId, diaryId)))
+      .orderBy(asc(diaryComments.createdAt), asc(diaryComments.id)),
+  ]);
+  return { readers, comments };
+}
+
+export async function addDiaryComment(data: InsertDiaryComment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(diaryComments).values(data);
+  const rows = await db.select().from(diaryComments)
+    .where(eq(diaryComments.id, result[0].insertId))
+    .limit(1);
+  return rows[0];
+}
+
+export async function getDiaryInteractionSummaries(roomId: number, diaryIds: number[]) {
+  const db = await getDb();
+  if (!db || diaryIds.length === 0) return [];
+  const [allReaders, allComments] = await Promise.all([
+    db.select().from(diaryReads).where(and(
+      eq(diaryReads.roomId, roomId),
+      inArray(diaryReads.diaryId, diaryIds),
+    )),
+    db.select().from(diaryComments).where(and(
+      eq(diaryComments.roomId, roomId),
+      inArray(diaryComments.diaryId, diaryIds),
+    )),
+  ]);
+  return diaryIds.map(diaryId => ({
+    diaryId,
+    readers: allReaders
+      .filter(reader => reader.diaryId === diaryId)
+      .map(reader => ({
+        readerUserId: reader.readerUserId,
+        readerName: reader.readerName,
+        readerEmoji: reader.readerEmoji,
+      })),
+    commentCount: allComments.filter(comment => comment.diaryId === diaryId).length,
+  }));
+}
+
 // ─── Announcements ───────────────────────────────────────────────────────────
 
 export async function createAnnouncement(data: InsertAnnouncement) {
@@ -317,6 +395,8 @@ export async function deleteFamilyRoom(roomId: number) {
   await db.delete(familyMembers).where(eq(familyMembers.roomId, roomId));
   await db.delete(elderProfiles).where(eq(elderProfiles.roomId, roomId));
   await db.delete(checkIns).where(eq(checkIns.roomId, roomId));
+  await db.delete(diaryReads).where(eq(diaryReads.roomId, roomId));
+  await db.delete(diaryComments).where(eq(diaryComments.roomId, roomId));
   await db.delete(diaryEntries).where(eq(diaryEntries.roomId, roomId));
   await db.delete(announcements).where(eq(announcements.roomId, roomId));
   await db.delete(briefings).where(eq(briefings.roomId, roomId));

@@ -10,7 +10,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator, mergeCloudDiariesIntoLocal } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries, getCloudSyncState, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
+import { cloudGetDiaries, cloudGetDiaryInteractionSummaries, getCloudSyncState, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -34,13 +34,25 @@ const CAREGIVER_MOOD_MAP: Record<string, { label: string; color: string }> = {
   '😤': { label: '快撑不住了', color: '#DC2626' },
 };
 
+type DiaryInteractionSummary = {
+  readers: { readerUserId: number; readerName: string; readerEmoji: string }[];
+  commentCount: number;
+};
+
+function getServerDiaryId(entry: DiaryEntry): number | null {
+  if (entry.serverDiaryId) return entry.serverDiaryId;
+  const match = String(entry.id).match(/^cloud_(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
 // ─── Diary Card ───────────────────────────────────────────────────────────────
-function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
+function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
   entry: DiaryEntry;
   onPress: () => void;
   onDelete: () => void;
   index: number;
   editMode: boolean;
+  interaction?: DiaryInteractionSummary;
 }) {
   const mood = MOOD_OPTIONS.find(m => m.emoji === entry.moodEmoji) || MOOD_OPTIONS[2];
   const cgMood = entry.caregiverMoodEmoji ? CAREGIVER_MOOD_MAP[entry.caregiverMoodEmoji] : null;
@@ -116,6 +128,20 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode }: {
 
         {entry.content ? (
           <Text style={styles.diaryContent} numberOfLines={3}>{entry.content}</Text>
+        ) : null}
+
+        {interaction && (interaction.readers.length > 0 || interaction.commentCount > 0) ? (
+          <View style={styles.interactionSummaryRow}>
+            {interaction.readers.length > 0 ? (
+              <Text style={styles.interactionSummaryText} numberOfLines={1}>
+                👀 已被 {interaction.readers.slice(0, 2).map(reader => reader.readerName).join('、')}
+                {interaction.readers.length > 2 ? ` 等${interaction.readers.length}人` : ''} 阅读
+              </Text>
+            ) : <View style={{ flex: 1 }} />}
+            {interaction.commentCount > 0 ? (
+              <Text style={styles.interactionCommentCount}>💬 {interaction.commentCount} 条留言</Text>
+            ) : null}
+          </View>
         ) : null}
 
         {hasAiReply ? (
@@ -298,12 +324,16 @@ function CalendarView({ entries, onOpenEntry }: { entries: DiaryEntry[]; onOpenE
   );
 }
 
+// 在同一次 App 运行中按家庭保存日记列表滚动位置；打开详情再返回时恢复到原处。
+const diaryListScrollOffsets = new Map<string, number>();
+
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function DiaryScreenContent() {
   const router = useRouter();
   const { activeMembership } = useFamilyContext();
   const familyId = activeMembership?.familyId;
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [interactionSummaries, setInteractionSummaries] = useState<Record<number, DiaryInteractionSummary>>({});
   const [editMode, setEditMode] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; date: string } | null>(null);
@@ -311,6 +341,8 @@ function DiaryScreenContent() {
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const fabScale = useRef(new Animated.Value(1)).current;
   const fabBreath = useRef(new Animated.Value(1)).current;
+  const listScrollRef = useRef<ScrollView>(null);
+  const listKey = familyId || 'legacy';
 
   useEffect(() => {
     fadeInUp(headerFade, headerSlide, { duration: 500 });
@@ -339,11 +371,33 @@ function DiaryScreenContent() {
   }, [familyId]);
 
   useFocusEffect(useCallback(() => {
-    loadEntries();
+    const savedOffset = diaryListScrollOffsets.get(listKey) ?? 0;
+    loadEntries().finally(() => {
+      // 等列表完成渲染后恢复到用户打开日记前的位置。
+      setTimeout(() => listScrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 80);
+    });
     setEditMode(false);
-    setShowAll(false);
+    // 不重置 showAll：否则从下方日记返回时列表折叠，滚动位置也会丢失。
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyId]));
+  }, [familyId, listKey]));
+
+  async function loadInteractionSummaries(list: DiaryEntry[]) {
+    const roomId = familyId ? Number(familyId) : NaN;
+    const diaryIds = list.map(getServerDiaryId).filter((id): id is number => Number.isFinite(id));
+    if (!Number.isFinite(roomId) || diaryIds.length === 0) {
+      setInteractionSummaries({});
+      return;
+    }
+    const rows = await cloudGetDiaryInteractionSummaries([...new Set(diaryIds)], roomId);
+    const next: Record<number, DiaryInteractionSummary> = {};
+    rows.forEach((row: any) => {
+      next[row.diaryId] = {
+        readers: Array.isArray(row.readers) ? row.readers : [],
+        commentCount: Number(row.commentCount || 0),
+      };
+    });
+    setInteractionSummaries(next);
+  }
 
   async function loadEntries(forceCloud = false) {
     // 立即展示当前家庭的本地缓存；即使网络慢也不会出现空白或卡顿。
@@ -355,6 +409,7 @@ function DiaryScreenContent() {
       return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
     });
     setEntries(localSorted);
+    loadInteractionSummaries(localSorted).catch(() => {});
 
     const roomId = familyId ? Number(familyId) : NaN;
     if (!Number.isFinite(roomId) || !await shouldRefreshCloudCache(roomId, 'diary', undefined, forceCloud)) return;
@@ -365,6 +420,7 @@ function DiaryScreenContent() {
       if (Array.isArray(cloudEntries)) {
         const merged = await mergeCloudDiariesIntoLocal(cloudEntries, familyId);
         setEntries(merged);
+        loadInteractionSummaries(merged).catch(() => {});
       }
       await markCloudCacheFresh(roomId, 'diary');
     } catch (e) {
@@ -482,12 +538,12 @@ function DiaryScreenContent() {
 
   function openDetail(entryId: string) {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({ pathname: '/diary-edit', params: { id: entryId } } as any);
+    router.push({ pathname: '/diary-edit', params: { id: entryId, fromDiary: '1' } } as any);
   }
 
   function openNewEntry() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push({ pathname: '/diary-edit' } as any);
+    router.push({ pathname: '/diary-edit', params: { fromDiary: '1' } } as any);
   }
 
   function confirmDelete(entryId: string, entryDate: string) {
@@ -518,8 +574,13 @@ function DiaryScreenContent() {
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
       <ScrollView
+        ref={listScrollRef}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          diaryListScrollOffsets.set(listKey, event.nativeEvent.contentOffset.y);
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -598,6 +659,7 @@ function DiaryScreenContent() {
                   onDelete={() => confirmDelete(entry.id, entry.date)}
                   index={i}
                   editMode={editMode}
+                  interaction={getServerDiaryId(entry) ? interactionSummaries[getServerDiaryId(entry)!] : undefined}
                 />
               ))}
 
@@ -658,6 +720,7 @@ function DiaryScreenContent() {
                             onDelete={() => confirmDelete(entry.id, entry.date)}
                             index={i}
                             editMode={false}
+                            interaction={getServerDiaryId(entry) ? interactionSummaries[getServerDiaryId(entry)!] : undefined}
                           />
                         ))}
                       </View>
@@ -833,6 +896,12 @@ const styles = StyleSheet.create({
   },
   tagText: { fontSize: 11, color: COLORS.textSecondary, fontWeight: '500' },
   diaryContent: { fontSize: 14, color: COLORS.text, lineHeight: 20, marginBottom: 8 },
+  interactionSummaryRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 8, marginBottom: 9, paddingTop: 2,
+  },
+  interactionSummaryText: { flex: 1, fontSize: 11, lineHeight: 16, color: '#93878B' },
+  interactionCommentCount: { fontSize: 11, lineHeight: 16, color: '#A66B7E', fontWeight: '600' },
   aiPreviewBox: {
     backgroundColor: AppColors.purple.soft, borderRadius: 10, padding: 10, marginTop: 4,
   },
