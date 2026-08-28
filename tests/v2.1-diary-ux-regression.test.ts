@@ -248,7 +248,7 @@ describe('Family-scoped cache recovery beyond diaries', () => {
     expect(storage).toContain('serverMedId?: number');
     expect(storage).toContain('syncPending?: boolean');
     expect(storage).toContain('export async function syncPendingMedications');
-    expect(storage).toContain('cloudDeleteMedication(medicationServerId(target)');
+    expect(storage).toContain('cloudDeleteMedication(serverId, target.name, Number(rid), deleteEvent)');
   });
 
   it('distinguishes empty cloud data from network failures for cached family content', () => {
@@ -335,5 +335,90 @@ describe('Final family-profile and cache contract safeguards', () => {
     expect(auth).toContain('active?.familyId ? getFamilyProfile(active.familyId)');
     expect(storage).toContain('const matched = userId ? remoteEntries.find');
     expect(storage).not.toContain('remote.authorName === entry.authorName');
+  });
+});
+
+
+describe('Diary comment composer and author-owned deletion', () => {
+  const interactions = read('components/diary-interactions.tsx');
+  const diaryEdit = read('app/diary-edit.tsx');
+  const diaryDetail = read('app/diary-detail.tsx');
+  const router = read('server/family-router.ts');
+  const familyDb = read('server/family-db.ts');
+
+  it('keeps the multiline comment composer visible above the keyboard without an artificial length cap', () => {
+    expect(interactions).toContain('submitBehavior="newline"');
+    expect(interactions).toContain('onInputFocus?.()');
+    expect(interactions).not.toContain('maxLength={500}');
+    expect(router).not.toContain('content: z.string().trim().min(1).max(500)');
+    expect(diaryEdit).toContain('onInputFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}');
+    expect(diaryDetail).toContain("behavior={Platform.OS === 'ios' ? 'padding' : 'height'}");
+  });
+
+  it('only exposes and executes delete for the comment author within the same family', () => {
+    expect(router).toContain('canDelete: comment.authorUserId === userId');
+    expect(router).toContain('deleteDiaryCommentByAuthor(input.roomId, input.commentId, userId)');
+    expect(familyDb).toContain('eq(diaryComments.roomId, roomId)');
+    expect(familyDb).toContain('eq(diaryComments.authorUserId, authorUserId)');
+    expect(interactions).toContain('comment.canDelete ?');
+    expect(interactions).toContain('cloudDeleteDiaryComment(comment.id, roomId)');
+  });
+});
+
+describe('Medication adjustment history', () => {
+  const schema = read('drizzle/schema.ts');
+  const db = read('server/db.ts');
+  const router = read('server/family-router.ts');
+  const storage = read('lib/storage.ts');
+  const medication = read('app/(tabs)/medication.tsx');
+  const history = read('components/medication-history.tsx');
+
+  it('persists an idempotent family-scoped medication timeline on the server', () => {
+    expect(schema).toContain('mysqlTable("medication_changes"');
+    expect(schema).toContain('uniqueIndex("uq_medication_change_event")');
+    expect(db).toContain('CREATE TABLE IF NOT EXISTS medication_changes');
+    expect(router).toContain('getMedicationChanges: protectedProcedure');
+    expect(router).toContain('recordMedicationChange({');
+  });
+
+  it('records what changed, why, when, and who changed it for all key medication actions', () => {
+    expect(storage).toContain('previousSnapshot?: MedicationSnapshot | null');
+    expect(storage).toContain('nextSnapshot?: MedicationSnapshot | null');
+    expect(medication).toContain("changeType: 'updated'");
+    expect(medication).toContain("changeType: 'added'");
+    expect(medication).toContain("changeType: nextMedication.active ? 'resumed' : 'paused'");
+    expect(medication).toContain("changeType: 'deleted'");
+    expect(medication).toContain('本次调整原因 *');
+    expect(history).toContain('调整原因');
+    expect(history).toContain('最近更新：');
+  });
+
+  it('renders the cached timeline first, then merges the current family cloud history', () => {
+    expect(medication).toContain('getMedicationChanges(requestedFamilyId)');
+    expect(medication).toContain('cloudGetMedicationChanges(Number(requestedFamilyId))');
+    expect(medication).toContain('mergeCloudMedicationChanges(cloudChanges, requestedFamilyId)');
+    expect(storage).toContain("MEDICATION_CHANGES: 'medication_changes_v1'");
+    expect(storage).toContain('syncPending?: boolean');
+  });
+});
+
+describe('Diary draft list management', () => {
+  const storage = read('lib/storage.ts');
+  const diaryList = read('app/(tabs)/diary.tsx');
+
+  it('separates unfinished drafts from published diaries and clearly states their privacy', () => {
+    expect(diaryList).toContain('const conversationDrafts = entries.filter(entry => entry.conversationFinished === false)');
+    expect(diaryList).toContain('const publishedEntries = entries.filter(entry => entry.conversationFinished !== false)');
+    expect(diaryList).toContain('📝 我的草稿');
+    expect(diaryList).toContain('尚未发布 · 家人看不到');
+    expect(diaryList).toContain('草稿 · 仅自己可见');
+  });
+
+  it('shows last edited time and lets the author continue or delete a family-scoped draft', () => {
+    expect(storage).toContain('updatedAt?: string');
+    expect(storage).toContain("updatedAt: data.updatedAt ?? new Date().toISOString()");
+    expect(diaryList).toContain('最后编辑：{formatDraftTime(savedAt)}');
+    expect(diaryList).toContain('onContinue={openNewEntry}');
+    expect(diaryList).toContain('clearDiaryDraft(requestedFamilyId)');
   });
 });

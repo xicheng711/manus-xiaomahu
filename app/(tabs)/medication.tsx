@@ -1,21 +1,26 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Alert, Platform, Animated, Easing, Keyboard, RefreshControl,
+  StyleSheet, Alert, Platform, Animated, Easing, RefreshControl,
+  KeyboardAvoidingView, Modal,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getMedications, saveMedication, saveMedications, updateMedication, deleteMedication, syncPendingMedications, Medication, getProfile, getFamilyProfile, CareNeedType, CareNeedsProfile } from '@/lib/storage';
-import { cloudGetMedications } from '@/lib/cloud-sync';
+import {
+  getMedications, saveMedication, saveMedications, updateMedication, deleteMedication,
+  syncPendingMedications, Medication, MedicationChangeEvent, getMedicationChanges,
+  mergeCloudMedicationChanges, createMedicationChangeEvent, medicationSnapshot,
+  getProfile, getFamilyProfile,
+} from '@/lib/storage';
+import { cloudGetMedications, cloudGetMedicationChanges } from '@/lib/cloud-sync';
+import { MedicationHistory } from '@/components/medication-history';
 import { useFamilyContext } from '@/lib/family-context';
-import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
-import { AppColors, Gradients } from '@/lib/design-tokens';
+import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
-import { scheduleMedicationMorningEvening, scheduleMedicationReminder, cancelMedicationReminder } from '@/lib/notifications';
+import { scheduleMedicationReminder, cancelMedicationReminder } from '@/lib/notifications';
 
 const TIMES = ['06:00','07:00','07:30','08:00','08:30','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
 const FREQUENCIES = ['每天一次', '每天两次', '每天三次', '每隔一天', '每周一次', '需要时服用'];
@@ -99,9 +104,10 @@ function MedicationScreenContent() {
   const activeFamilyRef = useRef<string | undefined>(familyId);
   activeFamilyRef.current = familyId;
   const isCreator = activeMembership?.role === 'creator';
+  const currentMemberName = activeMembership?.room.members.find(member => member.id === activeMembership.myMemberId)?.name || '主照顾者';
   const [meds, setMeds] = useState<Medication[]>([]);
+  const [medicationChanges, setMedicationChanges] = useState<MedicationChangeEvent[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
-  const [careNeeds, setCareNeeds] = useState<CareNeedType[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingMed, setEditingMed] = useState<Medication | null>(null);
   const [name, setName] = useState('');
@@ -109,6 +115,10 @@ function MedicationScreenContent() {
   const [freqIdx, setFreqIdx] = useState(0);
   const [selectedTimes, setSelectedTimes] = useState<string[]>(['08:00']);
   const [notes, setNotes] = useState('');
+  const [changeReason, setChangeReason] = useState('');
+  const [pendingAction, setPendingAction] = useState<{ type: 'toggle' | 'delete'; med: Medication } | null>(null);
+  const [pendingActionReason, setPendingActionReason] = useState('');
+  const [actionSaving, setActionSaving] = useState(false);
   const [icon, setIcon] = useState('💊');
   const [reminderEnabled, setReminderEnabled] = useState(false);
 
@@ -135,32 +145,41 @@ function MedicationScreenContent() {
     const requestedFamilyId = familyId;
     if (!familyReady || !requestedFamilyId) {
       setMeds([]);
+      setMedicationChanges([]);
       return;
     }
 
     // 先显示当前家庭本地缓存，网络更新在后台完成。
     let local = await getMedications(requestedFamilyId);
+    let localChanges = await getMedicationChanges(requestedFamilyId);
     if (activeFamilyRef.current !== requestedFamilyId) return;
     setMeds(local);
+    setMedicationChanges(localChanges);
     if (isCreator) {
       await syncPendingMedications(requestedFamilyId).catch(() => {});
       local = await getMedications(requestedFamilyId);
+      localChanges = await getMedicationChanges(requestedFamilyId);
       if (activeFamilyRef.current !== requestedFamilyId) return;
       setMeds(local);
+      setMedicationChanges(localChanges);
     }
 
-    const [cloudMeds, fp, lp] = await Promise.all([
+    const [cloudMeds, cloudChanges, fp, lp] = await Promise.all([
       cloudGetMedications(Number(requestedFamilyId)),
+      cloudGetMedicationChanges(Number(requestedFamilyId)),
       getFamilyProfile(requestedFamilyId),
       getProfile(),
     ]);
     if (activeFamilyRef.current !== requestedFamilyId) return;
 
+    if (Array.isArray(cloudChanges)) {
+      const mergedChanges = await mergeCloudMedicationChanges(cloudChanges, requestedFamilyId);
+      if (activeFamilyRef.current === requestedFamilyId) setMedicationChanges(mergedChanges);
+    }
+
     if (Array.isArray(cloudMeds)) {
-      const remoteIds = new Set<number>();
       const mergedRemote: Medication[] = cloudMeds.map((remote: any) => {
         const serverMedId = Number(remote.id);
-        remoteIds.add(serverMedId);
         const existing = local.find(item => item.serverMedId === serverMedId)
           ?? local.find(item => !item.serverMedId && item.name === remote.name);
         return {
@@ -186,7 +205,6 @@ function MedicationScreenContent() {
 
     const allowLegacyFallback = memberships.length === 1;
     setElderNickname(fp?.nickname || fp?.name || activeMembership?.room.elderName || (allowLegacyFallback ? lp?.nickname || lp?.name : undefined) || '家人');
-    setCareNeeds(fp?.careNeeds?.selectedNeeds || (allowLegacyFallback ? lp?.careNeeds?.selectedNeeds : undefined) || []);
   }, [familyId, familyReady, memberships.length, activeMembership?.room.elderName, isCreator]);
 
   const handleRefresh = useCallback(async () => {
@@ -207,7 +225,7 @@ function MedicationScreenContent() {
   function resetForm() {
     setAdding(false);
     setEditingMed(null);
-    setName(''); setDosage(''); setFreqIdx(0); setSelectedTimes(['08:00']); setNotes(''); setIcon('💊'); setReminderEnabled(false);
+    setName(''); setDosage(''); setFreqIdx(0); setSelectedTimes(['08:00']); setNotes(''); setChangeReason(''); setIcon('💊'); setReminderEnabled(false);
   }
 
   function openEdit(med: Medication) {
@@ -218,6 +236,7 @@ function MedicationScreenContent() {
     setFreqIdx(FREQUENCIES.indexOf(med.frequency) >= 0 ? FREQUENCIES.indexOf(med.frequency) : 0);
     setSelectedTimes(med.times || ['08:00']);
     setNotes(med.notes || '');
+    setChangeReason('');
     setIcon(med.icon || '💊');
     setReminderEnabled(!!med.reminderEnabled);
     setAdding(true);
@@ -243,6 +262,11 @@ function MedicationScreenContent() {
     if (activeFamilyRef.current !== requestedFamilyId) return;
     const nickname = fp?.nickname || fp?.name || activeMembership?.room.elderName || (memberships.length === 1 ? lp?.nickname || lp?.name : undefined) || '家人';
 
+    if (editingMed && !changeReason.trim()) {
+      Alert.alert('请填写调整原因', '简单记录医生建议、身体反应或其他原因，方便家人以后回顾。');
+      return;
+    }
+
     if (editingMed) {
       // ── Edit existing ── (updateMedication 自带云端同步)
       const patch = {
@@ -254,7 +278,16 @@ function MedicationScreenContent() {
         icon,
         reminderEnabled,
       };
-      await updateMedication(editingMed.id, patch, requestedFamilyId);
+      const nextMedication = { ...editingMed, ...patch };
+      const changeEvent = createMedicationChangeEvent({
+        changeType: 'updated',
+        reason: changeReason,
+        previousSnapshot: medicationSnapshot(editingMed),
+        nextSnapshot: medicationSnapshot(nextMedication),
+        changedByName: currentMemberName,
+      });
+      await updateMedication(editingMed.id, patch, requestedFamilyId, changeEvent);
+      setMedicationChanges(previous => [changeEvent, ...previous.filter(item => item.eventId !== changeEvent.eventId)]);
       const updated = meds.map(m => m.id === editingMed.id ? { ...m, ...patch } : m);
       setMeds(updated);
       // handle reminders—差集算法：取消已删除的时间点，新增新时间点
@@ -281,7 +314,7 @@ function MedicationScreenContent() {
       }
     } else {
       // ── Add new ── (saveMedication 自带云端同步)
-      const newMed = await saveMedication({
+      const newMedicationData = {
         name: name.trim(),
         dosage: dosage.trim() || '按医嘱',
         frequency: FREQUENCIES[freqIdx],
@@ -290,7 +323,15 @@ function MedicationScreenContent() {
         icon,
         active: true,
         reminderEnabled,
-      }, requestedFamilyId);
+      };
+      const changeEvent = createMedicationChangeEvent({
+        changeType: 'added',
+        reason: changeReason,
+        nextSnapshot: medicationSnapshot(newMedicationData),
+        changedByName: currentMemberName,
+      });
+      const newMed = await saveMedication(newMedicationData, requestedFamilyId, changeEvent);
+      setMedicationChanges(previous => [changeEvent, ...previous.filter(item => item.eventId !== changeEvent.eventId)]);
       setMeds(prev => [...prev, newMed]);
       if (reminderEnabled) {
         for (const t of selectedTimes) {
@@ -304,31 +345,65 @@ function MedicationScreenContent() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
-  async function handleToggle(id: string) {
-    if (!isCreator) return; // joiner 无权限操作
+  function handleToggle(id: string) {
+    if (!isCreator) return;
     const target = meds.find(m => m.id === id);
     if (!target) return;
-    // updateMedication 自带云端同步
-    await updateMedication(id, { active: !target.active }, familyId);
-    setMeds(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPendingAction({ type: 'toggle', med: target });
+    setPendingActionReason('');
   }
 
-  async function handleDelete(id: string) {
-    if (!isCreator) return; // joiner 无权限操作
-    Alert.alert('删除药物', '确定要删除这个药物吗？', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除', style: 'destructive', onPress: async () => {
-          try {
-            await deleteMedication(id, familyId);
-            setMeds(prev => prev.filter(m => m.id !== id));
-          } catch (error: any) {
-            Alert.alert('删除失败', error?.message || '无法同步删除，请检查网络后重试');
-          }
-        }
+  function handleDelete(id: string) {
+    if (!isCreator) return;
+    const target = meds.find(m => m.id === id);
+    if (!target) return;
+    setPendingAction({ type: 'delete', med: target });
+    setPendingActionReason('');
+  }
+
+  async function confirmMedicationAction() {
+    const action = pendingAction;
+    const requestedFamilyId = familyId;
+    if (!action || !requestedFamilyId || actionSaving) return;
+    if (!pendingActionReason.trim()) {
+      Alert.alert('请填写原因', '这条说明会保存在用药调整记录里，帮助家人了解为什么发生变化。');
+      return;
+    }
+    setActionSaving(true);
+    try {
+      if (action.type === 'toggle') {
+        const nextMedication = { ...action.med, active: !action.med.active };
+        const changeEvent = createMedicationChangeEvent({
+          changeType: nextMedication.active ? 'resumed' : 'paused',
+          reason: pendingActionReason,
+          previousSnapshot: medicationSnapshot(action.med),
+          nextSnapshot: medicationSnapshot(nextMedication),
+          changedByName: currentMemberName,
+        });
+        await updateMedication(action.med.id, { active: nextMedication.active }, requestedFamilyId, changeEvent);
+        setMeds(previous => previous.map(item => item.id === action.med.id ? { ...item, active: nextMedication.active } : item));
+        setMedicationChanges(previous => [changeEvent, ...previous.filter(item => item.eventId !== changeEvent.eventId)]);
+      } else {
+        const changeEvent = createMedicationChangeEvent({
+          changeType: 'deleted',
+          reason: pendingActionReason,
+          previousSnapshot: medicationSnapshot(action.med),
+          nextSnapshot: null,
+          changedByName: currentMemberName,
+        });
+        await deleteMedication(action.med.id, requestedFamilyId, changeEvent);
+        setMeds(previous => previous.filter(item => item.id !== action.med.id));
+        const refreshedChanges = await getMedicationChanges(requestedFamilyId);
+        setMedicationChanges(refreshedChanges);
       }
-    ]);
+      setPendingAction(null);
+      setPendingActionReason('');
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error: any) {
+      Alert.alert('操作没有完成', error?.message || '请检查网络后重试，原用药记录仍然保留。');
+    } finally {
+      setActionSaving(false);
+    }
   }
 
   function toggleTime(t: string) {
@@ -342,6 +417,7 @@ function MedicationScreenContent() {
 
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={0}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#B07858" colors={['#B07858']} />}>
         {/* Header */}
         <Animated.View style={{ opacity: headerFade, transform: [{ translateY: headerSlide }] }}>
@@ -373,6 +449,10 @@ function MedicationScreenContent() {
               </Text>
             </View>
           </View>
+        )}
+
+        {(medicationChanges.length > 0 || meds.length > 0) && (
+          <MedicationHistory changes={medicationChanges} />
         )}
 
         {adding && (
@@ -430,7 +510,33 @@ function MedicationScreenContent() {
             </View>
 
             <Text style={styles.label}>备注（可选）</Text>
-            <TextInput style={styles.input} placeholder="例如：饭后服用、需要大量喝水..." value={notes} onChangeText={setNotes} placeholderTextColor={AppColors.text.tertiary} />
+            <TextInput
+              style={[styles.input, styles.multilineInput]}
+              placeholder="例如：饭后服用、需要大量喝水..."
+              value={notes}
+              onChangeText={setNotes}
+              placeholderTextColor={AppColors.text.tertiary}
+              multiline
+              returnKeyType="default"
+              submitBehavior="newline"
+              blurOnSubmit={false}
+              textAlignVertical="top"
+            />
+
+            <Text style={styles.label}>{editingMed ? '本次调整原因 *' : '开始用药原因（可选）'}</Text>
+            <TextInput
+              style={[styles.input, styles.multilineInput]}
+              placeholder={editingMed ? '例如：医生复诊后调整剂量、出现不适反应…' : '例如：医生新开药、出院后的新方案…'}
+              value={changeReason}
+              onChangeText={setChangeReason}
+              placeholderTextColor={AppColors.text.tertiary}
+              multiline
+              returnKeyType="default"
+              submitBehavior="newline"
+              blurOnSubmit={false}
+              textAlignVertical="top"
+            />
+            <Text style={styles.fieldHint}>保存后会进入家庭共享的用药调整记录，方便以后回顾。</Text>
 
             {/* Reminder Toggle */}
             <TouchableOpacity
@@ -502,6 +608,42 @@ function MedicationScreenContent() {
         ) : null}
 
       </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Modal transparent visible={!!pendingAction} animationType="fade" onRequestClose={() => !actionSaving && setPendingAction(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalBackdrop}>
+          <View style={styles.reasonModal}>
+            <Text style={styles.reasonModalEmoji}>{pendingAction?.type === 'delete' ? '🗂️' : pendingAction?.med.active ? '⏸️' : '▶️'}</Text>
+            <Text style={styles.reasonModalTitle}>
+              {pendingAction?.type === 'delete' ? '停止并移除这项用药？' : pendingAction?.med.active ? '暂停这项用药？' : '恢复这项用药？'}
+            </Text>
+            <Text style={styles.reasonModalSubtitle}>
+              请记录原因。家人以后可以在用药调整记录中看到这次变化。
+            </Text>
+            <TextInput
+              style={[styles.input, styles.actionReasonInput]}
+              value={pendingActionReason}
+              onChangeText={setPendingActionReason}
+              placeholder="例如：医生复诊后停药、暂时观察身体反应…"
+              placeholderTextColor={AppColors.text.tertiary}
+              multiline
+              returnKeyType="default"
+              submitBehavior="newline"
+              blurOnSubmit={false}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.reasonModalButtons}>
+              <TouchableOpacity style={styles.reasonCancelButton} disabled={actionSaving} onPress={() => { setPendingAction(null); setPendingActionReason(''); }}>
+                <Text style={styles.reasonCancelText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.reasonConfirmButton, actionSaving && { opacity: 0.55 }]} disabled={actionSaving} onPress={confirmMedicationAction}>
+                <Text style={styles.reasonConfirmText}>{actionSaving ? '保存中…' : '记录并确认'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -571,6 +713,8 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.bg.secondary, borderRadius: RADIUS.md, padding: 14,
     fontSize: 15, color: COLORS.text, borderWidth: 1.5, borderColor: AppColors.border.soft,
   },
+  multilineInput: { minHeight: 76, maxHeight: 150 },
+  fieldHint: { marginTop: 7, fontSize: 11, lineHeight: 17, color: AppColors.text.tertiary },
   iconRow: { flexDirection: 'row', marginBottom: 4 },
   iconOption: {
     width: 46, height: 46, borderRadius: RADIUS.md,
@@ -610,6 +754,17 @@ const styles = StyleSheet.create({
     ...SHADOWS.glow(COLORS.primary),
   },
   saveBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(45,35,38,0.38)', alignItems: 'center', justifyContent: 'center', padding: 22 },
+  reasonModal: { width: '100%', maxWidth: 440, borderRadius: 24, padding: 22, backgroundColor: '#FFFCFB', ...SHADOWS.lg },
+  reasonModalEmoji: { fontSize: 32, textAlign: 'center', marginBottom: 8 },
+  reasonModalTitle: { fontSize: 19, fontWeight: '800', color: COLORS.text, textAlign: 'center' },
+  reasonModalSubtitle: { marginTop: 8, marginBottom: 16, fontSize: 13, lineHeight: 20, color: COLORS.textSecondary, textAlign: 'center' },
+  actionReasonInput: { minHeight: 100, maxHeight: 180 },
+  reasonModalButtons: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  reasonCancelButton: { flex: 1, paddingVertical: 13, alignItems: 'center', borderRadius: 14, backgroundColor: AppColors.bg.secondary },
+  reasonCancelText: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary },
+  reasonConfirmButton: { flex: 1.7, paddingVertical: 13, alignItems: 'center', borderRadius: 14, backgroundColor: COLORS.primary },
+  reasonConfirmText: { fontSize: 14, fontWeight: '800', color: AppColors.surface.whiteStrong },
 
   // Med List
   medList: { gap: 12, marginBottom: 20 },

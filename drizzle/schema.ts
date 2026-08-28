@@ -241,3 +241,26 @@ export const medications = mysqlTable("medications", {
 
 export type Medication = typeof medications.$inferSelect;
 export type InsertMedication = typeof medications.$inferInsert;
+
+// ─── Medication Change History ───────────────────────────────────────────────
+
+export const medicationChanges = mysqlTable("medication_changes", {
+  id: int("id").autoincrement().primaryKey(),
+  roomId: int("roomId").notNull(),
+  medicationId: int("medicationId"),
+  eventId: varchar("eventId", { length: 100 }).notNull(),
+  changedByUserId: int("changedByUserId").notNull(),
+  changedByName: varchar("changedByName", { length: 100 }).notNull(),
+  changeType: varchar("changeType", { length: 30 }).notNull(),
+  reason: text("reason"),
+  previousSnapshot: json("previousSnapshot"),
+  nextSnapshot: json("nextSnapshot"),
+  changedAt: timestamp("changedAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("uq_medication_change_event").on(table.eventId),
+  index("idx_medication_changes_room_time").on(table.roomId, table.changedAt),
+  index("idx_medication_changes_medication").on(table.roomId, table.medicationId),
+]);
+
+export type MedicationChange = typeof medicationChanges.$inferSelect;
+export type InsertMedicationChange = typeof medicationChanges.$inferInsert;

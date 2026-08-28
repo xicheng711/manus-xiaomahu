@@ -16,6 +16,7 @@ import {
   announcements, InsertAnnouncement,
   briefings, InsertBriefing,
   medications, InsertMedication,
+  medicationChanges, InsertMedicationChange,
 } from "../drizzle/schema";
 
 // ─── Family Rooms ────────────────────────────────────────────────────────────
@@ -274,6 +275,25 @@ export async function addDiaryComment(data: InsertDiaryComment) {
   return rows[0];
 }
 
+export async function deleteDiaryCommentByAuthor(roomId: number, commentId: number, authorUserId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db.select({ id: diaryComments.id }).from(diaryComments)
+    .where(and(
+      eq(diaryComments.id, commentId),
+      eq(diaryComments.roomId, roomId),
+      eq(diaryComments.authorUserId, authorUserId),
+    ))
+    .limit(1);
+  if (!existing[0]) return false;
+  await db.delete(diaryComments).where(and(
+    eq(diaryComments.id, commentId),
+    eq(diaryComments.roomId, roomId),
+    eq(diaryComments.authorUserId, authorUserId),
+  ));
+  return true;
+}
+
 export async function getDiaryInteractionSummaries(roomId: number, diaryIds: number[]) {
   const db = await getDb();
   if (!db || diaryIds.length === 0) return [];
@@ -386,6 +406,27 @@ export async function getMedicationsByRoom(roomId: number) {
   return db.select().from(medications).where(eq(medications.roomId, roomId));
 }
 
+export async function recordMedicationChange(data: InsertMedicationChange) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(medicationChanges).values(data).onDuplicateKeyUpdate({
+    set: { eventId: data.eventId },
+  });
+  const rows = await db.select().from(medicationChanges)
+    .where(eq(medicationChanges.eventId, data.eventId))
+    .limit(1);
+  return rows[0];
+}
+
+export async function getMedicationChangesByRoom(roomId: number, limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(medicationChanges)
+    .where(eq(medicationChanges.roomId, roomId))
+    .orderBy(desc(medicationChanges.changedAt), desc(medicationChanges.id))
+    .limit(limit);
+}
+
 export async function deleteMedication(id: number, roomId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -416,6 +457,7 @@ export async function deleteFamilyRoom(roomId: number) {
   await db.delete(diaryEntries).where(eq(diaryEntries.roomId, roomId));
   await db.delete(announcements).where(eq(announcements.roomId, roomId));
   await db.delete(briefings).where(eq(briefings.roomId, roomId));
+  await db.delete(medicationChanges).where(eq(medicationChanges.roomId, roomId));
   await db.delete(medications).where(eq(medications.roomId, roomId));
   await db.delete(familyRooms).where(eq(familyRooms.id, roomId));
 }

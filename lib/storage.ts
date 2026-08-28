@@ -146,6 +146,32 @@ export interface DailyCheckIn {
   syncPending?: boolean;
 }
 
+export type MedicationChangeType = 'added' | 'updated' | 'paused' | 'resumed' | 'deleted';
+
+export interface MedicationSnapshot {
+  name: string;
+  dosage: string;
+  frequency: string;
+  times: string[];
+  notes: string;
+  icon: string;
+  active: boolean;
+  reminderEnabled?: boolean;
+}
+
+export interface MedicationChangeEvent {
+  id?: number;
+  eventId: string;
+  medicationId?: number | null;
+  changeType: MedicationChangeType;
+  reason?: string;
+  previousSnapshot?: MedicationSnapshot | null;
+  nextSnapshot?: MedicationSnapshot | null;
+  changedAt: string;
+  changedByName?: string;
+  syncPending?: boolean;
+}
+
 export interface Medication {
   id: string;
   /** 云端 medication 主键，用于更新和删除同一条记录。 */
@@ -162,6 +188,8 @@ export interface Medication {
   notificationIds?: string[];
   /** 仅本地使用：新增或修改尚未成功同步到云端。 */
   syncPending?: boolean;
+  /** 随当前药物等待云端确认的调整事件；eventId 使重试保持幂等。 */
+  pendingChanges?: MedicationChangeEvent[];
 }
 
 export interface ConversationMessage {
@@ -190,6 +218,8 @@ export interface DiaryEntry {
   moodScore?: number;
   tags?: string[];
   createdAt?: string;
+  /** 本地或云端最后一次修改时间，用于草稿与发布状态展示。 */
+  updatedAt?: string;
   caregiverMoodEmoji?: string;  // v5.0: 照顾者心情（从打卡移过来）
   caregiverMoodLabel?: string;
   serverDiaryId?: number;
@@ -320,6 +350,7 @@ const KEYS = {
   // Legacy (non-scoped) keys — kept for migration only:
   CHECK_INS: 'daily_checkins_v2',
   MEDICATIONS: 'medications',
+  MEDICATION_CHANGES: 'medication_changes_v1',
   DIARY: 'diary_entries',
   DIARY_DRAFT: 'diary_draft_v1',
   FAMILY_ANNOUNCEMENTS: 'family_announcements_v1',
@@ -635,6 +666,104 @@ function medicationServerId(med: Medication): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+export function medicationSnapshot(med: Partial<Medication>): MedicationSnapshot {
+  return {
+    name: med.name ?? '',
+    dosage: med.dosage ?? '',
+    frequency: med.frequency ?? '',
+    times: Array.isArray(med.times) ? [...med.times] : [],
+    notes: med.notes ?? '',
+    icon: med.icon ?? '💊',
+    active: med.active ?? true,
+    reminderEnabled: med.reminderEnabled ?? false,
+  };
+}
+
+export function createMedicationChangeEvent(params: {
+  changeType: MedicationChangeType;
+  reason?: string;
+  previousSnapshot?: MedicationSnapshot | null;
+  nextSnapshot?: MedicationSnapshot | null;
+  changedByName?: string;
+}): MedicationChangeEvent {
+  return {
+    eventId: `med_change_${generateId()}`,
+    changeType: params.changeType,
+    reason: params.reason?.trim() || undefined,
+    previousSnapshot: params.previousSnapshot ?? null,
+    nextSnapshot: params.nextSnapshot ?? null,
+    changedAt: new Date().toISOString(),
+    changedByName: params.changedByName,
+    syncPending: true,
+  };
+}
+
+function normalizeMedicationChange(change: any): MedicationChangeEvent {
+  const changedAt = change?.changedAt instanceof Date
+    ? change.changedAt.toISOString()
+    : (typeof change?.changedAt === 'string' ? change.changedAt : new Date().toISOString());
+  return {
+    id: Number.isFinite(Number(change?.id)) ? Number(change.id) : undefined,
+    eventId: String(change?.eventId ?? `legacy_${generateId()}`),
+    medicationId: Number.isFinite(Number(change?.medicationId)) ? Number(change.medicationId) : null,
+    changeType: change?.changeType ?? 'updated',
+    reason: change?.reason ?? undefined,
+    previousSnapshot: change?.previousSnapshot ?? null,
+    nextSnapshot: change?.nextSnapshot ?? null,
+    changedAt,
+    changedByName: change?.changedByName ?? undefined,
+    syncPending: change?.syncPending === true,
+  };
+}
+
+export async function getMedicationChanges(roomId?: string): Promise<MedicationChangeEvent[]> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const raw = await AsyncStorage.getItem(roomKey(KEYS.MEDICATION_CHANGES, rid));
+  if (!raw) return [];
+  try {
+    return (JSON.parse(raw) as any[])
+      .map(normalizeMedicationChange)
+      .sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+  } catch {
+    return [];
+  }
+}
+
+export async function saveMedicationChanges(changes: MedicationChangeEvent[], roomId?: string): Promise<void> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const deduped = new Map<string, MedicationChangeEvent>();
+  changes.forEach(change => deduped.set(change.eventId, normalizeMedicationChange(change)));
+  const sorted = [...deduped.values()]
+    .sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime())
+    .slice(0, 200);
+  await AsyncStorage.setItem(roomKey(KEYS.MEDICATION_CHANGES, rid), JSON.stringify(sorted));
+}
+
+export async function mergeCloudMedicationChanges(changes: any[], roomId: string): Promise<MedicationChangeEvent[]> {
+  const local = await getMedicationChanges(roomId);
+  const remote = changes.map(change => ({ ...normalizeMedicationChange(change), syncPending: false }));
+  const pendingOnly = local.filter(change => change.syncPending && !remote.some(item => item.eventId === change.eventId));
+  const merged = [...remote, ...pendingOnly];
+  await saveMedicationChanges(merged, roomId);
+  return getMedicationChanges(roomId);
+}
+
+async function savePendingMedicationChange(change: MedicationChangeEvent | undefined, roomId?: string) {
+  if (!change || !roomId) return;
+  const all = await getMedicationChanges(roomId);
+  await saveMedicationChanges([change, ...all], roomId);
+}
+
+async function markMedicationChangesSynced(eventIds: string[], serverRows: any[], roomId?: string) {
+  if (!roomId || eventIds.length === 0) return;
+  const current = await getMedicationChanges(roomId);
+  const serverByEventId = new Map((serverRows ?? []).map((row: any) => [String(row.eventId), normalizeMedicationChange(row)]));
+  const next = current.map(change => eventIds.includes(change.eventId)
+    ? { ...change, ...(serverByEventId.get(change.eventId) ?? {}), syncPending: false }
+    : change);
+  await saveMedicationChanges(next, roomId);
+}
+
 export async function getMedications(roomId?: string): Promise<Medication[]> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
@@ -656,21 +785,26 @@ export async function getMedications(roomId?: string): Promise<Medication[]> {
   return raw ? JSON.parse(raw) : [];
 }
 
-export async function saveMedication(data: Omit<Medication, 'id'>, roomId?: string): Promise<Medication> {
+export async function saveMedication(data: Omit<Medication, 'id'>, roomId?: string, changeEvent?: MedicationChangeEvent): Promise<Medication> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
   const all = await getMedications(rid ?? undefined);
-  const med: Medication = { id: generateId(), ...data, syncPending: true };
+  const pendingChanges = changeEvent ? [changeEvent] : [];
+  const med: Medication = { id: generateId(), ...data, pendingChanges, syncPending: true };
   all.push(med);
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: sync medication to server and persist its stable server ID for later edits/deletes.
-  cloudSyncMedication(med, undefined, rid ? Number(rid) : undefined).then(async result => {
+  await savePendingMedicationChange(changeEvent, rid ?? undefined);
+  // Cloud sync: sync medication and its idempotent adjustment events together.
+  cloudSyncMedication(med, undefined, rid ? Number(rid) : undefined, pendingChanges).then(async result => {
     const serverMedId = result?.medication?.id;
-    if (!serverMedId) return;
+    if (!result?.success || !serverMedId) return;
+    const sentIds = pendingChanges.map(event => event.eventId);
+    await markMedicationChangesSynced(sentIds, result.recordedChanges ?? [], rid ?? undefined);
     const latest = await getMedications(rid ?? undefined);
     const latestIdx = latest.findIndex(item => item.id === med.id);
     if (latestIdx < 0) return;
-    latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(serverMedId), syncPending: false };
+    const remaining = (latest[latestIdx].pendingChanges ?? []).filter(event => !sentIds.includes(event.eventId));
+    latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(serverMedId), pendingChanges: remaining, syncPending: remaining.length > 0 };
     await AsyncStorage.setItem(key, JSON.stringify(latest));
   }).catch(() => {});
   return med;
@@ -682,39 +816,48 @@ export async function saveMedications(meds: Medication[], roomId?: string): Prom
   await AsyncStorage.setItem(key, JSON.stringify(meds));
 }
 
-export async function updateMedication(id: string, data: Partial<Medication>, roomId?: string): Promise<void> {
+export async function updateMedication(id: string, data: Partial<Medication>, roomId?: string, changeEvent?: MedicationChangeEvent): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
   const all = await getMedications(rid ?? undefined);
   const idx = all.findIndex(m => m.id === id);
   if (idx >= 0) {
-    all[idx] = { ...all[idx], ...data, syncPending: true };
+    const pendingChanges = [...(all[idx].pendingChanges ?? []), ...(changeEvent ? [changeEvent] : [])];
+    all[idx] = { ...all[idx], ...data, pendingChanges, syncPending: true };
     await AsyncStorage.setItem(key, JSON.stringify(all));
-    // Cloud sync: sync updated medication to the same server row.
+    await savePendingMedicationChange(changeEvent, rid ?? undefined);
+    // Cloud sync: update the same server row together with all unsynced history events.
     const serverMedId = medicationServerId(all[idx]);
-    cloudSyncMedication(all[idx], serverMedId, rid ? Number(rid) : undefined).then(async result => {
+    cloudSyncMedication(all[idx], serverMedId, rid ? Number(rid) : undefined, pendingChanges).then(async result => {
       const resolvedId = result?.medication?.id ?? serverMedId;
       if (!result?.success || !resolvedId) return;
+      const sentIds = pendingChanges.map(event => event.eventId);
+      await markMedicationChangesSynced(sentIds, result.recordedChanges ?? [], rid ?? undefined);
       const latest = await getMedications(rid ?? undefined);
       const latestIdx = latest.findIndex(item => item.id === id);
       if (latestIdx >= 0) {
-        latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(resolvedId), syncPending: false };
+        const remaining = (latest[latestIdx].pendingChanges ?? []).filter(event => !sentIds.includes(event.eventId));
+        latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(resolvedId), pendingChanges: remaining, syncPending: remaining.length > 0 };
         await AsyncStorage.setItem(key, JSON.stringify(latest));
       }
     }).catch(() => {});
   }
 }
 
-export async function deleteMedication(id: string, roomId?: string): Promise<void> {
+export async function deleteMedication(id: string, roomId?: string, changeEvent?: MedicationChangeEvent): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
   const all = await getMedications(rid ?? undefined);
   const target = all.find(m => m.id === id);
   if (!target) return;
 
+  const serverId = medicationServerId(target);
+  const deleteEvent = changeEvent ? { ...changeEvent, medicationId: serverId ?? changeEvent.medicationId } : undefined;
+  await savePendingMedicationChange(deleteEvent, rid ?? undefined);
   if (rid) {
-    const result = await cloudDeleteMedication(medicationServerId(target), target.name, Number(rid));
+    const result = await cloudDeleteMedication(serverId, target.name, Number(rid), deleteEvent);
     if (!result?.success) throw new Error('云端删除失败，请检查网络后重试');
+    if (deleteEvent) await markMedicationChangesSynced([deleteEvent.eventId], [], rid);
   }
   await AsyncStorage.setItem(key, JSON.stringify(all.filter(m => m.id !== id)));
 }
@@ -725,13 +868,17 @@ export async function syncPendingMedications(roomId: string): Promise<void> {
   const meds = await getMedications(roomId);
   for (const med of meds.filter(item => item.syncPending)) {
     const knownServerId = medicationServerId(med);
-    const result = await cloudSyncMedication(med, knownServerId, Number(roomId));
+    const pendingChanges = med.pendingChanges ?? [];
+    const result = await cloudSyncMedication(med, knownServerId, Number(roomId), pendingChanges);
     const resolvedId = result?.medication?.id ?? knownServerId;
     if (!result?.success || !resolvedId) continue;
+    const sentIds = pendingChanges.map(event => event.eventId);
+    await markMedicationChangesSynced(sentIds, result.recordedChanges ?? [], roomId);
     const latest = await getMedications(roomId);
     const idx = latest.findIndex(item => item.id === med.id);
     if (idx >= 0) {
-      latest[idx] = { ...latest[idx], serverMedId: Number(resolvedId), syncPending: false };
+      const remaining = (latest[idx].pendingChanges ?? []).filter(event => !sentIds.includes(event.eventId));
+      latest[idx] = { ...latest[idx], serverMedId: Number(resolvedId), pendingChanges: remaining, syncPending: remaining.length > 0 };
       await AsyncStorage.setItem(key, JSON.stringify(latest));
     }
   }
@@ -744,6 +891,9 @@ export function normalizeCloudDiaryEntry(diary: any, roomId?: string): DiaryEntr
   const createdAt = diary.createdAt instanceof Date
     ? diary.createdAt.toISOString()
     : (typeof diary.createdAt === 'string' ? diary.createdAt : new Date().toISOString());
+  const updatedAt = diary.updatedAt instanceof Date
+    ? diary.updatedAt.toISOString()
+    : (typeof diary.updatedAt === 'string' ? diary.updatedAt : createdAt);
   return {
     id: `server_${diary.id}`,
     roomId: roomId ? String(roomId) : (diary.roomId ? String(diary.roomId) : undefined),
@@ -765,6 +915,7 @@ export function normalizeCloudDiaryEntry(diary: any, roomId?: string): DiaryEntr
     authorName: diary.authorName ?? diary.author?.name,
     authorUserId: diary.authorUserId,
     createdAt,
+    updatedAt,
   };
 }
 
@@ -813,6 +964,10 @@ export async function mergeCloudDiariesIntoLocal(cloudDiaries: any[], roomId?: s
       // 保留本地 id，所有现有详情页路由和待同步操作仍能正确找到该条记录。
       id: local.id,
       conversation,
+      // 最后编辑时间只向前推进；较旧的云端响应不能把本地草稿时间回滚。
+      updatedAt: new Date(local.updatedAt || local.createdAt || 0).getTime() > new Date(remote.updatedAt || remote.createdAt || 0).getTime()
+        ? (local.updatedAt || local.createdAt)
+        : (remote.updatedAt || remote.createdAt),
       // 云端明确结束或本地已经结束都不能被较旧响应回滚。
       conversationFinished: Boolean(local.conversationFinished || remote.conversationFinished),
       syncPending: remote.conversationFinished === true && remoteConversation.length >= localConversation.length
@@ -981,7 +1136,7 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id' | 'roomId'>, ro
   const now = new Date();
   // 使用 getHours/getMinutes 生成本地时间字符串（避免 Hermes 引擎 toLocaleTimeString 返回 "下午2:30" 格式）
   const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const entry: DiaryEntry = { id: generateId(), ...data, roomId: rid ?? undefined, createdAt: now.toISOString(), localTimeStr };
+  const entry: DiaryEntry = { id: generateId(), ...data, roomId: rid ?? undefined, createdAt: now.toISOString(), updatedAt: now.toISOString(), localTimeStr };
   all.unshift(entry);
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync diary entry to server, and expose the serverDiaryId promise
@@ -1013,7 +1168,7 @@ export async function updateDiaryEntry(
   const all = await getDiaryEntries(rid ?? undefined);
   const idx = all.findIndex(e => e.id === id);
   if (idx < 0) return null;
-  const updatedEntry: DiaryEntry = { ...all[idx], ...data, roomId: rid ?? all[idx].roomId };
+  const updatedEntry: DiaryEntry = { ...all[idx], ...data, roomId: rid ?? all[idx].roomId, updatedAt: data.updatedAt ?? new Date().toISOString() };
   all[idx] = updatedEntry;
   // 写回前按 createdAt 降序重新排序，防止字段更新（如 serverDiaryId/conversationFinished）后破坏列表顺序
   all.splice(0, all.length, ...sortDiaryEntries(all));

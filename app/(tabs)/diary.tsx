@@ -8,7 +8,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator, mergeCloudDiariesIntoLocal, syncPendingDiaries } from '@/lib/storage';
+import {
+  getDiaryEntries, deleteDiaryEntry, DiaryEntry, DiaryDraft, getDiaryDraft, clearDiaryDraft,
+  getCurrentUserIsCreator, mergeCloudDiariesIntoLocal, syncPendingDiaries,
+} from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, cloudGetDiaryInteractionSummaries, getCloudSyncState, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
@@ -162,6 +165,42 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
         )}
       </TouchableOpacity>
     </Animated.View>
+  );
+}
+
+function formatDraftTime(value?: string) {
+  if (!value) return '刚刚';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '刚刚';
+  return date.toLocaleString('zh-CN', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+function DraftCard({ content, savedAt, stage, onContinue, onDelete }: {
+  content: string;
+  savedAt?: string;
+  stage: 'writing' | 'conversation';
+  onContinue: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <View style={styles.draftCard}>
+      <View style={styles.draftHeader}>
+        <View style={styles.draftBadge}><Text style={styles.draftBadgeText}>草稿 · 仅自己可见</Text></View>
+        <TouchableOpacity onPress={onDelete} style={styles.draftDeleteButton} activeOpacity={0.7}>
+          <Text style={styles.draftDeleteText}>删除</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.draftStage}>{stage === 'conversation' ? '💬 正在和小马虎整理' : '✏️ 尚未发布'}</Text>
+      <Text style={styles.draftContent} numberOfLines={3}>{content || '还没有输入正文'}</Text>
+      <View style={styles.draftFooter}>
+        <Text style={styles.draftTime}>最后编辑：{formatDraftTime(savedAt)}</Text>
+        <TouchableOpacity onPress={onContinue} style={styles.draftContinueButton} activeOpacity={0.8}>
+          <Text style={styles.draftContinueText}>继续写 →</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -336,6 +375,7 @@ function DiaryScreenContent() {
   const activeFamilyRef = useRef<string | undefined>(familyId);
   activeFamilyRef.current = familyId;
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [textDraft, setTextDraft] = useState<DiaryDraft | null>(null);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [interactionSummaries, setInteractionSummaries] = useState<Record<number, DiaryInteractionSummary>>({});
   const [editMode, setEditMode] = useState(false);
@@ -377,6 +417,7 @@ function DiaryScreenContent() {
   useFocusEffect(useCallback(() => {
     if (!familyReady || !familyId) {
       setEntries([]);
+      setTextDraft(null);
       setInteractionSummaries({});
       return;
     }
@@ -414,8 +455,9 @@ function DiaryScreenContent() {
     const requestedFamilyId = familyId;
     if (!familyReady || !requestedFamilyId) return;
     // 立即展示当前家庭的本地缓存；即使网络慢也不会出现空白或卡顿。
-    const [local, syncState] = await Promise.all([
+    const [local, draft, syncState] = await Promise.all([
       getDiaryEntries(requestedFamilyId),
+      getDiaryDraft(requestedFamilyId),
       getCloudSyncState(),
     ]);
     const localSorted = [...local].sort((a, b) => {
@@ -427,7 +469,8 @@ function DiaryScreenContent() {
     if (activeFamilyRef.current !== requestedFamilyId) return;
     setCurrentUserId(syncState.userId ?? null);
     setEntries(localSorted);
-    loadInteractionSummaries(localSorted, requestedFamilyId).catch(() => {});
+    setTextDraft(draft);
+    loadInteractionSummaries(localSorted.filter(entry => entry.conversationFinished !== false), requestedFamilyId).catch(() => {});
     // 正式发布曾因断网失败时，先展示本地完整内容，再在后台自动重试云端发布。
     syncPendingDiaries(requestedFamilyId).then(async () => {
       if (activeFamilyRef.current !== requestedFamilyId) return;
@@ -576,6 +619,20 @@ function DiaryScreenContent() {
     setDeleteTarget({ id: entryId, date: entryDate });
   }
 
+  function confirmDeleteTextDraft() {
+    if (!familyId) return;
+    const requestedFamilyId = familyId;
+    Alert.alert('删除草稿', '确定删除这份尚未发布的草稿吗？删除后无法恢复。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除', style: 'destructive', onPress: async () => {
+          await clearDiaryDraft(requestedFamilyId);
+          if (activeFamilyRef.current === requestedFamilyId) setTextDraft(null);
+        },
+      },
+    ]);
+  }
+
   async function executeDelete() {
     if (!deleteTarget) return;
     try {
@@ -599,6 +656,11 @@ function DiaryScreenContent() {
       Alert.alert('删除失败', error?.message || '无法同步删除，请检查网络后重试');
     }
   }
+
+  const conversationDrafts = entries.filter(entry => entry.conversationFinished === false);
+  const publishedEntries = entries.filter(entry => entry.conversationFinished !== false);
+  const hasDrafts = !!textDraft || conversationDrafts.length > 0;
+  const hasAnyContent = hasDrafts || publishedEntries.length > 0;
 
   return (
     <ScreenContainer containerClassName="bg-[#F7F1F3]">
@@ -627,7 +689,7 @@ function DiaryScreenContent() {
             style={{ marginBottom: 12 }}
           />
           <View style={styles.headerBtns}>
-            {entries.some(entry => !!currentUserId && entry.authorUserId === currentUserId) && (
+            {publishedEntries.some(entry => !!currentUserId && entry.authorUserId === currentUserId) && (
               <TouchableOpacity
                 style={[styles.manageBtn, editMode && styles.manageBtnActive]}
                 onPress={() => setEditMode(v => !v)}
@@ -660,7 +722,7 @@ function DiaryScreenContent() {
         )}
 
         {/* Entry list or empty state */}
-        {entries.length === 0 ? (
+        {!hasAnyContent ? (
           <EmptyState onStart={openNewEntry} />
         ) : (
           <>
@@ -669,18 +731,46 @@ function DiaryScreenContent() {
               <Text style={styles.selfCareText}>照顾好自己，才能更好地照顾家人 ❤️</Text>
             </View>
 
-            {/* ── 日记列表 ── */}
-            <View style={styles.entriesList}>
+            {hasDrafts && !editMode && (
+              <View style={styles.draftSection}>
+                <View style={styles.listTitleRow}>
+                  <Text style={styles.listTitle}>📝 我的草稿</Text>
+                  <Text style={styles.draftPrivateLabel}>尚未发布 · 家人看不到</Text>
+                </View>
+                {textDraft ? (
+                  <DraftCard
+                    content={textDraft.content}
+                    savedAt={textDraft.savedAt}
+                    stage="writing"
+                    onContinue={openNewEntry}
+                    onDelete={confirmDeleteTextDraft}
+                  />
+                ) : null}
+                {conversationDrafts.map(entry => (
+                  <DraftCard
+                    key={entry.id}
+                    content={entry.content}
+                    savedAt={entry.updatedAt || entry.createdAt}
+                    stage="conversation"
+                    onContinue={() => openDetail(entry.id)}
+                    onDelete={() => confirmDelete(entry.id, entry.date)}
+                  />
+                ))}
+              </View>
+            )}
+
+            {/* ── 已发布日记列表 ── */}
+            {publishedEntries.length > 0 && <View style={styles.entriesList}>
               <View style={styles.listTitleRow}>
                 <Text style={styles.listTitle}>{editMode ? '🗑️ 选择要删除的日记' : '📅 最近记录'}</Text>
                 {editMode
-                  ? <Text style={styles.listCount}>共 {entries.length} 篇</Text>
-                  : entries.length > 3
+                  ? <Text style={styles.listCount}>共 {publishedEntries.length} 篇</Text>
+                  : publishedEntries.length > 3
                     ? <Text style={styles.listCount}>↓ 下方日历查看更多</Text>
                     : null
                 }
               </View>
-              {(editMode ? entries : entries.slice(0, 3)).map((entry, i) => (
+              {(editMode ? publishedEntries : publishedEntries.slice(0, 3)).map((entry, i) => (
                 <DiaryCard
                   key={entry.id}
                   entry={entry}
@@ -693,14 +783,14 @@ function DiaryScreenContent() {
               ))}
 
               {/* 查看更多按钮 */}
-              {!editMode && entries.length > 3 && (
+              {!editMode && publishedEntries.length > 3 && (
                 <TouchableOpacity
                   style={styles.moreBtn}
                   onPress={() => setShowAll(v => !v)}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.moreBtnText}>
-                    {showAll ? '收起 ↑' : `查看更多日记（共 ${entries.length} 篇）↓`}
+                    {showAll ? '收起 ↑' : `查看更多日记（共 ${publishedEntries.length} 篇）↓`}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -709,7 +799,7 @@ function DiaryScreenContent() {
               {!editMode && showAll && (() => {
                 // 用 YYYY-MM 作为 key 确保数字排序正确，显示时转为中文
                 const grouped: Record<string, DiaryEntry[]> = {};
-                entries.slice(3).forEach(e => {
+                publishedEntries.slice(3).forEach(e => {
                   const parts = e.date.split('-');
                   if (parts.length === 3) {
                     const key = `${parts[0]}-${parts[1]}`; // YYYY-MM
@@ -756,16 +846,16 @@ function DiaryScreenContent() {
                     );
                   });
               })()}
-            </View>
+            </View>}
 
             {/* ── 日历回顾 ── */}
-            {!editMode && (
+            {!editMode && publishedEntries.length > 0 && (
               <View style={{ marginTop: 24 }}>
                 <View style={styles.listTitleRow}>
                   <Text style={styles.listTitle}>🗓️ 日历回顾</Text>
                   <Text style={styles.listCount}>点击有记录的日期</Text>
                 </View>
-                <CalendarView entries={entries} onOpenEntry={openDetail} />
+                <CalendarView entries={publishedEntries} onOpenEntry={openDetail} />
               </View>
             )}
           </>
@@ -773,7 +863,7 @@ function DiaryScreenContent() {
       </ScrollView>
 
       {/* FAB */}
-      {entries.length > 0 && !editMode && (
+      {hasAnyContent && !editMode && (
         <Animated.View style={[styles.fab, { transform: [{ scale: fabBreath }] }]}>
           <TouchableOpacity
             style={styles.fabBtn}
@@ -880,7 +970,24 @@ const styles = StyleSheet.create({
   selfCareEmoji: { fontSize: 18 },
   selfCareText: { fontSize: 13, color: AppColors.coral.primary, fontWeight: '600', flex: 1 },
 
-  // Entry list
+  // Drafts and entry list
+  draftSection: { gap: 10, marginBottom: 22 },
+  draftPrivateLabel: { fontSize: 11, color: '#A87952', fontWeight: '600' },
+  draftCard: {
+    padding: 16, borderRadius: RADIUS.lg, backgroundColor: '#FFF9EC',
+    borderWidth: 1.5, borderColor: '#F0D99B', ...SHADOWS.sm,
+  },
+  draftHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
+  draftBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: RADIUS.pill, backgroundColor: '#FCECC4' },
+  draftBadgeText: { fontSize: 11, fontWeight: '800', color: '#966B22' },
+  draftDeleteButton: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#FFF0EE' },
+  draftDeleteText: { fontSize: 11, fontWeight: '700', color: '#B65D61' },
+  draftStage: { fontSize: 13, fontWeight: '700', color: '#876A35', marginBottom: 7 },
+  draftContent: { fontSize: 14, lineHeight: 21, color: COLORS.text, marginBottom: 13 },
+  draftFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  draftTime: { flex: 1, fontSize: 11, color: COLORS.textSecondary },
+  draftContinueButton: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: '#F4DFA8' },
+  draftContinueText: { fontSize: 12, fontWeight: '800', color: '#805A19' },
   entriesList: { gap: 12 },
   listTitleRow: {
     flexDirection: 'row', justifyContent: 'space-between',

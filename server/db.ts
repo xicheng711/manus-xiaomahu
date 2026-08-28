@@ -65,12 +65,28 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
       KEY idx_diary_comments_room_diary (roomId, diaryId),
       KEY idx_diary_comments_created (createdAt)
     )`,
+    `CREATE TABLE IF NOT EXISTS medication_changes (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      roomId INT NOT NULL,
+      medicationId INT NULL,
+      eventId VARCHAR(100) NOT NULL,
+      changedByUserId INT NOT NULL,
+      changedByName VARCHAR(100) NOT NULL,
+      changeType VARCHAR(30) NOT NULL,
+      reason TEXT NULL,
+      previousSnapshot JSON NULL,
+      nextSnapshot JSON NULL,
+      changedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_medication_change_event (eventId),
+      KEY idx_medication_changes_room_time (roomId, changedAt),
+      KEY idx_medication_changes_medication (roomId, medicationId)
+    )`,
   ];
   for (const statement of tablesToCreate) {
     try {
       await (db as any).execute(statement);
     } catch (e: any) {
-      console.warn('[Database] Migration warning (diary interactions):', e?.message ?? e);
+      console.warn('[Database] Migration warning (family feature tables):', e?.message ?? e);
     }
   }
   console.log('[Database] Auto-migrations complete');

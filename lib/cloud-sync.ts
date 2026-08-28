@@ -423,6 +423,19 @@ export async function cloudAddDiaryComment(diaryId: number, content: string, roo
   }
 }
 
+/** Delete one of the current user's own diary comments. */
+export async function cloudDeleteDiaryComment(commentId: number, roomId?: number) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return null;
+  try {
+    const client = getClient();
+    return await client.family.deleteDiaryComment.mutate({ roomId: rid, commentId });
+  } catch (e) {
+    console.warn('[CloudSync] deleteDiaryComment failed:', e);
+    return null;
+  }
+}
+
 /** Fetch reader names and comment counts for diary list cards in one request. */
 export async function cloudGetDiaryInteractionSummaries(diaryIds: number[], roomId?: number) {
   const rid = roomId ?? await getActiveRoomId();
@@ -538,7 +551,7 @@ export async function cloudGetBriefings(roomId?: number, limit = 14) {
 // ─── Medication Sync ─────────────────────────────────────────────────────────
 
 /** Sync a medication to the server */
-export async function cloudSyncMedication(med: any, serverMedId?: number, roomId?: number) {
+export async function cloudSyncMedication(med: any, serverMedId?: number, roomId?: number, changeEvents?: any[]) {
   const rid = roomId ?? await getActiveRoomId();
   if (!rid) return null;
   try {
@@ -555,6 +568,7 @@ export async function cloudSyncMedication(med: any, serverMedId?: number, roomId
       active: med.active,
       reminderEnabled: med.reminderEnabled,
       color: med.color,
+      changeEvents,
     });
   } catch (e) {
     console.warn('[CloudSync] syncMedication failed:', e);
@@ -576,8 +590,21 @@ export async function cloudGetMedications(roomId?: number) {
   }
 }
 
+/** Fetch the family-visible medication adjustment timeline. */
+export async function cloudGetMedicationChanges(roomId?: number, limit = 100) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return null;
+  try {
+    const client = getClient();
+    return await client.family.getMedicationChanges.query({ roomId: rid, limit });
+  } catch (e) {
+    console.warn('[CloudSync] getMedicationChanges failed:', e);
+    return null;
+  }
+}
+
 /** Delete a medication using its stable server ID, with name matching only for legacy local rows. */
-export async function cloudDeleteMedication(serverMedId: number | undefined, medName: string, roomId?: number) {
+export async function cloudDeleteMedication(serverMedId: number | undefined, medName: string, roomId?: number, changeEvent?: any) {
   const rid = roomId ?? await getActiveRoomId();
   if (!rid) return null;
   try {
@@ -589,7 +616,7 @@ export async function cloudDeleteMedication(serverMedId: number | undefined, med
       if (!match) return { success: true }; // 从未同步到服务器，本地可直接删除。
       medicationId = match.id;
     }
-    return await client.family.deleteMedication.mutate({ roomId: rid, medicationId });
+    return await client.family.deleteMedication.mutate({ roomId: rid, medicationId, changeEvent });
   } catch (e) {
     console.warn('[CloudSync] deleteMedication failed:', e);
     return null;

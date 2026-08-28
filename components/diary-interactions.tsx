@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import {
   cloudAddDiaryComment,
+  cloudDeleteDiaryComment,
   cloudGetDiaryInteractions,
   cloudMarkDiaryRead,
 } from '@/lib/cloud-sync';
@@ -29,12 +30,15 @@ type DiaryComment = {
   authorEmoji: string;
   content: string;
   createdAt: string | Date;
+  canDelete?: boolean;
 };
 
 type Props = {
   diaryId?: number | null;
   roomId?: number | null;
   enabled?: boolean;
+  /** 输入框聚焦后由页面滚动到末尾，确保键盘不会遮挡留言。 */
+  onInputFocus?: () => void;
 };
 
 function formatInteractionTime(value: string | Date): string {
@@ -49,12 +53,13 @@ function formatInteractionTime(value: string | Date): string {
   });
 }
 
-export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
+export function DiaryInteractions({ diaryId, roomId, enabled = true, onInputFocus }: Props) {
   const [readers, setReaders] = useState<DiaryReader[]>([]);
   const [comments, setComments] = useState<DiaryComment[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [sending, setSending] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
   const [commentText, setCommentText] = useState('');
 
   const loadInteractions = useCallback(async (recordRead = false) => {
@@ -93,6 +98,30 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
       setSending(false);
     }
   }, [commentText, diaryId, loadInteractions, roomId, sending]);
+
+  const handleDeleteComment = useCallback((comment: DiaryComment) => {
+    if (!comment.canDelete || deletingCommentId !== null || !roomId) return;
+    Alert.alert('删除留言', '确定删除这条留言吗？删除后其他家人也将看不到。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingCommentId(comment.id);
+          try {
+            const result = await cloudDeleteDiaryComment(comment.id, roomId);
+            if (!result?.success) {
+              Alert.alert('删除没有成功', '请检查网络后重试，留言仍然保留。');
+              return;
+            }
+            setComments(current => current.filter(item => item.id !== comment.id));
+          } finally {
+            setDeletingCommentId(null);
+          }
+        },
+      },
+    ]);
+  }, [deletingCommentId, roomId]);
 
   if (!enabled || !diaryId || !roomId) return null;
 
@@ -138,7 +167,19 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
               <View style={styles.commentBody}>
                 <View style={styles.commentMeta}>
                   <Text style={styles.commentAuthor}>{comment.authorName || '家人'}</Text>
-                  <Text style={styles.commentTime}>{formatInteractionTime(comment.createdAt)}</Text>
+                  <View style={styles.commentMetaRight}>
+                    <Text style={styles.commentTime}>{formatInteractionTime(comment.createdAt)}</Text>
+                    {comment.canDelete ? (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteComment(comment)}
+                        disabled={deletingCommentId !== null}
+                        style={styles.commentDeleteButton}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.commentDeleteText}>{deletingCommentId === comment.id ? '删除中' : '删除'}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 </View>
                 <Text style={styles.commentContent}>{comment.content}</Text>
               </View>
@@ -157,9 +198,14 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
           placeholderTextColor="#A8A0A3"
           style={styles.input}
           multiline
-          maxLength={500}
           returnKeyType="default"
+          submitBehavior="newline"
           blurOnSubmit={false}
+          scrollEnabled
+          onFocus={() => {
+            onInputFocus?.();
+            setTimeout(() => onInputFocus?.(), 320);
+          }}
           editable={!sending}
         />
         <TouchableOpacity
@@ -171,7 +217,7 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
           {sending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.sendText}>发送</Text>}
         </TouchableOpacity>
       </View>
-      <Text style={styles.hint}>留言仅当前家庭成员可见</Text>
+      <Text style={styles.hint}>支持回车分段 · 留言仅当前家庭所有成员可见</Text>
     </View>
   );
 }
@@ -198,7 +244,10 @@ const styles = StyleSheet.create({
   commentBody: { flex: 1 },
   commentMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 },
   commentAuthor: { fontSize: 13, fontWeight: '700', color: '#493A3F', flexShrink: 1 },
+  commentMetaRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   commentTime: { fontSize: 11, color: '#A89DA0' },
+  commentDeleteButton: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, backgroundColor: '#FFF1F3' },
+  commentDeleteText: { fontSize: 10, fontWeight: '700', color: '#B85C73' },
   commentContent: { fontSize: 14, lineHeight: 21, color: '#53464A' },
   emptyText: { marginTop: 14, fontSize: 13, color: '#A89DA0' },
   statusRow: { minHeight: 46, marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -206,8 +255,8 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 14 },
   input: {
     flex: 1,
-    minHeight: 42,
-    maxHeight: 110,
+    minHeight: 68,
+    maxHeight: 150,
     borderRadius: 14,
     backgroundColor: '#F8F4F5',
     borderWidth: 1,
@@ -219,7 +268,7 @@ const styles = StyleSheet.create({
     color: '#493A3F',
     textAlignVertical: 'top',
   },
-  sendButton: { minWidth: 58, height: 42, borderRadius: 14, backgroundColor: '#C06D88', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  sendButton: { minWidth: 58, height: 46, borderRadius: 14, backgroundColor: '#C06D88', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, marginBottom: 1 },
   sendButtonDisabled: { opacity: 0.45 },
   sendText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   hint: { marginTop: 7, fontSize: 11, color: '#B1A7AA' },

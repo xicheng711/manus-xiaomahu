@@ -835,7 +835,7 @@ export default function DiaryEditScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          keyboardVerticalOffset={0}
         >
           <ScrollView
             ref={scrollRef}
@@ -1027,6 +1027,7 @@ export default function DiaryEditScreen() {
                 <DiaryInteractions
                   diaryId={interactionDiaryId}
                   roomId={interactionRoomId}
+                  onInputFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                 />
               )}
 

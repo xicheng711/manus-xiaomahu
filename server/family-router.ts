@@ -13,11 +13,12 @@ import {
   upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
   createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
   getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
-  getDiaryInteractionSummaries,
+  deleteDiaryCommentByAuthor, getDiaryInteractionSummaries,
   createAnnouncement, getAnnouncementsByRoom,
   deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
   upsertMedication, getMedicationsByRoom, deleteMedication,
+  recordMedicationChange, getMedicationChangesByRoom,
 } from "./family-db";
 import { updatePushToken, getUsersByIds } from "./db";
 import { ossUploadAvatar, storagePut } from "./storage";
@@ -579,7 +580,14 @@ export const familyRouter = router({
       const diary = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
       if (!diary) throw new Error("日记不存在");
       if (diary.conversationFinished === false) return { readers: [], comments: [] };
-      return getDiaryInteractions(input.roomId, input.diaryId);
+      const interactions = await getDiaryInteractions(input.roomId, input.diaryId);
+      return {
+        readers: interactions.readers,
+        comments: interactions.comments.map(comment => ({
+          ...comment,
+          canDelete: comment.authorUserId === userId,
+        })),
+      };
     }),
 
   /** Add a family comment below a published diary */
@@ -587,7 +595,7 @@ export const familyRouter = router({
     .input(z.object({
       roomId: z.number(),
       diaryId: z.number(),
-      content: z.string().trim().min(1).max(500),
+      content: z.string().trim().min(1),
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
@@ -614,7 +622,18 @@ export const familyRouter = router({
         { type: 'diary_comment', screen: 'diary', diaryId: input.diaryId, roomId: input.roomId },
         'addDiaryComment',
       );
-      return { success: true, comment };
+      return { success: true, comment: { ...comment, canDelete: true } };
+    }),
+
+  /** Delete a diary comment; only the comment author can delete it. */
+  deleteDiaryComment: protectedProcedure
+    .input(z.object({ roomId: z.number(), commentId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      await requireRoomMember(userId, input.roomId);
+      const deleted = await deleteDiaryCommentByAuthor(input.roomId, input.commentId, userId);
+      if (!deleted) throw new Error("留言不存在，或你只能删除自己发布的留言");
+      return { success: true };
     }),
 
   /** Batch summaries used by diary cards (readers + comment count) */
@@ -740,6 +759,14 @@ export const familyRouter = router({
       active: z.boolean().default(true),
       reminderEnabled: z.boolean().optional(),
       color: z.string().optional(),
+      changeEvents: z.array(z.object({
+        eventId: z.string().min(1).max(100),
+        changeType: z.enum(["added", "updated", "paused", "resumed", "deleted"]),
+        reason: z.string().trim().optional(),
+        previousSnapshot: z.any().optional(),
+        nextSnapshot: z.any().optional(),
+        changedAt: z.string(),
+      })).max(50).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
@@ -758,7 +785,23 @@ export const familyRouter = router({
         reminderEnabled: input.reminderEnabled ?? true,
         color: input.color ?? null,
       });
-      return { success: true, medication: med };
+      const recordedChanges = [];
+      for (const event of input.changeEvents ?? []) {
+        const parsedChangedAt = new Date(event.changedAt);
+        recordedChanges.push(await recordMedicationChange({
+          roomId: input.roomId,
+          medicationId: Number(med.id),
+          eventId: event.eventId,
+          changedByUserId: userId,
+          changedByName: member.name,
+          changeType: event.changeType,
+          reason: event.reason || null,
+          previousSnapshot: event.previousSnapshot ?? null,
+          nextSnapshot: event.nextSnapshot ?? null,
+          changedAt: Number.isNaN(parsedChangedAt.getTime()) ? new Date() : parsedChangedAt,
+        }));
+      }
+      return { success: true, medication: med, recordedChanges };
     }),
 
   /** Get medications for a room */
@@ -770,13 +813,45 @@ export const familyRouter = router({
       return getMedicationsByRoom(input.roomId);
     }),
 
+  /** Get medication adjustment history; all current family members can view it. */
+  getMedicationChanges: protectedProcedure
+    .input(z.object({ roomId: z.number(), limit: z.number().min(1).max(200).default(100) }))
+    .query(async ({ ctx, input }) => {
+      await requireRoomMember(ctx.user.id, input.roomId);
+      return getMedicationChangesByRoom(input.roomId, input.limit);
+    }),
+
   /** Delete a medication */
   deleteMedication: protectedProcedure
-    .input(z.object({ roomId: z.number(), medicationId: z.number() }))
+    .input(z.object({
+      roomId: z.number(),
+      medicationId: z.number(),
+      changeEvent: z.object({
+        eventId: z.string().min(1).max(100),
+        reason: z.string().trim().optional(),
+        previousSnapshot: z.any().optional(),
+        changedAt: z.string(),
+      }).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
       if (!member.isCreator) throw new Error("只有主照顾者可以删除用药记录");
+      if (input.changeEvent) {
+        const parsedChangedAt = new Date(input.changeEvent.changedAt);
+        await recordMedicationChange({
+          roomId: input.roomId,
+          medicationId: input.medicationId,
+          eventId: input.changeEvent.eventId,
+          changedByUserId: userId,
+          changedByName: member.name,
+          changeType: "deleted",
+          reason: input.changeEvent.reason || null,
+          previousSnapshot: input.changeEvent.previousSnapshot ?? null,
+          nextSnapshot: null,
+          changedAt: Number.isNaN(parsedChangedAt.getTime()) ? new Date() : parsedChangedAt,
+        });
+      }
       await deleteMedication(input.medicationId, input.roomId);
       return { success: true };
     }),

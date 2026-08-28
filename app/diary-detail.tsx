@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Platform, Alert, Animated, Share, ActivityIndicator,
-  TextInput, Keyboard,
+  TextInput, Keyboard, KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
@@ -209,7 +209,8 @@ export default function DiaryDetailScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={0}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* Header */}
           <View style={styles.header}>
@@ -390,6 +391,7 @@ export default function DiaryDetailScreen() {
             diaryId={entry.serverDiaryId ?? (/^(?:cloud_)?\d+$/.test(String(id)) ? Number(String(id).replace('cloud_', '')) : null)}
             roomId={familyId ? Number(familyId) : null}
             enabled={entry.conversationFinished !== false}
+            onInputFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
           />
 
           {/* Bottom actions */}
@@ -412,7 +414,8 @@ export default function DiaryDetailScreen() {
             </TouchableOpacity>
           </View>
         </Animated.View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
