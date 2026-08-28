@@ -172,6 +172,8 @@ export interface DiaryDraft {
 
 export interface DiaryEntry {
   id: string;
+  /** 本地缓存所属家庭；用于多 profile 场景下的二次隔离校验。 */
+  roomId?: string;
   date: string;
   content: string;
   moodEmoji: string;
@@ -644,12 +646,13 @@ export async function deleteMedication(id: string, roomId?: string): Promise<voi
 // ─── Diary Entries ────────────────────────────────────────────────────────────
 
 /** 将云端日记统一为本地结构；保留服务器 ID 以便后续更新同一条记录。 */
-export function normalizeCloudDiaryEntry(diary: any): DiaryEntry {
+export function normalizeCloudDiaryEntry(diary: any, roomId?: string): DiaryEntry {
   const createdAt = diary.createdAt instanceof Date
     ? diary.createdAt.toISOString()
     : (typeof diary.createdAt === 'string' ? diary.createdAt : new Date().toISOString());
   return {
     id: `server_${diary.id}`,
+    roomId: roomId ? String(roomId) : (diary.roomId ? String(diary.roomId) : undefined),
     serverDiaryId: Number(diary.id),
     date: diary.date,
     content: diary.content ?? '',
@@ -698,7 +701,7 @@ export async function mergeCloudDiariesIntoLocal(cloudDiaries: any[], roomId?: s
 
   const cloudIds = new Set<number>();
   const mergedCloudEntries = (cloudDiaries ?? []).map((raw: any) => {
-    const remote = normalizeCloudDiaryEntry(raw);
+    const remote = normalizeCloudDiaryEntry(raw, rid ?? undefined);
     const remoteId = Number(remote.serverDiaryId);
     cloudIds.add(remoteId);
     const local = localByServerId.get(remoteId);
@@ -762,15 +765,51 @@ export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.DIARY, rid);
   const raw = await AsyncStorage.getItem(key);
-  if (!raw && rid) {
-    const legacy = await AsyncStorage.getItem(KEYS.DIARY);
-    if (legacy) {
-      await AsyncStorage.setItem(key, legacy);
-      await AsyncStorage.removeItem(KEYS.DIARY);
-      return JSON.parse(legacy);
+
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as DiaryEntry[];
+      if (!rid) return parsed;
+
+      const hasUnscopedEntries = parsed.some(entry => !entry.roomId);
+      // 新格式缓存无需额外读取 memberships，保持本地秒开；只有升级旧缓存时才判断是否为多家庭。
+      const memberships = hasUnscopedEntries ? await getAllMemberships().catch(() => [] as FamilyMembership[]) : [];
+      const canClaimUnscopedEntries = memberships.length === 1 && memberships[0]?.familyId === String(rid);
+      // 只有明确确认当前用户仅有这一个家庭时，才可接纳旧的无归属记录；
+      // 多家庭或家庭上下文尚未就绪时绝不能猜测，否则会把主照顾者家庭的日记显示到 Joiner 家庭。
+      const scoped = parsed.filter(entry => entry.roomId
+        ? String(entry.roomId) === String(rid)
+        : canClaimUnscopedEntries);
+      const normalized = scoped.map(entry => entry.roomId ? entry : { ...entry, roomId: String(rid) });
+      if (normalized.length !== parsed.length || normalized.some((entry, index) => entry !== scoped[index])) {
+        if (!canClaimUnscopedEntries && parsed.some(entry => !entry.roomId)) {
+          await AsyncStorage.setItem(`${key}:legacy_unscoped_backup`, raw);
+        }
+        await AsyncStorage.setItem(key, JSON.stringify(normalized));
+      }
+      return normalized;
+    } catch {
+      return [];
     }
   }
-  return raw ? JSON.parse(raw) : [];
+
+  if (rid) {
+    const legacy = await AsyncStorage.getItem(KEYS.DIARY);
+    if (legacy) {
+      const memberships = await getAllMemberships().catch(() => [] as FamilyMembership[]);
+      // 只有明确只有一个家庭时才可安全迁移旧全局缓存；多家庭时保留备份并等待各自云端数据回填。
+      const onlyMembership = memberships.length === 1 && memberships[0]?.familyId === String(rid);
+      if (onlyMembership) {
+        const parsed = (JSON.parse(legacy) as DiaryEntry[]).map(entry => ({ ...entry, roomId: String(rid) }));
+        await AsyncStorage.setItem(key, JSON.stringify(parsed));
+        await AsyncStorage.removeItem(KEYS.DIARY);
+        return parsed;
+      }
+      await AsyncStorage.setItem(`${KEYS.DIARY}:legacy_unassigned_backup`, legacy);
+      await AsyncStorage.removeItem(KEYS.DIARY);
+    }
+  }
+  return [];
 }
 
 /**
@@ -828,14 +867,14 @@ export function waitForServerDiaryId(localId: string): Promise<number | null> {
   return _serverDiaryIdPromises.get(localId) ?? Promise.resolve(null);
 }
 
-export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id'>, roomId?: string): Promise<DiaryEntry> {
+export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id' | 'roomId'>, roomId?: string): Promise<DiaryEntry> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.DIARY, rid);
   const all = await getDiaryEntries(rid ?? undefined);
   const now = new Date();
   // 使用 getHours/getMinutes 生成本地时间字符串（避免 Hermes 引擎 toLocaleTimeString 返回 "下午2:30" 格式）
   const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const entry: DiaryEntry = { id: generateId(), createdAt: now.toISOString(), localTimeStr, ...data };
+  const entry: DiaryEntry = { id: generateId(), ...data, roomId: rid ?? undefined, createdAt: now.toISOString(), localTimeStr };
   all.unshift(entry);
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync diary entry to server, and expose the serverDiaryId promise
@@ -862,7 +901,7 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   const all = await getDiaryEntries(rid ?? undefined);
   const idx = all.findIndex(e => e.id === id);
   if (idx < 0) return null;
-  all[idx] = { ...all[idx], ...data };
+  all[idx] = { ...all[idx], ...data, roomId: rid ?? all[idx].roomId };
   // 写回前按 createdAt 降序重新排序，防止字段更新（如 serverDiaryId/conversationFinished）后破坏列表顺序
   all.splice(0, all.length, ...sortDiaryEntries(all));
   await AsyncStorage.setItem(key, JSON.stringify(all));

@@ -69,11 +69,12 @@ export default function DiaryDetailScreen() {
           const cloudEntries = await cloudGetDiaries(familyId ? Number(familyId) : undefined);
           // 剥离 cloud_ 前缀后再与云端数字 id 比较
           const numericId = String(id).replace(/^cloud_/, '');
-          const matched = cloudEntries.find((ce: any) => String(ce.id) === numericId);
+          const matched = cloudEntries?.find((ce: any) => String(ce.id) === numericId);
           if (matched) {
             e = {
               ...matched,
               id: `cloud_${matched.id}`,
+              roomId: familyId ? String(familyId) : undefined,
               serverDiaryId: matched.id,
               createdAt: matched.createdAt instanceof Date ? matched.createdAt.toISOString() : matched.createdAt,
             } as DiaryEntry;

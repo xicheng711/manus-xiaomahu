@@ -375,8 +375,13 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
   const lunarDate = getLunarDate();
 
   const activeFamilyId = activeMembership?.familyId ?? null;
+  const activeFamilyIdRef = useRef<string | null>(activeFamilyId);
+  activeFamilyIdRef.current = activeFamilyId;
 
   const loadData = useCallback(async (forceCloud = false) => {
+    const requestedFamilyId = activeFamilyId;
+    if (!requestedFamilyId || !activeMembership) return;
+    const isCurrentFamily = () => activeFamilyIdRef.current === requestedFamilyId;
     if (activeMembership) {
       setElderNickname(activeMembership.room.elderName || '家人');
       // 被照顾者头像：优先使用 elderPhotoUri（自定义上传的照片）
@@ -386,12 +391,14 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       // elderEmoji 会在下面 cloudGetElderProfile 返回后正确设置
     }
     const profile = await getProfile();
+    if (!isCurrentFamily()) return;
     if (profile) {
       if (!activeMembership) setElderNickname(profile.nickname || profile.name || '家人');
       setCaregiverName(profile.caregiverName || '');
       if (profile.zodiacEmoji && !activeMembership) setElderEmoji(profile.zodiacEmoji);
     }
     const member = await getCurrentMember();
+    if (!isCurrentFamily()) return;
     setCurrentMember(member);
     // 头像优先级：主动从云端拉取最新 room detail，确保头像是最新的
     // 而不是依赖可能过期的 activeMembership 缓存
@@ -401,6 +408,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       const roomId = familyId ? parseInt(familyId) : null;
       if (roomId && !isNaN(roomId)) {
         const detail = await cloudGetRoomDetail(roomId);
+        if (!isCurrentFamily()) return;
         if (detail?.members) {
           const freshMember = detail.members.find(
             (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(activeMembership?.myMemberId)
@@ -439,10 +447,11 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     }
 
     // Joiner 也先读取当前家庭的本地缓存；正常切换页面不会每次都等待云端。
-    let checkIns: DailyCheckIn[] = await getAllCheckIns(activeFamilyId || undefined);
-    let diaries: DiaryEntry[] = await getDiaryEntries(activeFamilyId || undefined);
+    let checkIns: DailyCheckIn[] = await getAllCheckIns(requestedFamilyId);
+    let diaries: DiaryEntry[] = await getDiaryEntries(requestedFamilyId);
+    if (!isCurrentFamily()) return;
     let creatorName = profile?.caregiverName || '照顾者';
-    const roomIdNum = activeFamilyId ? parseInt(activeFamilyId) : undefined;
+    const roomIdNum = parseInt(requestedFamilyId);
     if (roomIdNum && !isNaN(roomIdNum) && await shouldRefreshCloudCache(roomIdNum, 'joiner-home', undefined, forceCloud)) {
       try {
         const [cloudCheckIns, cloudDiaries, cloudProfile] = await Promise.all([
@@ -450,12 +459,13 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
           cloudGetDiaries(roomIdNum, 50),
           cloudGetElderProfile(roomIdNum),
         ]);
+        if (!isCurrentFamily()) return;
         if (Array.isArray(cloudCheckIns) && cloudCheckIns.length > 0) {
           checkIns = cloudCheckIns as DailyCheckIn[];
-          await AsyncStorage.setItem(`daily_checkins_v2:${activeFamilyId}`, JSON.stringify(checkIns));
+          await AsyncStorage.setItem(`daily_checkins_v2:${requestedFamilyId}`, JSON.stringify(checkIns));
         }
         if (Array.isArray(cloudDiaries)) {
-          diaries = await mergeCloudDiariesIntoLocal(cloudDiaries, activeFamilyId || undefined);
+          diaries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);
         }
         if (cloudProfile?.nickname) setElderNickname(cloudProfile.nickname);
         if (cloudProfile?.elderPhotoUri) setElderPhotoUri(cloudProfile.elderPhotoUri);
@@ -476,6 +486,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     const _todayNow = new Date();
     const _todayKey = `${_todayNow.getFullYear()}-${String(_todayNow.getMonth() + 1).padStart(2, '0')}-${String(_todayNow.getDate()).padStart(2, '0')}`;
     // 始终显示最新打卡（checkIns[0]），不按 Joiner 本地日期过滤
+    if (!isCurrentFamily()) return;
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest); // 始终用最新打卡，状态文字会显示实际日期
     setAllCheckIns(checkIns);
@@ -498,11 +509,11 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     // 关键修复：云端 localTimeStr 为空时，从本地缓存补充（防止数据库迁移未完成或竞态导致时间显示错误）
     let announcements: FamilyAnnouncement[] = [];
     try {
-      const roomIdNum2 = activeFamilyId ? parseInt(activeFamilyId) : undefined;
+      const roomIdNum2 = parseInt(requestedFamilyId);
       const cloudAnns = await cloudGetAnnouncements(roomIdNum2, 30);
       if (cloudAnns && cloudAnns.length > 0) {
         // 拉取本地缓存，用于补充云端缺失的 localTimeStr
-        const localAnns = await getFamilyAnnouncements(30, activeFamilyId || undefined);
+        const localAnns = await getFamilyAnnouncements(30, requestedFamilyId);
         // 本地 id 是 generateId() 随机字符串，云端 id 是数据库自增整数，两者永远不匹配
         // 必须用 content+date+authorName 三元组匹配
         const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [
@@ -522,11 +533,12 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
           } as FamilyAnnouncement;
         });
       } else {
-        announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
+        announcements = await getFamilyAnnouncements(30, requestedFamilyId);
       }
     } catch {
       announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
     }
+    if (!isCurrentFamily()) return;
     setLatestAnnounce(announcements[0] ?? null);
     // 「今日活动记录」必须只显示今天，不再混入昨天或明天的记录。
     // 所有共享记录都已经保存发布者写入的 YYYY-MM-DD date，因此统一按 date 精确匹配。
@@ -536,7 +548,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));
     // 读取今日简报缓存
     try {
-      const cacheKey = activeFamilyId ? `share_briefing_cache_v1:${activeFamilyId}` : 'share_briefing_cache_v1';
+      const cacheKey = `share_briefing_cache_v1:${requestedFamilyId}`;
       const raw = await AsyncStorage.getItem(cacheKey);
       if (raw) {
         const parsed = JSON.parse(raw);

@@ -390,7 +390,7 @@ export default function DiaryEditScreen() {
       const isOthersPerson = entry.authorUserId && currentUserId && entry.authorUserId !== currentUserId;
       try {
         const cloudEntries = await cloudGetDiaries(familyId ? Number(familyId) : undefined);
-        const cloudEntry = cloudEntries.find((e: any) => e.id === entry!.serverDiaryId);
+        const cloudEntry = cloudEntries?.find((e: any) => e.id === entry!.serverDiaryId);
         if (cloudEntry) {
           if (isOthersPerson) {
             // 他人写的日记：强制以云端 conversationFinished 为准（不信任本地缓存）
@@ -414,7 +414,7 @@ export default function DiaryEditScreen() {
         // 云端 id 是数字，本地传入的 id 可能是 "cloud_123" 或纯数字字符串
         // 剥离 cloud_ 前缀后再比较
         const numericId = String(id).replace(/^cloud_/, '');
-        const matched = cloudEntries.find(
+        const matched = cloudEntries?.find(
           (e: any) => String(e.id) === numericId
         );
         if (matched) {
@@ -426,6 +426,7 @@ export default function DiaryEditScreen() {
             : (typeof matched.createdAt === 'string' ? matched.createdAt : matched.date);
           const normalized: any = {
             id: localId,
+            roomId: familyId ? String(familyId) : undefined,
             serverDiaryId: matched.id,
             date: matched.date,
             content: matched.content || '',
@@ -562,8 +563,9 @@ export default function DiaryEditScreen() {
     // 使用 entryRef.current?.id 作为主要来源，避免 React state 闭包问题导致 entryId 为 null
     const eid = entryRef.current?.id ?? entryId;
     if (!eid) return;
-    // 传入 familyId 作为 roomId，确保写入正确的 storage key
+    // 传入 familyId 作为 roomId，确保写入正确的 storage key；同时更新内存快照供下一轮 AI 使用。
     await updateDiaryEntry(eid, { conversation: conv }, familyId ?? undefined);
+    if (entryRef.current) entryRef.current = { ...entryRef.current, conversation: conv };
   }
 
   async function handleSubmit() {
@@ -650,6 +652,8 @@ export default function DiaryEditScreen() {
     // Save locally and trigger cloud sync via updateDiaryEntry (which handles waiting for serverDiaryId
     // internally and syncs using a snapshot — no extra explicit cloudSyncDiary call needed here).
     await updateDiaryEntry(savedEntry.id, { aiReply: aiText, conversation: conv2 }, familyId ?? undefined);
+    // 第一轮 AI 回复必须同步写入 entryRef；否则用户立即追问时 originalAiReply 仍为空，模型会丢失上一句。
+    entryRef.current = { ...savedEntry, aiReply: aiText, conversation: conv2 };
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
   }
 
@@ -688,9 +692,9 @@ export default function DiaryEditScreen() {
       const result = await followUpMutation.mutateAsync({
         elderNickname,
         caregiverName,
-        originalContent: entryRef.current.content ?? '',
+        originalContent: entryRef.current.content?.trim() || conversationRef.current[0]?.text || '已记录今日护理情况',
         originalMood: entryRef.current.moodEmoji ?? '',
-        originalAiReply: entryRef.current.aiReply ?? '',
+        originalAiReply: entryRef.current.aiReply || conversationRef.current[1]?.text || '',
         checkInSummary,
         history: historyForApi,
         question: q,

@@ -356,13 +356,14 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
 /** Fetch diary entries from server */
 export async function cloudGetDiaries(roomId?: number, limit = 100) {
   const rid = roomId ?? await getActiveRoomId();
-  if (!rid) return [];
+  if (!rid) return null;
   try {
     const client = getClient();
     return await client.family.getDiaries.query({ roomId: rid, limit });
   } catch (e) {
     console.warn('[CloudSync] getDiaries failed:', e);
-    return [];
+    // null 表示网络/权限失败；[] 才表示服务端成功返回“当前家庭没有日记”。
+    return null;
   }
 }
 

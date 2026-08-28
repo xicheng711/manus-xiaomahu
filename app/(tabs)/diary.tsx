@@ -330,8 +330,10 @@ const diaryListScrollOffsets = new Map<string, number>();
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function DiaryScreenContent() {
   const router = useRouter();
-  const { activeMembership } = useFamilyContext();
+  const { activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(familyId);
+  activeFamilyRef.current = familyId;
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [interactionSummaries, setInteractionSummaries] = useState<Record<number, DiaryInteractionSummary>>({});
   const [editMode, setEditMode] = useState(false);
@@ -342,7 +344,7 @@ function DiaryScreenContent() {
   const fabScale = useRef(new Animated.Value(1)).current;
   const fabBreath = useRef(new Animated.Value(1)).current;
   const listScrollRef = useRef<ScrollView>(null);
-  const listKey = familyId || 'legacy';
+  const listKey = familyId || 'loading';
 
   useEffect(() => {
     fadeInUp(headerFade, headerSlide, { duration: 500 });
@@ -357,11 +359,11 @@ function DiaryScreenContent() {
   const { refresh: refreshParam } = useLocalSearchParams<{ refresh?: string }>();
   // 通知点击时传入 refresh 参数，触发强制刷新
   useEffect(() => {
-    if (refreshParam) {
+    if (refreshParam && familyReady && familyId) {
       loadEntries(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshParam]);
+  }, [refreshParam, familyReady, familyId]);
 
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
@@ -371,21 +373,28 @@ function DiaryScreenContent() {
   }, [familyId]);
 
   useFocusEffect(useCallback(() => {
+    if (!familyReady || !familyId) {
+      setEntries([]);
+      setInteractionSummaries({});
+      return;
+    }
+    const requestedFamilyId = familyId;
     const savedOffset = diaryListScrollOffsets.get(listKey) ?? 0;
     loadEntries().finally(() => {
-      // 等列表完成渲染后恢复到用户打开日记前的位置。
+      // 家庭已切换时，旧请求不能恢复旧家庭的滚动位置。
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       setTimeout(() => listScrollRef.current?.scrollTo({ y: savedOffset, animated: false }), 80);
     });
     setEditMode(false);
     // 不重置 showAll：否则从下方日记返回时列表折叠，滚动位置也会丢失。
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyId, listKey]));
+  }, [familyReady, familyId, listKey]));
 
-  async function loadInteractionSummaries(list: DiaryEntry[]) {
-    const roomId = familyId ? Number(familyId) : NaN;
+  async function loadInteractionSummaries(list: DiaryEntry[], requestedFamilyId: string) {
+    const roomId = Number(requestedFamilyId);
     const diaryIds = list.map(getServerDiaryId).filter((id): id is number => Number.isFinite(id));
     if (!Number.isFinite(roomId) || diaryIds.length === 0) {
-      setInteractionSummaries({});
+      if (activeFamilyRef.current === requestedFamilyId) setInteractionSummaries({});
       return;
     }
     const rows = await cloudGetDiaryInteractionSummaries([...new Set(diaryIds)], roomId);
@@ -396,33 +405,37 @@ function DiaryScreenContent() {
         commentCount: Number(row.commentCount || 0),
       };
     });
-    setInteractionSummaries(next);
+    if (activeFamilyRef.current === requestedFamilyId) setInteractionSummaries(next);
   }
 
   async function loadEntries(forceCloud = false) {
+    const requestedFamilyId = familyId;
+    if (!familyReady || !requestedFamilyId) return;
     // 立即展示当前家庭的本地缓存；即使网络慢也不会出现空白或卡顿。
-    const local = await getDiaryEntries(familyId);
+    const local = await getDiaryEntries(requestedFamilyId);
     const localSorted = [...local].sort((a, b) => {
       const ta = new Date(a.createdAt || a.date).getTime();
       const tb = new Date(b.createdAt || b.date).getTime();
       if (tb !== ta) return tb - ta;
       return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
     });
+    if (activeFamilyRef.current !== requestedFamilyId) return;
     setEntries(localSorted);
-    loadInteractionSummaries(localSorted).catch(() => {});
+    loadInteractionSummaries(localSorted, requestedFamilyId).catch(() => {});
 
-    const roomId = familyId ? Number(familyId) : NaN;
+    const roomId = Number(requestedFamilyId);
     if (!Number.isFinite(roomId) || !await shouldRefreshCloudCache(roomId, 'diary', undefined, forceCloud)) return;
 
     // 缓存过期、下拉刷新或通知点击时才校验云端，并安全合并而非覆盖本地完整对话。
     try {
       const cloudEntries = await cloudGetDiaries(roomId);
       if (Array.isArray(cloudEntries)) {
-        const merged = await mergeCloudDiariesIntoLocal(cloudEntries, familyId);
+        const merged = await mergeCloudDiariesIntoLocal(cloudEntries, requestedFamilyId);
+        if (activeFamilyRef.current !== requestedFamilyId) return;
         setEntries(merged);
-        loadInteractionSummaries(merged).catch(() => {});
+        loadInteractionSummaries(merged, requestedFamilyId).catch(() => {});
+        await markCloudCacheFresh(roomId, 'diary');
       }
-      await markCloudCacheFresh(roomId, 'diary');
     } catch (e) {
       console.warn('[Diary] cloudGetDiaries failed, using local only:', e);
     }

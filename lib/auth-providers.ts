@@ -6,7 +6,7 @@ import {
   getProfile, getFamilyProfile,
   addOrUpdateMembership, saveFamilyRoom, saveFamilyProfile,
   setActiveFamilyId, setActiveRoomIdCache,
-  setCurrentMember,
+  setCurrentMember, mergeCloudDiariesIntoLocal,
   FamilyMembership, FamilyRoom,
 } from '@/lib/storage';
 import {
@@ -239,30 +239,10 @@ async function navigateAfterLogin(router: Router) {
             await AsyncStorage.setItem(rk('daily_checkins_v2'), JSON.stringify(localCheckIns));
           }
 
-          // Write diaries
-          if (Array.isArray(diariesData) && diariesData.length > 0) {
-            const localDiaries = diariesData.map((d: any) => ({
-              id: `server_${d.id}`,
-              serverDiaryId: d.id,
-              date: d.date,
-              content: d.content ?? '',
-              moodEmoji: d.moodEmoji,
-              moodLabel: d.moodLabel,
-              moodScore: d.moodScore,
-              tags: d.tags ?? [],
-              caregiverMoodEmoji: d.caregiverMoodEmoji,
-              caregiverMoodLabel: d.caregiverMoodLabel,
-              aiReply: d.aiReply,
-              aiEmoji: d.aiEmoji,
-              aiTip: d.aiTip,
-              conversation: d.conversation ?? [],
-              conversationFinished: d.conversationFinished ?? true,
-              localTimeStr: d.localTimeStr,
-              authorName: d.authorName,
-              authorUserId: d.authorUserId,
-              createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
-            }));
-            await AsyncStorage.setItem(rk('diary_entries'), JSON.stringify(localDiaries));
+          // Write diaries: null 表示网络失败，保留旧缓存；数组（包括空数组）表示服务端成功返回。
+          // 使用统一合并函数为每条记录写入 roomId，并保留尚未完成上传的本地完整对话。
+          if (Array.isArray(diariesData)) {
+            await mergeCloudDiariesIntoLocal(diariesData, roomIdStr);
           }
 
           // Write announcements

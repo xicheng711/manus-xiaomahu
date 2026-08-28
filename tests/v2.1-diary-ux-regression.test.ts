@@ -80,3 +80,86 @@ describe('Announcement reaction attribution', () => {
     expect(router).toContain('if (isAdding)');
   });
 });
+
+describe('Multi-family diary cache isolation and speed', () => {
+  const storage = read('lib/storage.ts');
+  const diaryList = read('app/(tabs)/diary.tsx');
+  const joinerHome = read('components/joiner-home.tsx');
+  const cloudSync = read('lib/cloud-sync.ts');
+
+  it('tags every newly cached diary with its owning family id', () => {
+    expect(storage).toContain('roomId?: string');
+    expect(storage).toContain('roomId: rid ?? undefined');
+    expect(storage).toContain('normalizeCloudDiaryEntry(raw, rid ?? undefined)');
+  });
+
+  it('never guesses ownership of an unscoped legacy diary for a multi-family user', () => {
+    expect(storage).toContain('const canClaimUnscopedEntries = memberships.length === 1');
+    expect(storage).toContain(': canClaimUnscopedEntries);');
+    expect(storage).toContain('legacy_unassigned_backup');
+  });
+
+  it('renders the current family cache first and refreshes that same family in the background', () => {
+    const localRead = diaryList.indexOf('const local = await getDiaryEntries(requestedFamilyId)');
+    const localRender = diaryList.indexOf('setEntries(localSorted)');
+    const cloudRead = diaryList.indexOf('const cloudEntries = await cloudGetDiaries(roomId)');
+    expect(localRead).toBeGreaterThan(-1);
+    expect(localRender).toBeGreaterThan(localRead);
+    expect(cloudRead).toBeGreaterThan(localRender);
+    expect(diaryList).toContain('activeFamilyRef.current !== requestedFamilyId');
+    expect(joinerHome).toContain('const isCurrentFamily = () => activeFamilyIdRef.current === requestedFamilyId');
+    expect(joinerHome).toContain('if (!isCurrentFamily()) return');
+    expect(cloudSync).toContain('return null');
+  });
+});
+
+describe('Diary draft, full text, and accidental navigation protection', () => {
+  const diaryEdit = read('app/diary-edit.tsx');
+  const layout = read('app/_layout.tsx');
+
+  it('does not impose a character limit on the diary editor or detail text', () => {
+    const diaryInput = diaryEdit.slice(diaryEdit.indexOf('placeholder={`${elderNickname}今天有什么特别的时刻？'), diaryEdit.indexOf('/* ── SUBMITTED'));
+    expect(diaryInput).toContain('multiline');
+    expect(diaryInput).not.toContain('maxLength');
+    expect(diaryEdit).toContain('<Text style={styles.summaryContent}>{content.trim()}</Text>');
+  });
+
+  it('supports family-scoped autosave, explicit draft save, and later restore', () => {
+    expect(diaryEdit).toContain('getDiaryDraft(familyId)');
+    expect(diaryEdit).toContain('saveDiaryDraft({ content, selectedMood, caregiverMoodIdx, selectedTags }, familyId)');
+    expect(diaryEdit).toContain('保存草稿，稍后继续');
+  });
+
+  it('disables both edge swipe and full-screen swipe on the diary editor', () => {
+    expect(layout).toContain('<Stack.Screen name="diary-edit" options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />');
+  });
+});
+
+describe('Continuous AI diary conversation', () => {
+  const diaryEdit = read('app/diary-edit.tsx');
+  const aiRouter = read('server/ai-router.ts');
+
+  it('keeps the first AI reply in the in-memory entry used by immediate follow-ups', () => {
+    expect(diaryEdit).toContain('entryRef.current = { ...savedEntry, aiReply: aiText, conversation: conv2 }');
+    expect(diaryEdit).toContain("entryRef.current.aiReply || conversationRef.current[1]?.text || ''");
+  });
+
+  it('sends the original turn, prior follow-ups, and current message as role-based history', () => {
+    expect(aiRouter).toContain("messages.push({ role: 'assistant', content: originalAiReply })");
+    expect(aiRouter).toContain("role: m.role === 'user' ? 'user' : 'assistant'");
+    expect(aiRouter).toContain("messages.push({ role: 'user', content: question })");
+    expect(aiRouter).toContain('必须把历史消息当作正在进行的真实聊天');
+  });
+});
+
+describe('Evening meal multiline input', () => {
+  const checkin = read('app/(tabs)/checkin.tsx');
+
+  it('forces the meal field Enter key to insert a newline without dismissing the keyboard', () => {
+    const mealInput = checkin.slice(checkin.indexOf('style={[styles.mealCustomInput'), checkin.indexOf('/>', checkin.indexOf('style={[styles.mealCustomInput')));
+    expect(mealInput).toContain('multiline');
+    expect(mealInput).toContain('submitBehavior="newline"');
+    expect(mealInput).toContain('blurOnSubmit={false}');
+    expect(mealInput).toContain('returnKeyType="default"');
+  });
+});
