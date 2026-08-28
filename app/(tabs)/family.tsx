@@ -5,13 +5,14 @@ import {
   Keyboard, TouchableWithoutFeedback, Clipboard, KeyboardAvoidingView, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
   getFamilyRoom, getFamilyAnnouncements, saveFamilyRoom, cloudGetRoomDetail, saveFamilyAnnouncement,
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
   joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
-  getAllCheckIns, getDiaryEntries,
+  getAllCheckIns, getDiaryEntries, mergeCloudDiariesIntoLocal,
   getProfile, getFamilyProfile, getUserProfile,
   FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
@@ -437,6 +438,18 @@ export default function FamilyScreen() {
 
   const { activeMembership, refresh } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(familyId);
+  activeFamilyRef.current = familyId;
+
+  useEffect(() => {
+    // 家庭切换后先清空上一家庭的可见数据，随后立即加载新家庭缓存，避免短暂串页。
+    setRoom(null);
+    setCurrentMemberState(null);
+    setAnnouncements([]);
+    setBriefingData(null);
+    setBriefingHistory([]);
+    setElderNickname(activeMembership?.room.elderName || '家人');
+  }, [familyId]);
 
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
@@ -474,22 +487,35 @@ export default function FamilyScreen() {
   }, []);
 
   async function loadData() {
+    const requestedMembership = activeMembership;
+    const requestedFamilyId = requestedMembership?.familyId;
+    if (!requestedMembership || !requestedFamilyId) {
+      setRoom(null);
+      setCurrentMemberState(null);
+      setAnnouncements([]);
+      setBriefingData(null);
+      setBriefingHistory([]);
+      setLoading(false);
+      return;
+    }
+    const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
     setLoading(true);
-    const activeRoomId = getActiveRoomIdCache();
-    const [rLocal, m, localAnns, creatorFlag, cloudAnns, activeMem] = await Promise.all([
-      getFamilyRoom(),
-      getCurrentMember(),
-      getFamilyAnnouncements(),
-      getCurrentUserIsCreator(),
-      cloudGetAnnouncements(undefined, 50).catch(() => [] as any[]),
-      getActiveMembership(),
+    const rLocal = requestedMembership.room;
+    const m = rLocal.members.find(member => member.id === requestedMembership.myMemberId) ?? null;
+    const creatorFlag = requestedMembership.role === 'creator' || m?.isCreator === true;
+    const [localAnns, cloudAnns] = await Promise.all([
+      getFamilyAnnouncements(30, requestedFamilyId),
+      cloudGetAnnouncements(Number(requestedFamilyId), 50).catch(() => null),
     ]);
-    // myMemberId is the authoritative member row id for the current user
-    const myMemberId = activeMem?.myMemberId ?? m?.id;
+    if (!isCurrentFamily()) return;
+    // myMemberId is the authoritative member row id for the requested family.
+    const myMemberId = requestedMembership.myMemberId;
     let r = rLocal;
+    const activeRoomId = requestedFamilyId;
     if (activeRoomId) {
       try {
         const detail = await cloudGetRoomDetail(Number(activeRoomId));
+        if (!isCurrentFamily()) return;
         if (detail?.room) {
           // 本地已有成员数据（用于备用本地 photoUri）
           const localMembersMap = new Map((rLocal?.members ?? []).map((lm: any) => [String(lm.id), lm]));
@@ -524,7 +550,7 @@ export default function FamilyScreen() {
             members: serverMembers,
             createdAt: detail.room.createdAt ?? r?.createdAt ?? new Date().toISOString(),
           };
-          await saveFamilyRoom(r);
+          if (isCurrentFamily()) await saveFamilyRoom(r);
         }
       } catch (e) {
         console.warn("[Family] getRoomDetail failed", e);
@@ -571,6 +597,7 @@ export default function FamilyScreen() {
         cloudUpdateMemberProfile(syncData).catch(() => {});
       }
     }
+    if (!isCurrentFamily()) return;
     setRoom(r);
     // 优先使用服务器返回的最新成员数据（包含最新名字），避免本地缓存名字过时
     const serverMe = r?.members?.find((mem: any) => mem.isCurrentUser || String(mem.id) === String(myMemberId));
@@ -583,7 +610,7 @@ export default function FamilyScreen() {
     const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [
       `${la.content}|${la.date}|${la.authorName}`, la
     ]));
-    const a: FamilyAnnouncement[] = (cloudAnns && cloudAnns.length > 0)
+    const a: FamilyAnnouncement[] = Array.isArray(cloudAnns)
       ? (cloudAnns as any[]).map((c: any) => {
           const cloudId = String(c.id);
           // 用内容+日期+作者名匹配本地缓存（因为本地id和云端id不同命名空间）
@@ -609,6 +636,9 @@ export default function FamilyScreen() {
           };
         })
       : localAnns;
+    if (Array.isArray(cloudAnns)) {
+      await AsyncStorage.setItem(`family_announcements_v1:${requestedFamilyId}`, JSON.stringify(a));
+    }
     setAnnouncements(a);
     setIsCreator(creatorFlag);
 
@@ -620,23 +650,25 @@ export default function FamilyScreen() {
     if (!creatorFlag) {
       // Joiner: pull from cloud
       const [cloudCIs, cloudDiaries, cloudProfile] = await Promise.all([
-        cloudGetCheckIns(familyId ? Number(familyId) : undefined).catch(() => []),
-        cloudGetDiaries(familyId ? Number(familyId) : undefined).catch(() => []),
-        cloudGetElderProfile().catch(() => null),
+        cloudGetCheckIns(Number(requestedFamilyId)).catch(() => []),
+        cloudGetDiaries(Number(requestedFamilyId)).catch(() => []),
+        cloudGetElderProfile(Number(requestedFamilyId)).catch(() => null),
       ]);
       allCheckIns = (cloudCIs as any[]) ?? [];
       const todayDate = todayStr();
       todayCheckIn = allCheckIns.find((ci: any) => ci.date === todayDate) ?? null;
-      diaryEntries = (cloudDiaries as any[]) ?? [];
-      profile = cloudProfile ?? await getProfile();
+      diaryEntries = Array.isArray(cloudDiaries)
+        ? await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId)
+        : await getDiaryEntries(requestedFamilyId);
+      const scopedProfile = await getFamilyProfile(requestedFamilyId);
+      profile = cloudProfile ?? scopedProfile ?? { nickname: requestedMembership.room.elderName };
     } else {
       // Creator: read local first, then sync from cloud in background
-      const activeRoomId = getActiveRoomIdCache();
       const [localToday, localAll, localDiaries, localFp, localProfile] = await Promise.all([
-        getTodayCheckIn(activeRoomId || undefined),
-        getAllCheckIns(activeRoomId || undefined),
-        getDiaryEntries(activeRoomId || undefined),
-        activeRoomId ? getFamilyProfile(activeRoomId) : Promise.resolve(null),
+        getTodayCheckIn(requestedFamilyId),
+        getAllCheckIns(requestedFamilyId),
+        getDiaryEntries(requestedFamilyId),
+        getFamilyProfile(requestedFamilyId),
         getProfile(),
       ]);
       todayCheckIn = localToday;
@@ -680,31 +712,8 @@ export default function FamilyScreen() {
             const todayDate = todayStr();
             todayCheckIn = localCheckIns.find((c: any) => c.date === todayDate) ?? null;
           }
-          if (Array.isArray(cloudDiaries) && cloudDiaries.length > 0) {
-            const localDiaries2 = (cloudDiaries as any[]).map((d: any) => ({
-              id: `server_${d.id}`,
-              serverDiaryId: d.id,
-              date: d.date,
-              content: d.content ?? '',
-              moodEmoji: d.moodEmoji,
-              moodLabel: d.moodLabel,
-              moodScore: d.moodScore,
-              tags: d.tags ?? [],
-              caregiverMoodEmoji: d.caregiverMoodEmoji,
-              caregiverMoodLabel: d.caregiverMoodLabel,
-              aiReply: d.aiReply,
-              aiEmoji: d.aiEmoji,
-              aiTip: d.aiTip,
-              conversation: d.conversation ?? [],
-              conversationFinished: d.conversationFinished ?? true,
-              localTimeStr: d.localTimeStr,
-              authorName: d.authorName,
-              authorUserId: d.authorUserId,
-              createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
-            }));
-            const { default: AsyncStorage2 } = await import('@react-native-async-storage/async-storage');
-            await AsyncStorage2.setItem(`diary_entries:${familyId}`, JSON.stringify(localDiaries2));
-            diaryEntries = localDiaries2;
+          if (Array.isArray(cloudDiaries)) {
+            diaryEntries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);
           }
         } catch (e) {
           console.warn('[Family] cloud fallback failed:', e);
@@ -713,9 +722,10 @@ export default function FamilyScreen() {
       // Prefer FamilyProfile (family-scoped) for elder data
       profile = localFp ? { ...localProfile, ...localFp, name: localFp.name || localProfile?.name, nickname: localFp.nickname || localProfile?.nickname } as any : localProfile;
     }
+    if (!isCurrentFamily()) return;
     const today = todayStr();
     setBriefingData({ checkIn: todayCheckIn, profile, todayAnnouncements: a.filter(ann => ann.date === today) });
-    setElderNickname(profile?.nickname || profile?.name || '家人');
+    setElderNickname(profile?.nickname || profile?.name || r?.elderName || '家人');
     setElderEmoji(profile?.zodiacEmoji || '🐯');
 
     // Build briefing history: always show the latest 3 calendar days.
@@ -760,29 +770,32 @@ export default function FamilyScreen() {
       const dayAnnouncements = a.filter(ann => ann.date === dateKey);
       history.push({ date: dateKey, label, checkIn: dayCheckIn, diary: dayDiary, announcements: dayAnnouncements });
     }
+    if (!isCurrentFamily()) return;
     setBriefingHistory(history);
 
     // Select the newest day that has any check-in data; otherwise show the first day.
     const latestWithData = history.find(item => item.checkIn) || history[0];
     if (latestWithData) setSelectedBriefingDate(latestWithData.date);
 
+    if (!isCurrentFamily()) return;
     setLoading(false);
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }
 
   async function handlePostAnnouncement() {
-    if (!composeText.trim() || !currentMember) return;
+    const requestedFamilyId = familyId;
+    const postingMember = activeMembership?.room.members.find(member => member.id === activeMembership.myMemberId) ?? currentMember;
+    if (!requestedFamilyId || !composeText.trim() || !postingMember) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const newAnn = await saveFamilyAnnouncement({
-      authorId: currentMember.id,
-      authorName: currentMember.name,
-      authorEmoji: currentMember.emoji,
-      authorColor: currentMember.color,
+      authorId: postingMember.id,
+      authorName: postingMember.name,
+      authorEmoji: postingMember.emoji,
+      authorColor: postingMember.color,
       content: composeText.trim(),
       emoji: composeEmoji,
       type: composeType,
-    });
-    const postedText = composeText.trim();
+    }, requestedFamilyId);
     setComposeText('');
     setComposeEmoji('');
     setComposeType('daily');
@@ -800,8 +813,8 @@ export default function FamilyScreen() {
   }
 
   async function handleDeleteAnnouncement(id: string) {
-    // Server-first: delete on server before removing locally
-    const roomId = getActiveRoomIdCache();
+    // Server-first: delete on server before removing locally；始终锁定当前页面所属家庭。
+    const roomId = familyId;
     const numericRoomId = roomId ? parseInt(roomId) : null;
     const numericAnnId = parseInt(id);
     if (numericRoomId && !isNaN(numericAnnId)) {
@@ -813,7 +826,7 @@ export default function FamilyScreen() {
       }
     }
     // Server succeeded (or no roomId to sync) — now delete locally
-    await deleteFamilyAnnouncement(id);
+    await deleteFamilyAnnouncement(id, roomId);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await loadData();
   }
@@ -999,7 +1012,7 @@ export default function FamilyScreen() {
                     if (!currentMember) return;
                     // Server-first: toggle reaction on server, then refresh from cloud
                     const numericAnnId = parseInt(String(ann.id));
-                    const numericRoomId = room?.id ? parseInt(String(room.id)) : undefined;
+                    const numericRoomId = familyId ? parseInt(familyId) : undefined;
                     if (!isNaN(numericAnnId)) {
                       const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
                       if (result === null) {
@@ -1032,7 +1045,7 @@ export default function FamilyScreen() {
                       if (!currentMember) return;
                       // Server-first: toggle reaction on server, then refresh from cloud
                       const numericAnnId = parseInt(String(ann.id));
-                      const numericRoomId = room?.id ? parseInt(String(room.id)) : undefined;
+                      const numericRoomId = familyId ? parseInt(familyId) : undefined;
                       if (!isNaN(numericAnnId)) {
                         const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
                         if (result === null) {

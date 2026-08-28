@@ -2,10 +2,10 @@ import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
@@ -18,7 +18,7 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
-import { FamilyProvider } from "@/lib/family-context";
+import { FamilyProvider, useFamilyContext } from "@/lib/family-context";
 import { WeatherProvider } from "@/lib/weather-context";
 import { initCloudSync } from "@/lib/cloud-sync";
 import { registerPushToken } from "@/lib/notifications";
@@ -31,14 +31,81 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
+function NotificationNavigator() {
+  const router = useRouter();
+  const { ready, memberships, activeMembership, switchFamily } = useFamilyContext();
+  const [pendingData, setPendingData] = useState<any>(null);
+  const handledIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const capture = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const id = response.notification.request.identifier;
+      if (handledIds.current.has(id)) return;
+      handledIds.current.add(id);
+      setPendingData(response.notification.request.content.data as any);
+    };
+    const subscription = Notifications.addNotificationResponseReceivedListener(capture);
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      capture(response);
+      if (response) Notifications.clearLastNotificationResponseAsync().catch(() => {});
+    }).catch(() => {});
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pendingData || !ready) return;
+    const data = pendingData;
+    setPendingData(null);
+    void (async () => {
+      const targetRoomId = data?.roomId ? String(data.roomId) : null;
+      if (targetRoomId && activeMembership?.familyId !== targetRoomId) {
+        if (!memberships.some(item => item.familyId === targetRoomId)) {
+          Alert.alert('无法打开这条通知', '你已不在该通知所属的家庭中。');
+          return;
+        }
+        await switchFamily(targetRoomId);
+      }
+
+      const refresh = String(Date.now());
+      switch (data?.screen || 'family') {
+        case 'diary':
+          if (data?.diaryId) {
+            router.push({ pathname: '/diary-edit', params: { id: `cloud_${data.diaryId}`, roomId: targetRoomId ?? undefined, refresh } } as any);
+          } else {
+            router.push({ pathname: '/(tabs)/diary', params: { refresh } } as any);
+          }
+          break;
+        case 'checkin':
+          router.push({ pathname: '/(tabs)/checkin', params: { refresh } } as any);
+          break;
+        case 'medication':
+          router.push({ pathname: '/(tabs)/medication', params: { refresh } } as any);
+          break;
+        case 'home':
+          router.push({ pathname: '/(tabs)/index', params: { refresh } } as any);
+          break;
+        case 'family':
+        default:
+          router.push({ pathname: '/(tabs)/family', params: { refresh } } as any);
+          break;
+      }
+    })().catch(error => {
+      console.warn('[Layout] notification navigation failed:', error);
+      Alert.alert('暂时无法打开通知', '请稍后从应用内重试。');
+    });
+  }, [pendingData, ready, memberships, activeMembership?.familyId, router, switchFamily]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
-  const router = useRouter();
-
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
@@ -55,56 +122,6 @@ export default function RootLayout() {
     const timer3 = setTimeout(() => { registerPushToken().catch(() => {}); }, 15000);
     return () => { clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3); };
   }, []);
-
-  // Handle push notification tap: navigate to the relevant screen
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-      const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as any;
-      const screen = data?.screen || 'family'; // 默认导航到 family 页面（防止 Unmatched Route）
-      // Small delay to ensure the navigator is ready
-      setTimeout(() => {
-        try {
-          // 传入 refresh=1 参数，让目标页面在 useFocusEffect 里检测到并自动刷新最新数据
-          switch (screen) {
-            case "diary":
-              if (data?.diaryId) {
-                router.push({
-                  pathname: "/diary-edit",
-                  params: {
-                    id: `cloud_${data.diaryId}`,
-                    roomId: data?.roomId ? String(data.roomId) : undefined,
-                    refresh: Date.now(),
-                  },
-                } as any);
-              } else {
-                router.push({ pathname: "/(tabs)/diary", params: { refresh: Date.now() } } as any);
-              }
-              break;
-            case "family":
-              router.push({ pathname: "/(tabs)/family", params: { refresh: Date.now() } } as any);
-              break;
-            case "checkin":
-              router.push({ pathname: "/(tabs)/checkin", params: { refresh: Date.now() } } as any);
-              break;
-            case "medication":
-              router.push({ pathname: "/(tabs)/medication", params: { refresh: Date.now() } } as any);
-              break;
-            case "home":
-              router.push({ pathname: "/(tabs)/index", params: { refresh: Date.now() } } as any);
-              break;
-            default:
-              // 未知 screen 值也导航到 family 页面
-              router.push({ pathname: "/(tabs)/family", params: { refresh: Date.now() } } as any);
-              break;
-          }
-        } catch (e) {
-          console.warn("[Layout] notification navigation failed:", e);
-        }
-      }, 300);
-    });
-    return () => subscription.remove();
-  }, [router]);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
     setInsets(metrics.insets);
@@ -159,6 +176,7 @@ export default function RootLayout() {
           {/* If a screen needs the native header, explicitly enable it and set a human title via Stack.Screen options. */}
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
           <FamilyProvider>
+            <NotificationNavigator />
             <WeatherProvider>
               <Stack screenOptions={{
                   headerShown: false,

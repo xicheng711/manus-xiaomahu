@@ -13,9 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { useWeather } from '@/lib/weather-context';
 import {
   getProfile, getAllCheckIns, getDiaryEntries, getFamilyAnnouncements,
-  getCurrentMember,
   saveFamilyAnnouncement,
-  upsertCheckIn,
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember, mergeCloudDiariesIntoLocal,
 } from '@/lib/storage';
 import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements, cloudGetRoomDetail, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
@@ -379,39 +377,32 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
   activeFamilyIdRef.current = activeFamilyId;
 
   const loadData = useCallback(async (forceCloud = false) => {
-    const requestedFamilyId = activeFamilyId;
-    if (!requestedFamilyId || !activeMembership) return;
+    const requestedMembership = activeMembership;
+    const requestedFamilyId = requestedMembership?.familyId ?? null;
+    if (!requestedFamilyId || !requestedMembership) return;
     const isCurrentFamily = () => activeFamilyIdRef.current === requestedFamilyId;
-    if (activeMembership) {
-      setElderNickname(activeMembership.room.elderName || '家人');
-      // 被照顾者头像：优先使用 elderPhotoUri（自定义上传的照片）
-      setElderPhotoUri(activeMembership.room.elderPhotoUri || null);
-      // 注意：被照顾者 emoji 应从 cloudGetElderProfile().zodiacEmoji 获取
-      // 不要用 isCreator 成员（主照顾者）的 emoji 作为被照顾者头像
-      // elderEmoji 会在下面 cloudGetElderProfile 返回后正确设置
-    }
+    const scopedMember = requestedMembership.room.members.find(item => item.id === requestedMembership.myMemberId) ?? null;
+    setCurrentMember(scopedMember);
+    setElderNickname(requestedMembership.room.elderName || '家人');
+    // 被照顾者头像：优先使用当前家庭缓存的照片；emoji 由云端 elder profile 更新。
+    setElderPhotoUri(requestedMembership.room.elderPhotoUri || null);
     const profile = await getProfile();
     if (!isCurrentFamily()) return;
-    if (profile) {
-      if (!activeMembership) setElderNickname(profile.nickname || profile.name || '家人');
+    const allowLegacyFallback = memberships.length === 1;
+    if (profile && allowLegacyFallback) {
       setCaregiverName(profile.caregiverName || '');
-      if (profile.zodiacEmoji && !activeMembership) setElderEmoji(profile.zodiacEmoji);
     }
-    const member = await getCurrentMember();
-    if (!isCurrentFamily()) return;
-    setCurrentMember(member);
     // 头像优先级：主动从云端拉取最新 room detail，确保头像是最新的
     // 而不是依赖可能过期的 activeMembership 缓存
     let resolvedMemberPhotoUri: string | null = null;
     try {
-      const familyId = activeMembership?.familyId;
-      const roomId = familyId ? parseInt(familyId) : null;
+      const roomId = parseInt(requestedFamilyId);
       if (roomId && !isNaN(roomId)) {
         const detail = await cloudGetRoomDetail(roomId);
         if (!isCurrentFamily()) return;
         if (detail?.members) {
           const freshMember = detail.members.find(
-            (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(activeMembership?.myMemberId)
+            (m: any) => String(m.id) === String(scopedMember?.id) || String(m.id) === String(requestedMembership.myMemberId)
           );
           if (freshMember?.photoUri) {
             resolvedMemberPhotoUri = freshMember.photoUri;
@@ -432,10 +423,10 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     }
     // 降级顺序：云端最新 > activeMembership 缓存 > 本地 member.photoUri
     if (!resolvedMemberPhotoUri) {
-      const cachedMember = activeMembership?.room?.members?.find(
-        (m: any) => m.isCurrentUser || String(m.id) === String(member?.id)
+      const cachedMember = requestedMembership.room.members.find(
+        (m: any) => m.isCurrentUser || String(m.id) === String(scopedMember?.id)
       );
-      resolvedMemberPhotoUri = cachedMember?.photoUri || member?.photoUri || null;
+      resolvedMemberPhotoUri = cachedMember?.photoUri || scopedMember?.photoUri || null;
     }
     if (resolvedMemberPhotoUri) {
       setMemberPhotoUri(resolvedMemberPhotoUri);
@@ -443,14 +434,14 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       setZodiacEmoji('');
     } else {
       setMemberPhotoUri(null);
-      setZodiacEmoji(profile?.caregiverZodiacEmoji || member?.emoji || '👤');
+      setZodiacEmoji((allowLegacyFallback ? profile?.caregiverZodiacEmoji : undefined) || scopedMember?.emoji || '👤');
     }
 
     // Joiner 也先读取当前家庭的本地缓存；正常切换页面不会每次都等待云端。
     let checkIns: DailyCheckIn[] = await getAllCheckIns(requestedFamilyId);
     let diaries: DiaryEntry[] = await getDiaryEntries(requestedFamilyId);
     if (!isCurrentFamily()) return;
-    let creatorName = profile?.caregiverName || '照顾者';
+    let creatorName = requestedMembership.room.members.find(item => item.isCreator)?.name || (allowLegacyFallback ? profile?.caregiverName : undefined) || '照顾者';
     const roomIdNum = parseInt(requestedFamilyId);
     if (roomIdNum && !isNaN(roomIdNum) && await shouldRefreshCloudCache(roomIdNum, 'joiner-home', undefined, forceCloud)) {
       try {
@@ -460,7 +451,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
           cloudGetElderProfile(roomIdNum),
         ]);
         if (!isCurrentFamily()) return;
-        if (Array.isArray(cloudCheckIns) && cloudCheckIns.length > 0) {
+        if (Array.isArray(cloudCheckIns)) {
           checkIns = cloudCheckIns as DailyCheckIn[];
           await AsyncStorage.setItem(`daily_checkins_v2:${requestedFamilyId}`, JSON.stringify(checkIns));
         }
@@ -490,8 +481,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     const latest = checkIns[0] ?? null;
     setLatestCheckIn(latest); // 始终用最新打卡，状态文字会显示实际日期
     setAllCheckIns(checkIns);
-    // 日记去重：按 serverDiaryId/id 去重，不再按 conversationFinished 过滤
-    // （主照顾者如果没有点“结束并保存”，joiner 也应该能看到日记和 AI 对话）
+    // 日记去重：服务端和本地缓存都已过滤他人的未发布内容；这里只按 ID 去重。
     const seenSrvIds = new Set<number>();
     const seenLocIds = new Set<string>();
     const cleanDiaries = diaries.filter(d => {
@@ -511,7 +501,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     try {
       const roomIdNum2 = parseInt(requestedFamilyId);
       const cloudAnns = await cloudGetAnnouncements(roomIdNum2, 30);
-      if (cloudAnns && cloudAnns.length > 0) {
+      if (Array.isArray(cloudAnns)) {
         // 拉取本地缓存，用于补充云端缺失的 localTimeStr
         const localAnns = await getFamilyAnnouncements(30, requestedFamilyId);
         // 本地 id 是 generateId() 随机字符串，云端 id 是数据库自增整数，两者永远不匹配
@@ -532,11 +522,12 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
               : (typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString()),
           } as FamilyAnnouncement;
         });
+        await AsyncStorage.setItem(`family_announcements_v1:${requestedFamilyId}`, JSON.stringify(announcements));
       } else {
         announcements = await getFamilyAnnouncements(30, requestedFamilyId);
       }
     } catch {
-      announcements = await getFamilyAnnouncements(30, activeFamilyId || undefined);
+      announcements = await getFamilyAnnouncements(30, requestedFamilyId);
     }
     if (!isCurrentFamily()) return;
     setLatestAnnounce(announcements[0] ?? null);
@@ -561,7 +552,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
         setBriefingSummary(null);
       }
     } catch { setBriefingSummary(null); }
-  }, [activeFamilyId]);
+  }, [activeFamilyId, activeMembership, memberships.length]);
 
   // 切换 Tab 时使用当前家庭缓存；缓存过期后才后台校验云端。
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
@@ -570,18 +561,21 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
   useEffect(() => {
     if (refreshToken) loadData(true);
   }, [refreshToken, loadData]);
-  // 仅在 activeFamilyId 变为 null 时清空 UI（不再重复调用 loadData）
+  // 任何家庭切换都先清空上一 profile 的可见状态，随后由当前家庭本地缓存快速填充。
   useEffect(() => {
-    if (!activeFamilyId) {
-      setElderNickname('家人');
-      setElderEmoji('🌸');
-      setCaregiverName('');
-      setLatestCheckIn(null);
-      setLatestAnnounce(null);
-      setFeed([]);
-      setCurrentMember(null);
-    }
-  }, [activeFamilyId]);
+    setElderNickname(activeMembership?.room.elderName || '家人');
+    setElderEmoji('🌸');
+    setElderPhotoUri(activeMembership?.room.elderPhotoUri || null);
+    setCaregiverName('');
+    setLatestCheckIn(null);
+    setLatestAnnounce(null);
+    setFeed([]);
+    setCurrentMember(null);
+    setMemberPhotoUri(null);
+    setAllCheckIns([]);
+    setAllDiaries([]);
+    setBriefingSummary(null);
+  }, [activeFamilyId, activeMembership?.room.elderName, activeMembership?.room.elderPhotoUri]);
 
   useEffect(() => {
     Animated.parallel([

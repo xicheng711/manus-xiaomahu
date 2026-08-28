@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   cloudSyncCheckIn,
   cloudSyncDiary,
+  cloudGetDiaries,
+  cloudDeleteDiary,
   cloudSyncMedication,
   cloudDeleteMedication,
   cloudPostAnnouncement,
@@ -13,6 +15,7 @@ import {
   cloudUpdateElderProfile,
   cloudUpdateMemberProfile,
   setCloudSyncState,
+  getCloudSyncState,
 } from "./cloud-sync";
 
 export { cloudGetRoomDetail };
@@ -139,10 +142,14 @@ export interface DailyCheckIn {
   aiMessage: string;
   careScore: number;       // 1-100
   completedAt: string;
+  /** 仅本地使用：打卡尚未成功写入家庭云端。 */
+  syncPending?: boolean;
 }
 
 export interface Medication {
   id: string;
+  /** 云端 medication 主键，用于更新和删除同一条记录。 */
+  serverMedId?: number;
   name: string;
   dosage: string;
   frequency: string;       // e.g. '每天一次'
@@ -153,6 +160,8 @@ export interface Medication {
   reminderEnabled?: boolean;
   color?: string;
   notificationIds?: string[];
+  /** 仅本地使用：新增或修改尚未成功同步到云端。 */
+  syncPending?: boolean;
 }
 
 export interface ConversationMessage {
@@ -196,6 +205,8 @@ export interface DiaryEntry {
   // Multi-turn conversation history (new in v3.0)
   conversation?: ConversationMessage[];
   conversationFinished?: boolean; // true when user tapped "End and Save"
+  /** 仅本地使用：正式发布尚未成功同步到云端，进入列表时会自动重试。 */
+  syncPending?: boolean;
   localTimeStr?: string;  // e.g. "14:23" — writer's local time, timezone-safe
 }
 
@@ -393,9 +404,11 @@ export async function getFamilyProfile(roomId?: string): Promise<FamilyProfile |
   const key = roomKey(KEYS.FAMILY_PROFILE, rid);
   const raw = await AsyncStorage.getItem(key);
   if (raw) return JSON.parse(raw);
-  // Migrate from legacy global ElderProfile if available
+  // 旧版全局 ElderProfile 没有家庭归属；仅在账号明确只有当前一个家庭时才可安全迁移。
   if (rid) {
-    const legacy = await getProfile();
+    const memberships = await getAllMemberships().catch(() => [] as FamilyMembership[]);
+    const canClaimLegacy = memberships.length === 1 && memberships[0]?.familyId === String(rid);
+    const legacy = canClaimLegacy ? await getProfile() : null;
     if (legacy) {
       const fp: FamilyProfile = {
         id: legacy.id,
@@ -428,8 +441,8 @@ export async function saveFamilyProfile(profile: Partial<FamilyProfile>, roomId?
   const existing: FamilyProfile | null = raw ? JSON.parse(raw) : null;
   const merged: FamilyProfile = { ...(existing ?? {}), ...profile };
   await AsyncStorage.setItem(key, JSON.stringify(merged));
-  // Cloud sync: update elder profile on server
-  cloudUpdateElderProfile(merged as any).catch(() => {});
+  // Cloud sync: bind the update to this family instead of the mutable global active-room pointer.
+  cloudUpdateElderProfile(merged as any, rid ? Number(rid) : undefined).catch(() => {});
   return merged;
 }
 
@@ -452,14 +465,20 @@ export async function getAllCheckIns(roomId?: string): Promise<DailyCheckIn[]> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.CHECK_INS, rid);
   const raw = await AsyncStorage.getItem(key);
-  // If scoped key is empty but we have a rid, try migrating from legacy
+  // 旧版全局缓存只有在账号明确仅有一个家庭时才能安全认领。
   if (!raw && rid) {
     const legacy = await AsyncStorage.getItem(KEYS.CHECK_INS);
     if (legacy) {
-      await AsyncStorage.setItem(key, legacy);
+      const memberships = await getAllMemberships().catch(() => [] as FamilyMembership[]);
+      const onlyMembership = memberships.length === 1 && memberships[0]?.familyId === String(rid);
+      if (onlyMembership) {
+        await AsyncStorage.setItem(key, legacy);
+        await AsyncStorage.removeItem(KEYS.CHECK_INS);
+        const list: DailyCheckIn[] = JSON.parse(legacy);
+        return list.map(normalizeMoodScore);
+      }
+      await AsyncStorage.setItem(`${KEYS.CHECK_INS}:legacy_unassigned_backup`, legacy);
       await AsyncStorage.removeItem(KEYS.CHECK_INS);
-      const list: DailyCheckIn[] = JSON.parse(legacy);
-      return list.map(normalizeMoodScore);
     }
   }
   const list: DailyCheckIn[] = raw ? JSON.parse(raw) : [];
@@ -508,14 +527,40 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     completedAt: new Date().toISOString(),
   };
   const checkIn: DailyCheckIn = idx >= 0
-    ? { ...all[idx], ...data, completedAt: new Date().toISOString() }
-    : { ...defaults, ...data };
+    ? { ...all[idx], ...data, completedAt: new Date().toISOString(), syncPending: true }
+    : { ...defaults, ...data, syncPending: true };
   if (idx >= 0) all[idx] = checkIn;
   else all.unshift(checkIn);
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: sync check-in to server
-  cloudSyncCheckIn(checkIn).catch((e) => console.warn('[xiaomahu] 打卡云端同步失败，已保存到本地', e));
+  // Cloud sync: 失败时保留 syncPending，后续进入首页/打卡页会自动重试。
+  cloudSyncCheckIn(checkIn, rid).then(async result => {
+    if (!result?.success) return;
+    const latestRaw = await AsyncStorage.getItem(key);
+    const latest: DailyCheckIn[] = latestRaw ? JSON.parse(latestRaw) : [];
+    const latestIdx = latest.findIndex(item => item.date === checkIn.date);
+    if (latestIdx >= 0) {
+      latest[latestIdx] = { ...latest[latestIdx], syncPending: false };
+      await AsyncStorage.setItem(key, JSON.stringify(latest));
+    }
+  }).catch((e) => console.warn('[xiaomahu] 打卡云端同步失败，已保存到本地', e));
   return checkIn;
+}
+
+/** Retry check-ins that were saved locally while the cloud was unavailable. */
+export async function syncPendingCheckIns(roomId: string): Promise<void> {
+  const key = roomKey(KEYS.CHECK_INS, roomId);
+  const entries = await getAllCheckIns(roomId);
+  for (const entry of entries.filter(item => item.syncPending)) {
+    const result = await cloudSyncCheckIn(entry, roomId);
+    if (!result?.success) continue;
+    const latestRaw = await AsyncStorage.getItem(key);
+    const latest: DailyCheckIn[] = latestRaw ? JSON.parse(latestRaw) : [];
+    const idx = latest.findIndex(item => item.date === entry.date);
+    if (idx >= 0) {
+      latest[idx] = { ...latest[idx], syncPending: false };
+      await AsyncStorage.setItem(key, JSON.stringify(latest));
+    }
+  }
 }
 
 export async function getRecentCheckIns(days = 7, roomId?: string): Promise<DailyCheckIn[]> {
@@ -583,6 +628,13 @@ export async function getWeeklySleepData(days = 7, roomId?: string): Promise<Arr
 
 // ─── Medications ──────────────────────────────────────────────────────────────
 
+function medicationServerId(med: Medication): number | undefined {
+  if (Number.isFinite(med.serverMedId)) return Number(med.serverMedId);
+  const rawId = String(med.id ?? '').replace(/^cloud_/, '');
+  const parsed = Number(rawId);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 export async function getMedications(roomId?: string): Promise<Medication[]> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
@@ -590,9 +642,15 @@ export async function getMedications(roomId?: string): Promise<Medication[]> {
   if (!raw && rid) {
     const legacy = await AsyncStorage.getItem(KEYS.MEDICATIONS);
     if (legacy) {
-      await AsyncStorage.setItem(key, legacy);
+      const memberships = await getAllMemberships().catch(() => [] as FamilyMembership[]);
+      const onlyMembership = memberships.length === 1 && memberships[0]?.familyId === String(rid);
+      if (onlyMembership) {
+        await AsyncStorage.setItem(key, legacy);
+        await AsyncStorage.removeItem(KEYS.MEDICATIONS);
+        return JSON.parse(legacy);
+      }
+      await AsyncStorage.setItem(`${KEYS.MEDICATIONS}:legacy_unassigned_backup`, legacy);
       await AsyncStorage.removeItem(KEYS.MEDICATIONS);
-      return JSON.parse(legacy);
     }
   }
   return raw ? JSON.parse(raw) : [];
@@ -602,11 +660,19 @@ export async function saveMedication(data: Omit<Medication, 'id'>, roomId?: stri
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
   const all = await getMedications(rid ?? undefined);
-  const med: Medication = { id: generateId(), ...data };
+  const med: Medication = { id: generateId(), ...data, syncPending: true };
   all.push(med);
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: sync medication to server
-  cloudSyncMedication(med).catch(() => {});
+  // Cloud sync: sync medication to server and persist its stable server ID for later edits/deletes.
+  cloudSyncMedication(med, undefined, rid ? Number(rid) : undefined).then(async result => {
+    const serverMedId = result?.medication?.id;
+    if (!serverMedId) return;
+    const latest = await getMedications(rid ?? undefined);
+    const latestIdx = latest.findIndex(item => item.id === med.id);
+    if (latestIdx < 0) return;
+    latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(serverMedId), syncPending: false };
+    await AsyncStorage.setItem(key, JSON.stringify(latest));
+  }).catch(() => {});
   return med;
 }
 
@@ -622,24 +688,52 @@ export async function updateMedication(id: string, data: Partial<Medication>, ro
   const all = await getMedications(rid ?? undefined);
   const idx = all.findIndex(m => m.id === id);
   if (idx >= 0) {
-    all[idx] = { ...all[idx], ...data };
+    all[idx] = { ...all[idx], ...data, syncPending: true };
     await AsyncStorage.setItem(key, JSON.stringify(all));
-    // Cloud sync: sync updated medication to server
-    cloudSyncMedication(all[idx]).catch(() => {});
+    // Cloud sync: sync updated medication to the same server row.
+    const serverMedId = medicationServerId(all[idx]);
+    cloudSyncMedication(all[idx], serverMedId, rid ? Number(rid) : undefined).then(async result => {
+      const resolvedId = result?.medication?.id ?? serverMedId;
+      if (!result?.success || !resolvedId) return;
+      const latest = await getMedications(rid ?? undefined);
+      const latestIdx = latest.findIndex(item => item.id === id);
+      if (latestIdx >= 0) {
+        latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(resolvedId), syncPending: false };
+        await AsyncStorage.setItem(key, JSON.stringify(latest));
+      }
+    }).catch(() => {});
   }
 }
 
 export async function deleteMedication(id: string, roomId?: string): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
-  // Find the medication name before deleting locally (needed for cloud sync)
   const all = await getMedications(rid ?? undefined);
   const target = all.find(m => m.id === id);
-  const filtered = all.filter(m => m.id !== id);
-  await AsyncStorage.setItem(key, JSON.stringify(filtered));
-  // Cloud sync: delete from server by name (best-effort, fire-and-forget)
-  if (target?.name) {
-    cloudDeleteMedication(target.name, rid ? Number(rid) : undefined).catch(() => {});
+  if (!target) return;
+
+  if (rid) {
+    const result = await cloudDeleteMedication(medicationServerId(target), target.name, Number(rid));
+    if (!result?.success) throw new Error('云端删除失败，请检查网络后重试');
+  }
+  await AsyncStorage.setItem(key, JSON.stringify(all.filter(m => m.id !== id)));
+}
+
+/** Retry locally saved medication changes when connectivity returns. */
+export async function syncPendingMedications(roomId: string): Promise<void> {
+  const key = roomKey(KEYS.MEDICATIONS, roomId);
+  const meds = await getMedications(roomId);
+  for (const med of meds.filter(item => item.syncPending)) {
+    const knownServerId = medicationServerId(med);
+    const result = await cloudSyncMedication(med, knownServerId, Number(roomId));
+    const resolvedId = result?.medication?.id ?? knownServerId;
+    if (!result?.success || !resolvedId) continue;
+    const latest = await getMedications(roomId);
+    const idx = latest.findIndex(item => item.id === med.id);
+    if (idx >= 0) {
+      latest[idx] = { ...latest[idx], serverMedId: Number(resolvedId), syncPending: false };
+      await AsyncStorage.setItem(key, JSON.stringify(latest));
+    }
   }
 }
 
@@ -721,6 +815,9 @@ export async function mergeCloudDiariesIntoLocal(cloudDiaries: any[], roomId?: s
       conversation,
       // 云端明确结束或本地已经结束都不能被较旧响应回滚。
       conversationFinished: Boolean(local.conversationFinished || remote.conversationFinished),
+      syncPending: remote.conversationFinished === true && remoteConversation.length >= localConversation.length
+        ? false
+        : local.syncPending,
       // 本地的 AI 回复存在而云端暂未返回时，保留本地值。
       aiReply: remote.aiReply ?? local.aiReply,
       aiEmoji: remote.aiEmoji ?? local.aiEmoji,
@@ -781,13 +878,19 @@ export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
         ? String(entry.roomId) === String(rid)
         : canClaimUnscopedEntries);
       const normalized = scoped.map(entry => entry.roomId ? entry : { ...entry, roomId: String(rid) });
-      if (normalized.length !== parsed.length || normalized.some((entry, index) => entry !== scoped[index])) {
+      const { userId: currentUserId } = await getCloudSyncState().catch(() => ({ userId: null }));
+      // 本地旧缓存也必须遵守服务端权限：明确属于他人的未发布内容不能继续显示。
+      // authorUserId 缺失的本机旧记录视为作者本人的兼容数据，避免升级后丢失自己的草稿。
+      const visible = normalized.filter(entry =>
+        entry.conversationFinished !== false || !entry.authorUserId || entry.authorUserId === currentUserId
+      );
+      if (visible.length !== parsed.length || normalized.some((entry, index) => entry !== scoped[index])) {
         if (!canClaimUnscopedEntries && parsed.some(entry => !entry.roomId)) {
           await AsyncStorage.setItem(`${key}:legacy_unscoped_backup`, raw);
         }
-        await AsyncStorage.setItem(key, JSON.stringify(normalized));
+        await AsyncStorage.setItem(key, JSON.stringify(visible));
       }
-      return normalized;
+      return visible;
     } catch {
       return [];
     }
@@ -800,7 +903,11 @@ export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
       // 只有明确只有一个家庭时才可安全迁移旧全局缓存；多家庭时保留备份并等待各自云端数据回填。
       const onlyMembership = memberships.length === 1 && memberships[0]?.familyId === String(rid);
       if (onlyMembership) {
-        const parsed = (JSON.parse(legacy) as DiaryEntry[]).map(entry => ({ ...entry, roomId: String(rid) }));
+        const migrated = (JSON.parse(legacy) as DiaryEntry[]).map(entry => ({ ...entry, roomId: String(rid) }));
+        const { userId: currentUserId } = await getCloudSyncState().catch(() => ({ userId: null }));
+        const parsed = migrated.filter(entry =>
+          entry.conversationFinished !== false || !entry.authorUserId || entry.authorUserId === currentUserId
+        );
         await AsyncStorage.setItem(key, JSON.stringify(parsed));
         await AsyncStorage.removeItem(KEYS.DIARY);
         return parsed;
@@ -895,13 +1002,19 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id' | 'roomId'>, ro
   return entry;
 }
 
-export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, roomId?: string): Promise<DiaryEntry | null> {
+export async function updateDiaryEntry(
+  id: string,
+  data: Partial<DiaryEntry>,
+  roomId?: string,
+  options?: { skipCloud?: boolean },
+): Promise<DiaryEntry | null> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.DIARY, rid);
   const all = await getDiaryEntries(rid ?? undefined);
   const idx = all.findIndex(e => e.id === id);
   if (idx < 0) return null;
-  all[idx] = { ...all[idx], ...data, roomId: rid ?? all[idx].roomId };
+  const updatedEntry: DiaryEntry = { ...all[idx], ...data, roomId: rid ?? all[idx].roomId };
+  all[idx] = updatedEntry;
   // 写回前按 createdAt 降序重新排序，防止字段更新（如 serverDiaryId/conversationFinished）后破坏列表顺序
   all.splice(0, all.length, ...sortDiaryEntries(all));
   await AsyncStorage.setItem(key, JSON.stringify(all));
@@ -909,18 +1022,19 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
   // creation), skip cloud sync entirely. Triggering a sync here would read the current local state
   // (which may already have conversationFinished:true if the user tapped "End & Save" concurrently)
   // and cause a duplicate push notification.
+  if (options?.skipCloud) return updatedEntry;
   const dataKeys = Object.keys(data);
   if (dataKeys.length === 1 && dataKeys[0] === 'serverDiaryId') {
-    return all[idx];
+    return updatedEntry;
   }
   // Cloud sync: sync when conversation is finished, when an AI reply has been added,
   // OR when the conversation has been updated at all (including user follow-up messages)
   // This ensures follow-up messages are saved even if AI hasn't replied yet or user navigates away
-  const shouldSync = all[idx].conversationFinished ||
+  const shouldSync = updatedEntry.conversationFinished ||
     data.conversation !== undefined ||
-    (data.aiReply !== undefined && !!all[idx].aiReply);
+    (data.aiReply !== undefined && !!updatedEntry.aiReply);
   if (shouldSync) {
-    const syncEntry = all[idx];
+    const syncEntry = updatedEntry;
     if (syncEntry.serverDiaryId) {
       // serverDiaryId already known — update existing cloud record (no push notification)
       cloudSyncDiary(syncEntry, syncEntry.serverDiaryId, rid).catch((e) => console.warn('[xiaomahu] 日记云端同步失败，已保存到本地', e));
@@ -947,7 +1061,74 @@ export async function updateDiaryEntry(id: string, data: Partial<DiaryEntry>, ro
       })();
     }
   }
-  return all[idx];
+  return updatedEntry;
+}
+
+const _diaryPublishPromises = new Map<string, Promise<boolean>>();
+
+/**
+ * 将指定日记的当前完整快照同步到云端并等待结果。
+ * 用于“结束并保存”和进入列表后的断网重试，避免页面先退出但家人只看到不完整对话。
+ */
+export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boolean> {
+  const existingPromise = _diaryPublishPromises.get(`${roomId}:${id}`);
+  if (existingPromise) return existingPromise;
+
+  const task = (async () => {
+    const entry = await getDiaryEntryById(id, roomId);
+    if (!entry) return false;
+
+    let serverDiaryId = entry.serverDiaryId ?? null;
+    if (!serverDiaryId) serverDiaryId = await waitForServerDiaryId(id);
+    const result = await cloudSyncDiary(entry, serverDiaryId ?? undefined, roomId);
+    const resolvedServerId = result?.diaryId ?? result?.id ?? serverDiaryId;
+    if (!result?.success || !resolvedServerId) return false;
+
+    const key = roomKey(KEYS.DIARY, roomId);
+    const all = await getDiaryEntries(roomId);
+    const idx = all.findIndex(item => item.id === id);
+    if (idx >= 0) {
+      all[idx] = { ...all[idx], serverDiaryId: Number(resolvedServerId), syncPending: false, roomId };
+      await AsyncStorage.setItem(key, JSON.stringify(sortDiaryEntries(all)));
+    }
+    return true;
+  })().finally(() => {
+    _diaryPublishPromises.delete(`${roomId}:${id}`);
+  });
+
+  _diaryPublishPromises.set(`${roomId}:${id}`, task);
+  return task;
+}
+
+/** Retry formally published diaries that previously failed to reach the cloud. */
+export async function syncPendingDiaries(roomId: string): Promise<void> {
+  let entries = await getDiaryEntries(roomId);
+  let pending = entries.filter(entry => entry.conversationFinished === true && (entry.syncPending || !entry.serverDiaryId));
+  if (pending.length === 0) return;
+
+  // App 可能在“服务器已创建、serverDiaryId 尚未写回本地”的极短窗口被关闭。
+  // 重试创建前先从云端匹配作者自己的同一条记录，避免重新上线后产生重复日记。
+  const remoteEntries = await cloudGetDiaries(Number(roomId));
+  if (Array.isArray(remoteEntries)) {
+    const { userId } = await getCloudSyncState().catch(() => ({ userId: null }));
+    for (const entry of pending.filter(item => !item.serverDiaryId)) {
+      const matched = userId ? remoteEntries.find((remote: any) =>
+        remote.authorUserId === userId &&
+        remote.date === entry.date &&
+        (remote.content ?? '') === entry.content &&
+        (remote.localTimeStr ?? '') === (entry.localTimeStr ?? '')
+      ) : undefined;
+      if (matched?.id) {
+        await updateDiaryEntry(entry.id, { serverDiaryId: Number(matched.id) }, roomId, { skipCloud: true });
+      }
+    }
+    entries = await getDiaryEntries(roomId);
+    pending = entries.filter(entry => entry.conversationFinished === true && (entry.syncPending || !entry.serverDiaryId));
+  }
+
+  for (const entry of pending) {
+    await syncDiaryEntryNow(entry.id, roomId).catch(() => false);
+  }
 }
 
 export async function getDiaryEntryById(id: string, roomId?: string): Promise<DiaryEntry | null> {
@@ -958,7 +1139,19 @@ export async function getDiaryEntryById(id: string, roomId?: string): Promise<Di
 export async function deleteDiaryEntry(id: string, roomId?: string): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.DIARY, rid);
-  const filtered = (await getDiaryEntries(rid ?? undefined)).filter(e => e.id !== id);
+  const entries = await getDiaryEntries(rid ?? undefined);
+  const target = entries.find(entry => entry.id === id);
+  if (!target) return;
+
+  // Server-first：已进入云端的日记必须先删除服务器记录；失败时保留本地，避免下次刷新“复活”。
+  let serverDiaryId = target.serverDiaryId ?? null;
+  if (!serverDiaryId) serverDiaryId = await waitForServerDiaryId(id);
+  if (serverDiaryId && rid) {
+    const result = await cloudDeleteDiary(serverDiaryId, Number(rid));
+    if (!result?.success) throw new Error('云端删除失败，请检查网络后重试');
+  }
+
+  const filtered = entries.filter(entry => entry.id !== id);
   await AsyncStorage.setItem(key, JSON.stringify(filtered));
 }
 
@@ -1248,27 +1441,34 @@ export async function addFamilyMember(member: Omit<FamilyMember, 'id' | 'joinedA
   return newMember;
 }
 
-export async function updateFamilyMemberPhoto(memberId: string, photoUri: string): Promise<void> {
-  const room = await getFamilyRoom();
-  if (!room) return;
-  const idx = room.members.findIndex(m => m.id === memberId);
-  if (idx >= 0) {
-    room.members[idx].photoUri = photoUri;
+export async function updateFamilyMemberPhoto(memberId: string, photoUri: string, familyId?: string): Promise<void> {
+  const rid = familyId ?? _activeRoomIdCache;
+  const memberships = await getAllMemberships();
+  const membership = rid ? memberships.find(item => item.familyId === String(rid)) : undefined;
+  const globalRoom = await getFamilyRoom();
+  const baseRoom = membership?.room ?? (globalRoom && (!rid || globalRoom.id === String(rid)) ? globalRoom : null);
+  if (!baseRoom) return;
+
+  const room: FamilyRoom = { ...baseRoom, members: baseRoom.members.map(member => ({ ...member })) };
+  const idx = room.members.findIndex(member => member.id === memberId);
+  if (idx < 0) return;
+  room.members[idx].photoUri = photoUri;
+
+  if (membership) await addOrUpdateMembership({ ...membership, room });
+  const activeId = await getActiveFamilyId();
+  const isActiveFamily = !rid || activeId === String(rid);
+  if (isActiveFamily) {
     await saveFamilyRoom(room);
-    // Also update current member if it's the same
     const current = await getCurrentMember();
-    if (current && current.id === memberId) {
-      await setCurrentMember({ ...current, photoUri });
-      // Cloud sync: only sync https:// URLs (not local file:// URIs which are device-specific)
-      if (photoUri.startsWith('https://')) {
-        const roomId = parseInt(room.id);
-        if (!isNaN(roomId)) {
-          cloudUpdateMemberProfile({
-            roomId,
-            photoUri,
-          }).catch(e => console.warn('[Storage] cloudUpdateMemberProfile failed:', e));
-        }
-      }
+    if (current && current.id === memberId) await setCurrentMember({ ...current, photoUri });
+  }
+
+  // Cloud sync: only sync https:// URLs (not local file:// URIs which are device-specific).
+  if (photoUri.startsWith('https://')) {
+    const numericRoomId = parseInt(String(rid ?? room.id));
+    if (!isNaN(numericRoomId)) {
+      cloudUpdateMemberProfile({ roomId: numericRoomId, photoUri })
+        .catch(e => console.warn('[Storage] cloudUpdateMemberProfile failed:', e));
     }
   }
 }
@@ -1326,6 +1526,7 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
     type: announcement.type,
     date: announcement.date,
     localTimeStr: announcement.localTimeStr,
+    roomId: rid ? Number(rid) : undefined,
   }).catch(() => {});
   return announcement;
 }
@@ -1480,8 +1681,8 @@ export async function saveBriefing(briefing: CareBriefing, roomId?: string): Pro
   else all.unshift(briefing);
   const trimmed = all.slice(0, 30);
   await AsyncStorage.setItem(key, JSON.stringify(trimmed));
-  // Cloud sync: save briefing to server
-  cloudSaveBriefing(briefing).catch(() => {});
+  // Cloud sync: bind the write to the family captured by the caller, not a mutable global pointer.
+  cloudSaveBriefing(briefing, rid ? Number(rid) : undefined).catch(() => {});
 }
 
 export async function getTodayBriefing(roomId?: string): Promise<CareBriefing | null> {

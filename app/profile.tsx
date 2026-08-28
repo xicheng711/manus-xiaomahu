@@ -94,6 +94,9 @@ export default function ProfileScreen() {
   const deleteAccountMutation = trpc.auth.deleteAccount.useMutation();
 
   const { memberships, activeMembership, switchFamily, leaveFamily, deleteFamily, refresh, ready: contextReady } = useFamilyContext();
+  const activeFamilyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(activeFamilyId);
+  activeFamilyRef.current = activeFamilyId;
 
   const handleDeleteAccount = async () => {
     setDeletingAccount(true);
@@ -139,7 +142,8 @@ export default function ProfileScreen() {
     if (target === 'member') {
       // Joiner uploading their own photo
       // 1. Show local URI immediately for instant feedback
-      const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : undefined;
+      const targetFamilyId = activeFamilyId;
+      const roomId = targetFamilyId ? parseInt(targetFamilyId) : undefined;
       const optimisticMember = currentMember ? { ...currentMember, photoUri: localUri } : null;
       if (optimisticMember) setCurrentMember(optimisticMember);
       // 2. Upload to OSS in background
@@ -150,11 +154,13 @@ export default function ProfileScreen() {
         // 3. Update local storage with final URI
         const { updateFamilyMemberPhoto } = await import('@/lib/storage');
         if (currentMember?.id) {
-          await updateFamilyMemberPhoto(currentMember.id, finalUri);
+          await updateFamilyMemberPhoto(currentMember.id, finalUri, targetFamilyId);
         }
         // 4. Also update currentMember state with cloud URL
         if (cloudUrl) {
-          setCurrentMember(prev => prev ? { ...prev, photoUri: cloudUrl } : prev);
+          if (activeFamilyRef.current === targetFamilyId) {
+            setCurrentMember(prev => prev ? { ...prev, photoUri: cloudUrl } : prev);
+          }
           // 5. Sync cloud URL back to server member record so other family members can see it
           if (roomId) {
             await cloudUpdateMemberProfile({ roomId, photoUri: cloudUrl }).catch(() => {});
@@ -279,36 +285,39 @@ export default function ProfileScreen() {
 
   useFocusEffect(useCallback(() => {
     const loadProfiles = async () => {
+      const requestedMembership = activeMembership;
+      const requestedFamilyId = requestedMembership?.familyId;
       setLoading(true);
       try {
-        // Load all three in parallel: legacy (compat shim), user-scoped, family-scoped, plus currentMember for joiner
-        const isJoinerRole = activeMembership != null && activeMembership.role !== 'creator';
-        const [legacyP, up, fp, cm, cloudElderP] = await Promise.all([
+        // Load user-scoped caregiver data and the requested family's profile/member snapshot in parallel.
+        const isJoinerRole = requestedMembership != null && requestedMembership.role !== 'creator';
+        const memberFromFamily = requestedMembership?.room.members.find(member => member.id === requestedMembership.myMemberId) ?? null;
+        const [legacyP, up, fp, cloudElderP] = await Promise.all([
           getProfile(),
           getUserProfile(),
-          activeMembership?.familyId ? getFamilyProfile(activeMembership.familyId) : Promise.resolve(null),
-          getCurrentMember(),
+          requestedFamilyId ? getFamilyProfile(requestedFamilyId) : Promise.resolve(null),
           // joiner 端额外拉取被照顾者档案（获取 zodiacEmoji）
-          isJoinerRole ? cloudGetElderProfile().catch(() => null) : Promise.resolve(null),
+          isJoinerRole && requestedFamilyId ? cloudGetElderProfile(Number(requestedFamilyId)).catch(() => null) : Promise.resolve(null),
         ]);
+        if (activeFamilyRef.current !== requestedFamilyId) return;
         setProfile(legacyP);
         setUserProfile(up);
         setFamilyProfile(fp);
-        setCurrentMember(cm);
+        setCurrentMember(memberFromFamily);
         // joiner 端：保存被照顾者生肖 emoji
         if (cloudElderP?.zodiacEmoji) setCloudElderZodiacEmoji(cloudElderP.zodiacEmoji);
         // Seed draft fields from authoritative scoped sources
         setCaregiverNameDraft(up?.caregiverName || legacyP?.caregiverName || '');
-        setElderNicknameDraft(fp?.nickname || legacyP?.nickname || legacyP?.name || '');
+        setElderNicknameDraft(fp?.nickname || requestedMembership?.room.elderName || (memberships.length === 1 ? legacyP?.nickname || legacyP?.name : '') || '');
       } finally {
-        setLoading(false);
+        if (activeFamilyRef.current === requestedFamilyId) setLoading(false);
       }
     };
     loadProfiles();
     if (Platform.OS !== 'web') {
       areRemindersScheduled().then(setNotifEnabled);
     }
-  }, [activeMembership?.familyId]));
+  }, [activeMembership?.familyId, memberships.length]));
 
   const saveCaregiverName = async () => {
     if (!caregiverNameDraft.trim()) return;

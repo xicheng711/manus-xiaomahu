@@ -16,8 +16,8 @@ import { DiaryInteractions } from '@/components/diary-interactions';
 import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
-  getTodayCheckIn, DailyCheckIn, getCurrentMember, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
-  waitForServerDiaryId,
+  getTodayCheckIn, DailyCheckIn, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
+  waitForServerDiaryId, syncDiaryEntryNow,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
@@ -231,6 +231,8 @@ export default function DiaryEditScreen() {
   const notificationRoomId = params.roomId ? String(params.roomId) : null;
   const { memberships, activeMembership, ready: familyReady, switchFamily } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(familyId);
+  activeFamilyRef.current = familyId;
   const targetFamilyReady = !notificationRoomId || familyId === notificationRoomId;
   const [roleReadOnly, setRoleReadOnly] = useState(params.readOnly === '1');
   const isReadOnly = roleReadOnly;
@@ -311,18 +313,20 @@ export default function DiaryEditScreen() {
   // 新建日记时，按当前家庭读取本机草稿；已发布日记绝不读取草稿覆盖内容。
   useEffect(() => {
     if (existingId || !familyReady || draftLoadedFamilyRef.current === (familyId ?? null)) return;
-    draftLoadedFamilyRef.current = familyId ?? null;
+    const requestedFamilyId = familyId;
+    draftLoadedFamilyRef.current = requestedFamilyId ?? null;
     // 切换家庭后先清空编辑状态，再只恢复该家庭自己的草稿。
     setContent('');
     setSelectedMood(0);
     setCaregiverMoodIdx(-1);
     setSelectedTags([]);
     setDraftRestoredAt(null);
-    getDiaryDraft(familyId).then(draft => {
-      if (!draft) return;
+    getDiaryDraft(requestedFamilyId).then(draft => {
+      if (activeFamilyRef.current !== requestedFamilyId || !draft) return;
       const draftAgeMs = Date.now() - new Date(draft.savedAt).getTime();
       const draftAgeDays = Number.isFinite(draftAgeMs) ? Math.floor(draftAgeMs / (1000 * 60 * 60 * 24)) : 0;
       const restoreDraft = () => {
+        if (activeFamilyRef.current !== requestedFamilyId) return;
         setContent(draft.content ?? '');
         setSelectedMood(typeof draft.selectedMood === 'number' ? draft.selectedMood : 0);
         setCaregiverMoodIdx(typeof draft.caregiverMoodIdx === 'number' ? draft.caregiverMoodIdx : -1);
@@ -334,7 +338,7 @@ export default function DiaryEditScreen() {
           `\u53d1\u73b0 ${draftAgeDays} \u5929\u524d\u7684\u8349\u7a3f`,
           '\u8981\u6062\u590d\u8fd9\u7bc7\u8349\u7a3f\u5417\uff1f\u4e0d\u6062\u590d\u5c06\u6c38\u4e45\u5220\u9664\u3002',
           [
-            { text: '\u4e0d\u6062\u590d\uff0c\u5220\u9664\u8349\u7a3f', style: 'destructive', onPress: () => clearDiaryDraft(familyId).catch(() => {}) },
+            { text: '\u4e0d\u6062\u590d\uff0c\u5220\u9664\u8349\u7a3f', style: 'destructive', onPress: () => clearDiaryDraft(requestedFamilyId).catch(() => {}) },
             { text: '\u6062\u590d\u8349\u7a3f', onPress: restoreDraft },
           ],
         );
@@ -364,18 +368,22 @@ export default function DiaryEditScreen() {
   }, [familyId]);
 
   async function loadProfile() {
-    const [userProfile, familyProfile, legacyProfile, entries, checkIn, currentMember] = await Promise.all([
-      getUserProfile(), getFamilyProfile(familyId), getProfile(), getDiaryEntries(familyId), getTodayCheckIn(familyId), getCurrentMember(),
+    const requestedMembership = activeMembership;
+    const requestedFamilyId = requestedMembership?.familyId;
+    const currentMember = requestedMembership?.room.members.find(member => member.id === requestedMembership.myMemberId) ?? null;
+    const [userProfile, familyProfile, legacyProfile, entries, checkIn] = await Promise.all([
+      getUserProfile(), getFamilyProfile(requestedFamilyId), getProfile(), getDiaryEntries(requestedFamilyId), getTodayCheckIn(requestedFamilyId),
     ]);
-    // Joiner 和主照顾者都可以写日记、有 AI 对话、可删除，不再区分只读模式
-    // family-scoped 优先，fallback 到 legacy
-    setElderNickname(familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人');
-    // 优先使用当前家庭成员名（Joiner 没有 caregiverName，用 member.name 确保 authorName 正确）
-    setCaregiverName(currentMember?.name || userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者');
-    setCaregiverPhotoUri(userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri || null);
-    setCaregiverZodiacEmoji(userProfile?.caregiverZodiacEmoji || legacyProfile?.caregiverZodiacEmoji || '😊');
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    // Joiner 和主照顾者都可以写日记和 AI 对话；查看他人日记时再按作者身份锁为只读。
+    setElderNickname(familyProfile?.nickname || familyProfile?.name || requestedMembership?.room.elderName || (memberships.length === 1 ? legacyProfile?.nickname || legacyProfile?.name : undefined) || '家人');
+    // 多家庭时只信任当前 membership，避免 Joiner profile 继承另一个主照顾者 profile 的头像或生肖。
+    const allowLegacyFallback = memberships.length === 1;
+    setCaregiverName(currentMember?.name || (allowLegacyFallback ? userProfile?.caregiverName || legacyProfile?.caregiverName : undefined) || '照顾者');
+    setCaregiverPhotoUri(currentMember?.photoUri || (allowLegacyFallback ? userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri : undefined) || null);
+    setCaregiverZodiacEmoji(currentMember?.emoji || (allowLegacyFallback ? userProfile?.caregiverZodiacEmoji || legacyProfile?.caregiverZodiacEmoji : undefined) || '😊');
     setDiaryCount(entries.length);
-    if (checkIn) setTodayCheckIn(checkIn);
+    setTodayCheckIn(checkIn ?? null);
   }
 
   async function loadExistingEntry(id: string) {
@@ -393,14 +401,10 @@ export default function DiaryEditScreen() {
         const cloudEntry = cloudEntries?.find((e: any) => e.id === entry!.serverDiaryId);
         if (cloudEntry) {
           if (isOthersPerson) {
-            // 他人写的日记：强制以云端 conversationFinished 为准（不信任本地缓存）
-            if (cloudEntry.conversationFinished !== entry.conversationFinished) {
-              await updateDiaryEntry(entry.id, { conversationFinished: cloudEntry.conversationFinished }, familyId ?? undefined);
-            }
+            // 他人写的日记只更新当前页面快照，绝不能调用 updateDiaryEntry 触发云端写回。
             entry = { ...entry, conversationFinished: cloudEntry.conversationFinished };
           } else if (cloudEntry.conversationFinished && !entry.conversationFinished) {
-            // 自己写的日记：云端已结束但本地未结束，同步到本地
-            await updateDiaryEntry(entry.id, { conversationFinished: true }, familyId ?? undefined);
+            // 自己写的日记以云端正式发布状态为准；当前页面直接采用最新值。
             entry = { ...entry, conversationFinished: true };
           }
         }
@@ -492,6 +496,7 @@ export default function DiaryEditScreen() {
       // 他人写的日记：无论 conversationFinished 是什么，一律锁定对话框（不能继续对话）
       // 自己写的日记：以 conversationFinished 为准
       const isOthersDiary = !!(entry.authorUserId && currentUserId && entry.authorUserId !== currentUserId);
+      setRoleReadOnly(params.readOnly === '1' || isOthersDiary);
       setFinished(isOthersDiary ? true : (entry.conversationFinished ?? false));
       if (entry.conversation && entry.conversation.length > 0) {
         setConversation(entry.conversation);
@@ -549,10 +554,14 @@ export default function DiaryEditScreen() {
 
   async function handleDeleteEntry() {
     if (!entryId) return;
-    await deleteDiaryEntry(entryId, familyId ?? undefined);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowDeleteModal(false);
-    returnToDiaryList();
+    try {
+      await deleteDiaryEntry(entryId, familyId ?? undefined);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowDeleteModal(false);
+      returnToDiaryList();
+    } catch (error: any) {
+      Alert.alert('删除失败', error?.message || '无法同步删除，请检查网络后重试');
+    }
   }
 
   function toggleTag(tag: string) {
@@ -570,6 +579,10 @@ export default function DiaryEditScreen() {
 
   async function handleSubmit() {
     if (submitting) return;
+    if (!content.trim()) {
+      Alert.alert('还没有日记内容', '请先写下一些内容，再让小马虎回复。');
+      return;
+    }
     // 游客模式检查：日记需要登录才能同步到云端
     const token = await getSessionToken();
     if (!token) {
@@ -672,7 +685,8 @@ export default function DiaryEditScreen() {
     // 将 conv1 中除第一条用户消息和第一条 AI 回复之外的历史传给服务端
     // 使用 conv1（已含本次用户消息），跳过最初的两条（初始日记 + 第一条回复）
     // 再跳过最后一条（本次用户消息，由 question 字段单独传递）
-    const historySlice = conv1.slice(2, -1);
+    // 保留最近 24 条历史消息，既能连续承接上下文，也避免极长对话拖慢请求。
+    const historySlice = conv1.slice(2, -1).slice(-24);
     const historyForApi = historySlice.map(m => ({
       role: (m.role === 'ai' ? 'ai' : 'user') as 'user' | 'ai',
       text: m.text,
@@ -705,7 +719,7 @@ export default function DiaryEditScreen() {
       await persistConversation(conv2);
     } catch (err) {
       console.error('followUp error:', err);
-      const errMsg: ConversationMessage = { id: generateId(), role: 'ai', text: '我这边小幸出了点状况，请稍后再试试。您的记录我已经保存好了 📝', createdAt: new Date().toISOString() };
+      const errMsg: ConversationMessage = { id: generateId(), role: 'ai', text: '我这边出了点状况，请稍后再试试。您的记录我已经保存好了 📝', createdAt: new Date().toISOString() };
       const conv2 = [...conv1, errMsg];
       setConversation(conv2);
       await persistConversation(conv2);
@@ -716,6 +730,11 @@ export default function DiaryEditScreen() {
   }
 
   async function handleEndAndSave() {
+    // AI 正在回复时不能提前发布，否则最终云端快照可能缺少最后一条回复。
+    if (smartLoading || followUpLoading) {
+      Alert.alert('小马虎正在回复', '请等这条回复完成后再结束并保存，这样完整对话都会一起发布。');
+      return;
+    }
     // 防止重复点击（双击会触发两次云同步，导致主照顾者收到两条相同通知）
     if (saving) return;
     setSaving(true);
@@ -724,13 +743,33 @@ export default function DiaryEditScreen() {
       const latestConv = conversationRef.current;
       // 使用 entryRef.current?.id 作为 fallback，避免 entryId state 闭包问题导致 id 为 null
       const eid = entryId ?? entryRef.current?.id ?? null;
-      if (eid) {
-        // updateDiaryEntry 内部已处理云同步（conversationFinished:true 时会触发带通知的 syncDiary）
-        // 不需要额外调用 cloudSyncDiary，否则会发送重复通知
-        await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true }, familyId ?? undefined);
-        if (entryRef.current) entryRef.current = { ...entryRef.current, conversation: latestConv, conversationFinished: true };
+      if (!eid || !familyId) {
+        Alert.alert('保存失败', '当前家庭信息尚未准备好，请稍后重试');
+        return;
       }
-      // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
+      // 先把最新完整对话可靠写入当前家庭本地缓存，再等待同一快照成功发布到云端。
+      await updateDiaryEntry(
+        eid,
+        { conversation: latestConv, conversationFinished: true, syncPending: true },
+        familyId,
+        { skipCloud: true },
+      );
+      if (entryRef.current) {
+        entryRef.current = { ...entryRef.current, conversation: latestConv, conversationFinished: true, syncPending: true };
+      }
+      const published = await syncDiaryEntryNow(eid, familyId);
+      if (!published) {
+        Alert.alert(
+          '已保存到本机',
+          '完整日记和对话已经安全保存在本机，但暂时无法发布到家庭云端。请保持网络连接并再次点击“结束并保存”。',
+        );
+        return;
+      }
+      const syncedEntry = await getDiaryEntryById(eid, familyId);
+      if (syncedEntry) {
+        entryRef.current = syncedEntry;
+        setServerDiaryId(syncedEntry.serverDiaryId ?? null);
+      }
       setFinished(true);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       returnToDiaryList();
@@ -1006,9 +1045,9 @@ export default function DiaryEditScreen() {
             ) : !submitted ? (
               <View style={styles.draftActionGroup}>
                 <TouchableOpacity
-                  style={[styles.submitBtnWrap, submitting && { opacity: 0.6 }]}
+                  style={[styles.submitBtnWrap, (submitting || !content.trim()) && { opacity: 0.55 }]}
                   onPress={handleSubmit}
-                  disabled={submitting}
+                  disabled={submitting || !content.trim()}
                   activeOpacity={0.85}
                 >
                   <LinearGradient colors={['#B07858', '#8B5E3C', '#A07050']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitBtn}>
@@ -1059,9 +1098,9 @@ export default function DiaryEditScreen() {
                 </View>
                 {/* 结束并保存按钮：与右上角「保存」功能完全一致，方便用户随时结束对话 */}
                 <TouchableOpacity
-                  style={[styles.endAndSaveBtn, saving && { opacity: 0.6 }]}
+                  style={[styles.endAndSaveBtn, (saving || smartLoading || followUpLoading) && { opacity: 0.6 }]}
                   onPress={handleEndAndSave}
-                  disabled={saving}
+                  disabled={saving || smartLoading || followUpLoading}
                   activeOpacity={0.85}
                 >
                   {saving ? (

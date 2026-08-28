@@ -1,14 +1,14 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Animated, Easing, Modal, RefreshControl,
+  StyleSheet, Animated, Easing, Modal, RefreshControl, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator, mergeCloudDiariesIntoLocal } from '@/lib/storage';
+import { getDiaryEntries, deleteDiaryEntry, DiaryEntry, getCurrentUserIsCreator, mergeCloudDiariesIntoLocal, syncPendingDiaries } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, cloudGetDiaryInteractionSummaries, getCloudSyncState, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
@@ -101,6 +101,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
             {entry.authorName ? (
               <Text style={styles.diaryAuthor}>记录人：{entry.authorName}</Text>
             ) : null}
+            {entry.syncPending ? <Text style={styles.syncPendingText}>⏳ 等待同步</Text> : null}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, justifyContent: 'flex-end' }}>
             {editMode && (
@@ -335,6 +336,7 @@ function DiaryScreenContent() {
   const activeFamilyRef = useRef<string | undefined>(familyId);
   activeFamilyRef.current = familyId;
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [interactionSummaries, setInteractionSummaries] = useState<Record<number, DiaryInteractionSummary>>({});
   const [editMode, setEditMode] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -412,7 +414,10 @@ function DiaryScreenContent() {
     const requestedFamilyId = familyId;
     if (!familyReady || !requestedFamilyId) return;
     // 立即展示当前家庭的本地缓存；即使网络慢也不会出现空白或卡顿。
-    const local = await getDiaryEntries(requestedFamilyId);
+    const [local, syncState] = await Promise.all([
+      getDiaryEntries(requestedFamilyId),
+      getCloudSyncState(),
+    ]);
     const localSorted = [...local].sort((a, b) => {
       const ta = new Date(a.createdAt || a.date).getTime();
       const tb = new Date(b.createdAt || b.date).getTime();
@@ -420,8 +425,15 @@ function DiaryScreenContent() {
       return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
     });
     if (activeFamilyRef.current !== requestedFamilyId) return;
+    setCurrentUserId(syncState.userId ?? null);
     setEntries(localSorted);
     loadInteractionSummaries(localSorted, requestedFamilyId).catch(() => {});
+    // 正式发布曾因断网失败时，先展示本地完整内容，再在后台自动重试云端发布。
+    syncPendingDiaries(requestedFamilyId).then(async () => {
+      if (activeFamilyRef.current !== requestedFamilyId) return;
+      const retried = await getDiaryEntries(requestedFamilyId);
+      if (activeFamilyRef.current === requestedFamilyId) setEntries(retried);
+    }).catch(() => {});
 
     const roomId = Number(requestedFamilyId);
     if (!Number.isFinite(roomId) || !await shouldRefreshCloudCache(roomId, 'diary', undefined, forceCloud)) return;
@@ -566,22 +578,26 @@ function DiaryScreenContent() {
 
   async function executeDelete() {
     if (!deleteTarget) return;
-    await deleteDiaryEntry(deleteTarget.id, familyId);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setDeleteTarget(null);
-    const updated = await getDiaryEntries(familyId);
-    // 删除后重新排序，确保列表顺序正确
-    const sorted = [...updated].sort((a, b) => {
-      const ta = new Date(a.createdAt || a.date).getTime();
-      const tb = new Date(b.createdAt || b.date).getTime();
-      if (tb !== ta) return tb - ta;
-      const lta = a.localTimeStr || '00:00';
-      const ltb = b.localTimeStr || '00:00';
-      return ltb.localeCompare(lta);
-    });
-    const next = sorted.slice(0, 30);
-    setEntries(next);
-    if (next.length === 0) setEditMode(false);
+    try {
+      await deleteDiaryEntry(deleteTarget.id, familyId);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setDeleteTarget(null);
+      const updated = await getDiaryEntries(familyId);
+      // 删除后重新排序，确保列表顺序正确
+      const sorted = [...updated].sort((a, b) => {
+        const ta = new Date(a.createdAt || a.date).getTime();
+        const tb = new Date(b.createdAt || b.date).getTime();
+        if (tb !== ta) return tb - ta;
+        const lta = a.localTimeStr || '00:00';
+        const ltb = b.localTimeStr || '00:00';
+        return ltb.localeCompare(lta);
+      });
+      const next = sorted.slice(0, 30);
+      setEntries(next);
+      if (next.length === 0) setEditMode(false);
+    } catch (error: any) {
+      Alert.alert('删除失败', error?.message || '无法同步删除，请检查网络后重试');
+    }
   }
 
   return (
@@ -611,7 +627,7 @@ function DiaryScreenContent() {
             style={{ marginBottom: 12 }}
           />
           <View style={styles.headerBtns}>
-            {entries.length > 0 && (
+            {entries.some(entry => !!currentUserId && entry.authorUserId === currentUserId) && (
               <TouchableOpacity
                 style={[styles.manageBtn, editMode && styles.manageBtnActive]}
                 onPress={() => setEditMode(v => !v)}
@@ -671,7 +687,7 @@ function DiaryScreenContent() {
                   onPress={() => openDetail(entry.id)}
                   onDelete={() => confirmDelete(entry.id, entry.date)}
                   index={i}
-                  editMode={editMode}
+                  editMode={editMode && !!currentUserId && entry.authorUserId === currentUserId}
                   interaction={getServerDiaryId(entry) ? interactionSummaries[getServerDiaryId(entry)!] : undefined}
                 />
               ))}
@@ -896,6 +912,7 @@ const styles = StyleSheet.create({
   diaryDate: { fontSize: 14, fontWeight: '700', color: COLORS.text },
   diaryTime: { fontSize: 12, color: COLORS.textSecondary },
   diaryAuthor: { fontSize: 11, color: COLORS.textSecondary, opacity: 0.75 },
+  syncPendingText: { fontSize: 11, color: '#B7791F', fontWeight: '600' },
   moodBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill,

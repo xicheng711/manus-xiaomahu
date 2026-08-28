@@ -6,7 +6,7 @@ import {
   getProfile, getFamilyProfile,
   addOrUpdateMembership, saveFamilyRoom, saveFamilyProfile,
   setActiveFamilyId, setActiveRoomIdCache,
-  setCurrentMember, mergeCloudDiariesIntoLocal,
+  setCurrentMember, mergeCloudDiariesIntoLocal, getActiveMembership,
   FamilyMembership, FamilyRoom,
 } from '@/lib/storage';
 import {
@@ -211,7 +211,7 @@ async function navigateAfterLogin(router: Router) {
           const rk = (base: string) => `${base}:${roomIdStr}`;
 
           // Write check-ins
-          if (Array.isArray(checkInsData) && checkInsData.length > 0) {
+          if (Array.isArray(checkInsData)) {
             const localCheckIns = checkInsData.map((c: any) => ({
               id: String(c.id),
               date: c.date,
@@ -246,7 +246,7 @@ async function navigateAfterLogin(router: Router) {
           }
 
           // Write announcements
-          if (Array.isArray(announcementsData) && announcementsData.length > 0) {
+          if (Array.isArray(announcementsData)) {
             const localAnnouncements = announcementsData.map((a: any) => ({
               id: String(a.id),
               serverId: a.id,
@@ -265,7 +265,7 @@ async function navigateAfterLogin(router: Router) {
           }
 
           // Write briefings
-          if (Array.isArray(briefingsData) && briefingsData.length > 0) {
+          if (Array.isArray(briefingsData)) {
             const localBriefings = briefingsData.map((b: any) => ({
               id: String(b.id),
               date: b.date,
@@ -282,7 +282,7 @@ async function navigateAfterLogin(router: Router) {
           }
 
           // Write medications
-          if (Array.isArray(medsData) && medsData.length > 0) {
+          if (Array.isArray(medsData)) {
             const localMeds = medsData.map((m: any) => ({
               id: String(m.id),
               serverMedId: m.id,
@@ -326,11 +326,13 @@ async function navigateAfterLogin(router: Router) {
 
   // Step 3: Fallback — check local storage (server unavailable or truly new user)
   try {
+    const active = await getActiveMembership();
     const [legacyProfile, familyProfile] = await Promise.all([
       getProfile(),
-      getFamilyProfile(),
+      active?.familyId ? getFamilyProfile(active.familyId) : Promise.resolve(null),
     ]);
-    const setupDone = legacyProfile?.setupComplete || familyProfile?.setupComplete;
+    // 只要本机已有明确 membership 就可安全进入；仅在没有任何家庭归属时使用旧版全局 profile。
+    const setupDone = !!active || familyProfile?.setupComplete || (!active && legacyProfile?.setupComplete);
     if (setupDone) {
       router.replace('/(tabs)' as any);
     } else {

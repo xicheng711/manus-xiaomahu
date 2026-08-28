@@ -60,6 +60,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     await migrateToMultiFamily();
     let all = await getAllMemberships();
+    const preferredActiveId = await getActiveFamilyId();
 
     // ── Server reconciliation + 头像同步 ───────────────────────────────────────────────────────────────────────────────────────
     // Pull the authoritative room list from the server and remove any local
@@ -144,7 +145,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
                 memberEmoji: sr.memberEmoji ?? undefined,
                 memberPhotoUri: sr.memberPhotoUri ?? undefined,
               };
-              await saveFamilyRoom(newRoom);
+              // 这里只更新 membership；全局 FAMILY_ROOM/CURRENT_MEMBER 必须在确定 active family 后统一写入。
               await addOrUpdateMembership(newMembership);
               // 恢复 elder profile
               if (detail2.elderProfile) {
@@ -165,11 +166,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
                   careNeeds: ep.careNeeds ?? undefined,
                 }, roomId);
               }
-              // 恢复 CURRENT_MEMBER（如果是 active family）
               const myMember2 = serverMembers2.find(m => m.id === myMemberId) ?? serverMembers2[0];
-              if (myMember2) {
-                await setCurrentMember(myMember2);
-              }
               // 恢复 UserProfile（主照顾者名字和头像）
               if (sr.isCreator && myMember2) {
                 try {
@@ -227,7 +224,7 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
               room: updatedRoom,
               memberPhotoUri: sr.memberPhotoUri || membership.memberPhotoUri,
             };
-            await saveFamilyRoom(updatedRoom);
+            // membership 按家庭保存；不要在遍历非当前家庭时覆盖全局 active room 缓存。
             await addOrUpdateMembership(updatedMembership);
             // 更新 all 中的数据
             const idx = all.findIndex(m => m.familyId === roomId);
@@ -253,13 +250,16 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     }
     // ───────────────────────────────────────────────────────────────────────────────────────
 
-    const activeId = await getActiveFamilyId();
-    const active = all.find(m => m.familyId === activeId) ?? all[0] ?? null;
+    const active = all.find(m => m.familyId === preferredActiveId) ?? all[0] ?? null;
     setMemberships(all);
     setActiveMembership(active);
-    // Keep room-scoped cache in sync with active family
+    // Keep every active-family cache in sync only after the authoritative active membership is known.
     if (active) {
+      await setActiveFamilyId(active.familyId);
       setActiveRoomIdCache(active.familyId);
+      await saveFamilyRoom(active.room);
+      const activeMember = active.room.members.find(m => m.id === active.myMemberId) ?? null;
+      if (activeMember) await setCurrentMember(activeMember);
       const serverRoomId = parseInt(active.familyId);
       if (!isNaN(serverRoomId)) {
         await setCloudSyncState({ activeRoomId: serverRoomId });
@@ -361,17 +361,19 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
           members: serverMembers.length > 0 ? serverMembers : target.room.members,
           createdAt: detail.room.createdAt ?? target.room.createdAt,
         };
-        await saveFamilyRoom(updatedRoom);
         const updatedMembership = { ...target, room: updatedRoom };
         await addOrUpdateMembership(updatedMembership);
-        // 更新 currentMember（用服务端最新数据）
-        const freshMember =
-          updatedRoom.members.find(m => m.id === target.myMemberId) ??
-          target.room.members.find(m => m.id === target.myMemberId);
-        if (freshMember) await setCurrentMember(freshMember);
-        // 静默更新 activeMembership（UI 已经切过去了，这里只是补充最新数据）
-        setActiveMembership(updatedMembership);
         setMemberships(prev => prev.map(m => m.familyId === familyId ? updatedMembership : m));
+        // 用户可能在请求期间又切换了家庭；旧请求只能更新自己的 membership，不能覆盖当前 UI/global cache。
+        const stillActive = (await getActiveFamilyId()) === familyId;
+        if (stillActive) {
+          await saveFamilyRoom(updatedRoom);
+          const freshMember =
+            updatedRoom.members.find(m => m.id === target.myMemberId) ??
+            target.room.members.find(m => m.id === target.myMemberId);
+          if (freshMember) await setCurrentMember(freshMember);
+          setActiveMembership(updatedMembership);
+        }
       } catch (e: any) {
         const code: string = e?.data?.code ?? e?.shape?.data?.code ?? '';
         const isGone = ['NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED'].includes(code);

@@ -9,7 +9,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getCurrentMember, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, todayStr, syncPendingCheckIns } from '@/lib/storage';
 import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiacFromDate } from '@/lib/zodiac';
@@ -466,6 +466,9 @@ function CreatorHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { memberships, activeMembership, switchFamily, refresh: refreshFamily } = useFamilyContext();
+  const activeFamilyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(activeFamilyId);
+  activeFamilyRef.current = activeFamilyId;
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [greeting, setGreeting] = useState('');
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
@@ -490,25 +493,44 @@ function CreatorHomeScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  useEffect(() => {
+    // 切换家庭时立即清除上一家庭的可见状态，随后从新家庭缓存秒开。
+    setTodayCheckIn(null);
+    setLatestCheckIn(null);
+    setAllCheckIns([]);
+    setAllDiaryEntries([]);
+    setBriefingSummary(null);
+    setElderNickname(activeMembership?.room.elderName || '家人');
+    setCaregiverName('');
+    setMemberPhotoUri(null);
+  }, [activeFamilyId]);
+
   // 本地数据先渲染；仅在缓存过期、手动下拉或通知跳转时请求云端。
   const loadData = useCallback(async (forceCloud = false) => {
+    const requestedMembership = activeMembership;
+    const requestedFamilyId = requestedMembership?.familyId;
+    if (!requestedMembership || !requestedFamilyId) return;
+    const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
+    // 本地打卡曾因断网未上传时，首页后台自动重试；服务端只在首次完成时发送通知，不会重复打扰。
+    syncPendingCheckIns(requestedFamilyId).catch(() => {});
     // P1 fix: read from scoped profiles (family-scoped for elder, global for caregiver)
     // Fall back to legacy getProfile() only for setupComplete guard and missing fields.
     const [userProfile, familyProfile, legacyProfile] = await Promise.all([
       getUserProfile(),
-      getFamilyProfile(activeMembership?.familyId),
+      getFamilyProfile(requestedFamilyId),
       getProfile(),
     ]);
+    if (!isCurrentFamily()) return;
     // Guard: if no setup has been done at all, redirect to onboarding
     // 例外：Joiner 身份时（已加入他人家庭）本地没有 profile 是正常的，不跳转
     // 避免用户作为 joiner 时被错误引导到 onboarding
-    const isJoinerOnly = activeMembership != null && activeMembership.role !== 'creator';
+    const isJoinerOnly = requestedMembership.role !== 'creator';
     if (!isJoinerOnly && !legacyProfile?.setupComplete && !familyProfile?.setupComplete) {
       router.replace('/onboarding' as any);
       return;
     }
     // Elder data: prefer family-scoped, fall back to legacy
-    const elderNick = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
+    const elderNick = familyProfile?.nickname || familyProfile?.name || requestedMembership.room.elderName || (memberships.length === 1 ? legacyProfile?.nickname || legacyProfile?.name : undefined) || '家人';
     setElderNickname(elderNick);
     // Caregiver data: prefer userProfile, fall back to legacy
     const cgName = userProfile?.caregiverName || legacyProfile?.caregiverName || '';
@@ -517,17 +539,18 @@ function CreatorHomeScreen() {
     // 2. caregiverPhotoUri (from userProfile or legacyProfile) — set by profile page
     // 3. member.photoUri (from getCurrentMember) — set by member upload
     // Use whichever is a valid https:// URL, or fall back to any non-null value
-    const member = await getCurrentMember();
+    const member = requestedMembership.room.members.find(m => m.id === requestedMembership.myMemberId) ?? null;
     // 头像加载：主动从云端拉取最新 room detail，确保头像是最新的
     let resolvedPhotoUri: string | null = null;
     let serverHasPhoto = false;
-    const roomId = activeMembership?.familyId ? parseInt(activeMembership.familyId) : null;
+    const roomId = parseInt(requestedFamilyId);
     try {
       if (roomId && !isNaN(roomId)) {
         const detail = await cloudGetRoomDetail(roomId);
+        if (!isCurrentFamily()) return;
         if (detail?.members) {
           const freshMember = detail.members.find(
-            (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(activeMembership?.myMemberId)
+            (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(requestedMembership.myMemberId)
           );
           if (freshMember?.photoUri && !freshMember.photoUri.startsWith('file://')) {
             resolvedPhotoUri = freshMember.photoUri;
@@ -541,7 +564,7 @@ function CreatorHomeScreen() {
     // 降级顺序：云端最新 > activeMembership 缓存 > caregiverPhotoUri > member.photoUri
     // 允许 file:// 路径作为最后的 fallback（本地照片在同一设备上可以正常显示）
     if (!resolvedPhotoUri) {
-      const cachedMember = activeMembership?.room?.members?.find(
+      const cachedMember = requestedMembership.room.members.find(
         (m: any) => m.isCurrentUser || (member?.id && String(m.id) === String(member.id))
       );
       const cachedPhotoUri = cachedMember?.photoUri;
@@ -560,6 +583,7 @@ function CreatorHomeScreen() {
       const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
       cloudUpdateMemberProfile({ roomId, photoUri: resolvedPhotoUri }).catch(() => {});
     }
+    if (!isCurrentFamily()) return;
     setMemberPhotoUri(resolvedPhotoUri);
     if (resolvedPhotoUri) { setPhotoLoadError(false); }
     setCaregiverName(cgName);
@@ -567,22 +591,26 @@ function CreatorHomeScreen() {
     refreshWeather();
     setGreeting(buildGreeting(cgName || undefined));
     // Elder zodiac: prefer family-scoped birthDate
-    const birthDate = familyProfile?.birthDate || legacyProfile?.birthDate;
+    const birthDate = familyProfile?.birthDate || (memberships.length === 1 ? legacyProfile?.birthDate : undefined);
     if (birthDate) {
       const zodiac = getZodiacFromDate(birthDate);
       setZodiacColor(zodiac.color);
       setZodiacEmoji(zodiac.emoji);
     }
-    const fid = activeMembership?.familyId;
+    const fid = requestedFamilyId;
     const today = await getTodayCheckIn(fid);
+    if (!isCurrentFamily()) return;
     setTodayCheckIn(today);
     const yesterday = await getYesterdayCheckIn(fid);
+    if (!isCurrentFamily()) return;
     const latest = today ?? yesterday;
     setLatestCheckIn(latest);
     // 限量读取：只取当年打卡数据（TrendChart 需要）和最近 20 条日记，切换家庭时读取量轻得多
     const all = await getCheckInsForHome(fid);
+    if (!isCurrentFamily()) return;
     setAllCheckIns(all);
     const diaries = await getDiaryEntriesForHome(fid, 20);
+    if (!isCurrentFamily()) return;
     setAllDiaryEntries(diaries);
     // 后台从云端拉取最新数据并写入本地缓存，然后更新 UI
     // 这样即使本地缓存为空（如退出登录后）也能展示最新数据
@@ -593,6 +621,7 @@ function CreatorHomeScreen() {
           cloudGetCheckIns(fidNum, 60),
           cloudGetDiaries(fidNum, 100),
         ]).then(async ([cloudCheckIns, cloudDiaries]) => {
+          if (!isCurrentFamily()) return;
           // 将云端打卡数据写入本地缓存（合并策略：本地 morningDone/eveningDone=true 优先，防止竞态覆盖）
           if (Array.isArray(cloudCheckIns) && cloudCheckIns.length > 0) {
             // 先读取当前本地缓存，用于合并
@@ -674,14 +703,17 @@ function CreatorHomeScreen() {
           if (Array.isArray(cloudDiaries)) {
             await mergeCloudDiariesIntoLocal(cloudDiaries, fid);
           }
+          if (!isCurrentFamily()) return;
           // 重新读取本地数据更新 UI
           const [freshToday, freshAll, freshDiaries] = await Promise.all([
             getTodayCheckIn(fid),
             getCheckInsForHome(fid),
             getDiaryEntriesForHome(fid, 20),
           ]);
+          if (!isCurrentFamily()) return;
           setTodayCheckIn(freshToday);
           const freshYesterday = await getYesterdayCheckIn(fid);
+          if (!isCurrentFamily()) return;
           setLatestCheckIn(freshToday ?? freshYesterday);
           setAllCheckIns(freshAll);
           setAllDiaryEntries(freshDiaries);
@@ -693,11 +725,10 @@ function CreatorHomeScreen() {
     }
     // 读取今日简报缓存的 AI 总结（family-scoped key，和 share.tsx 保持一致）
     try {
-      const todayKey = new Date().toISOString().slice(0, 10);
-      const cacheKey = activeMembership?.familyId
-        ? `share_briefing_cache_v1:${activeMembership.familyId}`
-        : 'share_briefing_cache_v1';
+      const todayKey = todayStr();
+      const cacheKey = `share_briefing_cache_v1:${requestedFamilyId}`;
       const raw = await AsyncStorage.getItem(cacheKey);
+      if (!isCurrentFamily()) return;
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.date === todayKey && parsed.briefing?.summary) {
@@ -709,7 +740,7 @@ function CreatorHomeScreen() {
         setBriefingSummary(null);
       }
     } catch { setBriefingSummary(null); }
-  }, [activeMembership?.familyId]);
+  }, [activeMembership?.familyId, memberships.length]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

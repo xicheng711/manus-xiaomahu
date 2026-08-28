@@ -11,7 +11,7 @@ import {
   removeFamilyMember, deleteFamilyRoom,
   upsertElderProfile, getElderProfile,
   upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
-  createDiaryEntry, updateDiaryEntry, getDiaryEntriesByRoom,
+  createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
   getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
   getDiaryInteractionSummaries,
   createAnnouncement, getAnnouncementsByRoom,
@@ -281,7 +281,7 @@ export const familyRouter = router({
         userId,
         `🎉 ${input.memberName}加入了家庭！`,
         `${input.memberEmoji} ${input.memberName} 现在也能看到大家的照护记录了，一起加油吧 💕`,
-        { type: 'new_member', screen: 'family', memberName: input.memberName },
+        { type: 'new_member', screen: 'family', memberName: input.memberName, roomId: room.id },
         'joinRoom',
       );
 
@@ -383,23 +383,26 @@ export const familyRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
-      await requireRoomMember(userId, input.roomId);
+      const member = await requireRoomMember(userId, input.roomId);
+      if (!member.isCreator) throw new Error("只有主照顾者可以新增或修改打卡记录");
+      const previous = await getCheckInByDate(input.roomId, input.date);
       const result = await upsertCheckIn({ ...input, authorUserId: userId });
 
-      // Notify family members about the check-in
-      const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
-      // 用 eveningDone 判断是否为晚间打卡（比 morningDone 更准确）
-      // 原因：晚间打卡时整个 checkIn 对象会携带之前早间打卡写入的 morningDone:true
-      // 所以不能用 morningDone 判断——只要 eveningDone 为 true 就是晚间打卡
-      const period = input.eveningDone ? '晚间' : '早间';
-      await notifyRoomMembers(
-        input.roomId,
-        userId,
-        `${actorMember?.name || '照顾者'}完成了${period}打卡 ✅`,
-        input.morningNotes || input.eveningNotes || '点击查看今日照护记录，辛苦了！💕',
-        { type: 'checkin', screen: 'home' },
-        'syncCheckIn',
-      );
+      // 只在完成状态首次 false→true 时通知。断网重试或资料补写不会重复打扰家人。
+      const newlyFinishedEvening = input.eveningDone === true && previous?.eveningDone !== true;
+      const newlyFinishedMorning = input.morningDone === true && previous?.morningDone !== true;
+      if (newlyFinishedEvening || newlyFinishedMorning) {
+        const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
+        const period = newlyFinishedEvening ? '晚间' : '早间';
+        await notifyRoomMembers(
+          input.roomId,
+          userId,
+          `${actorMember?.name || '照顾者'}完成了${period}打卡 ✅`,
+          (newlyFinishedEvening ? input.eveningNotes : input.morningNotes) || '点击查看今日照护记录，辛苦了！💕',
+          { type: 'checkin', screen: 'home', roomId: input.roomId },
+          'syncCheckIn',
+        );
+      }
 
       return { success: true, checkIn: result };
     }),
@@ -449,6 +452,9 @@ export const familyRouter = router({
       await requireRoomMember(userId, input.roomId);
 
       if (input.serverDiaryId) {
+        const existingEntry = await getDiaryEntryForInteraction(input.roomId, input.serverDiaryId);
+        if (!existingEntry) throw new Error("日记不存在或已删除");
+        if (existingEntry.authorUserId !== userId) throw new Error("只能修改自己发布的日记");
         await updateDiaryEntry(input.serverDiaryId, {
           content: input.content,
           moodEmoji: input.moodEmoji ?? null,
@@ -464,8 +470,9 @@ export const familyRouter = router({
           conversationFinished: input.conversationFinished ?? false,
           localTimeStr: input.localTimeStr ?? null,
         });
-        // 对话结束时发送通知（更新路径同样需要发通知）
-        if (input.conversationFinished === true && shouldSendDiaryNotification(input.serverDiaryId)) {
+        // 只有服务器状态首次从未发布变为已发布时通知；断网重试和后续幂等更新不重复提醒。
+        const newlyPublished = input.conversationFinished === true && existingEntry.conversationFinished !== true;
+        if (newlyPublished && shouldSendDiaryNotification(input.serverDiaryId)) {
           const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
           const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
           await notifyRoomMembers(
@@ -523,7 +530,22 @@ export const familyRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
-      return getDiaryEntriesByRoom(input.roomId, input.limit);
+      const entries = await getDiaryEntriesByRoom(input.roomId, input.limit);
+      // 未点击“结束并保存”的日记仍是作者草稿：作者可跨设备继续，其他家庭成员不可见。
+      return entries.filter(entry => entry.conversationFinished === true || entry.authorUserId === userId);
+    }),
+
+  /** Delete one diary and its interactions; only the diary author may delete it. */
+  deleteDiary: protectedProcedure
+    .input(z.object({ roomId: z.number(), diaryId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      await requireRoomMember(userId, input.roomId);
+      const entry = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
+      if (!entry) throw new Error("日记不存在或已删除");
+      if (entry.authorUserId !== userId) throw new Error("只能删除自己发布的日记");
+      await deleteDiaryEntryById(input.roomId, input.diaryId);
+      return { success: true };
     }),
 
   /** Mark a diary as read by the current family member (authors do not read-receipt themselves) */
@@ -643,7 +665,7 @@ export const familyRouter = router({
         userId,
         `${member.emoji} ${member.name} 有新消息要告诉你`,
         announcementPreview,
-        { type: 'announcement', screen: 'family' },
+        { type: 'announcement', screen: 'family', roomId: input.roomId },
         'postAnnouncement',
       );
 
@@ -755,7 +777,7 @@ export const familyRouter = router({
       const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
       if (!member.isCreator) throw new Error("只有主照顾者可以删除用药记录");
-      await deleteMedication(input.medicationId);
+      await deleteMedication(input.medicationId, input.roomId);
       return { success: true };
     }),
 

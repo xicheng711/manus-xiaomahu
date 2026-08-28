@@ -10,7 +10,7 @@ import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getCurrentUserIsCreator, getBriefingByDate } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns } from '@/lib/storage';
 import { getSessionToken } from '@/lib/_core/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
@@ -693,8 +693,10 @@ function CheckinScreenContent() {
   const router = useRouter();
   const params = useLocalSearchParams<{ backfillDate?: string; refresh?: string }>();
   const backfillDate = params.backfillDate || null;
-  const { activeMembership } = useFamilyContext();
+  const { memberships, activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(familyId);
+  activeFamilyRef.current = familyId;
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [mode, setMode] = useState<'landing' | 'morning' | 'evening'>('landing');
   const [step, setStep] = useState(0);
@@ -777,34 +779,50 @@ function CheckinScreenContent() {
 
   const [refreshing, setRefreshing] = useState(false);
   const loadCheckInData = useCallback(async () => {
-    const [userProfile, familyProfile, legacyProfile] = await Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]);
-    const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
-    const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '您';
+    const requestedMembership = activeMembership;
+    const requestedFamilyId = requestedMembership?.familyId;
+    if (!familyReady || !requestedFamilyId) return;
+    const member = requestedMembership.room.members.find(item => item.id === requestedMembership.myMemberId);
+    const [userProfile, familyProfile, legacyProfile] = await Promise.all([
+      getUserProfile(), getFamilyProfile(requestedFamilyId), getProfile(),
+    ]);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    const allowLegacyFallback = memberships.length === 1;
+    const nickname = familyProfile?.nickname || familyProfile?.name || requestedMembership.room.elderName || (allowLegacyFallback ? legacyProfile?.nickname || legacyProfile?.name : undefined) || '家人';
+    const caregiver = member?.name || userProfile?.caregiverName || (allowLegacyFallback ? legacyProfile?.caregiverName : undefined) || '您';
     setElderNickname(nickname);
     setCaregiverName(caregiver);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyId]);
+  }, [familyId, familyReady, memberships.length, activeMembership]);
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try { await loadCheckInData(); } finally { setRefreshing(false); }
   }, [loadCheckInData]);
 
   useFocusEffect(useCallback(() => {
-    // 加载姓名（family-scoped 优先，fallback 到 legacy）
-    Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]).then(([userProfile, familyProfile, legacyProfile]) => {
-      const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
-      const caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '您';
-      setElderNickname(nickname);
-      setCaregiverName(caregiver);
-    });
+    const requestedFamilyId = familyId;
+    if (!familyReady || !requestedFamilyId) {
+      setCheckIn(null);
+      return;
+    }
+    loadCheckInData().catch(() => {});
+    syncPendingCheckIns(requestedFamilyId).catch(() => {});
 
-    (async () => {
+    void (async () => {
+      const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
       const targetDate = backfillDate || null;
       const existing = targetDate
-        ? await getCheckInByDate(targetDate, familyId)
-        : await getTodayCheckIn(familyId);
+        ? await getCheckInByDate(targetDate, requestedFamilyId)
+        : await getTodayCheckIn(requestedFamilyId);
+      if (!isCurrentFamily()) return;
       setCheckIn(existing);
 
+      // 先清理上一家庭的表单数据，当前家庭有记录时再逐项恢复。
+      setMorningNotes('');
+      setMealCustom('');
+      setEveningNotes('');
+      setMedicationTaken(true);
+      setMealOptionIdx(0);
+      setNapMinutes(0);
       if (existing) {
         restoreSleepFields(existing);
         setMorningNotes(existing.morningNotes ?? '');
@@ -825,53 +843,36 @@ function CheckinScreenContent() {
         }
         setEveningNotes(existing.eveningNotes ?? '');
       } else {
-        // 今日没有数据 → 尝试用最近一次历史打卡预填睡眠字段
-        // 策略：取过去7天中最近一条有 morningDone 的记录
-        const recent = await getAllCheckIns();
-        const todayDate = todayStr();
+        const recent = await getAllCheckIns(requestedFamilyId);
+        if (!isCurrentFamily()) return;
         const lastMorning = recent
-          .filter(r => r.date !== todayDate && r.morningDone)
+          .filter(r => r.date !== todayStr() && r.morningDone)
           .sort((a, b) => b.date.localeCompare(a.date))[0];
-        if (lastMorning) {
-          restoreSleepFields(lastMorning);
-          // 注意：只预填睡眠字段，不预填心情/用药（每天状态不同）
-          // caregiverMoodIdx 保持默认（正常）
-        }
-        // 无历史数据 → 保持 useState 初始值（7-9小时 / 没醒 / 几乎没有 / 没有）
+        if (lastMorning) restoreSleepFields(lastMorning);
       }
 
-      // 计算连续打卡天数（去重同一天，只有相差1天才算连续）
-      getAllCheckIns().then(all => {
-        // 去重：同一天只算一次，且必须有 eveningDone 或 morningDone
-        const doneDates = [...new Set(
-          all.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
-        )].sort().reverse();
-        let count = 0;
-        let prev: string | null = null;
-        for (const d of doneDates) {
-          if (prev === null) {
-            // 第一条：必须是今天或昨天才开始计数
-            const diffFromToday = (new Date(todayStr()).getTime() - new Date(d).getTime()) / 86400000;
-            if (diffFromToday <= 1) { count = 1; prev = d; }
-            else break;
-          } else {
-            const diff = (new Date(prev).getTime() - new Date(d).getTime()) / 86400000;
-            if (diff === 1) { count++; prev = d; } else break;
-          }
+      const all = await getAllCheckIns(requestedFamilyId);
+      if (!isCurrentFamily()) return;
+      const doneDates = [...new Set(
+        all.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
+      )].sort().reverse();
+      let count = 0;
+      let prev: string | null = null;
+      for (const d of doneDates) {
+        if (prev === null) {
+          const diffFromToday = (new Date(todayStr()).getTime() - new Date(d).getTime()) / 86400000;
+          if (diffFromToday <= 1) { count = 1; prev = d; } else break;
+        } else {
+          const diff = (new Date(prev).getTime() - new Date(d).getTime()) / 86400000;
+          if (diff === 1) { count++; prev = d; } else break;
         }
-        setStreak(Math.max(count, 1));
-      });
-
-      if (backfillDate) {
-        setMode('evening');
-        setStep(0);
-      } else {
-        setMode('landing');
       }
+      setStreak(Math.max(count, 1));
+      setMode(backfillDate ? 'evening' : 'landing');
       setStep(0);
       setDone(false);
     })();
-  }, [backfillDate]));
+  }, [backfillDate, familyId, familyReady, loadCheckInData]));
 
   // 点击通知时强制刷新
   useEffect(() => {
@@ -1009,7 +1010,7 @@ function CheckinScreenContent() {
     }
     // 保存完成后重新计算连续打卡天数（包含刚刚保存的这次）
     try {
-      const allAfterSave = await getAllCheckIns();
+      const allAfterSave = await getAllCheckIns(familyId);
       const doneDates = [...new Set(
         allAfterSave.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
       )].sort().reverse();
@@ -2495,35 +2496,48 @@ const calStyles = StyleSheet.create({
 
 // ─── Joiner Read-Only View ───────────────────────────────────────────────────
 function JoinerCheckinView() {
-  const { activeMembership } = useFamilyContext();
+  const { memberships, activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(familyId);
+  activeFamilyRef.current = familyId;
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [allCheckIns, setAllCheckIns] = useState<DailyCheckIn[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
+  const viewerTodayKey = todayStr();
 
   const [refreshing, setRefreshing] = useState(false);
   const loadJoinerData = useCallback(async () => {
-    const todayDate = new Date();
-    const todayKey = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+    const requestedFamilyId = familyId;
+    if (!familyReady || !requestedFamilyId) {
+      setCheckIn(null);
+      setAllCheckIns([]);
+      return;
+    }
     // 本地优先：先立即显示缓存数据，再后台拉取云端
-    const localCheckIns = await getAllCheckIns(familyId);
-    const localToday = localCheckIns.find(ci => ci.date === todayKey) ?? null;
-    setCheckIn(localToday);
-    setAllCheckIns(localCheckIns);
+    const localCheckIns = await getAllCheckIns(requestedFamilyId);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    const localSorted = [...localCheckIns].sort((a, b) => b.date.localeCompare(a.date));
+    setCheckIn(localSorted[0] ?? null);
+    setAllCheckIns(localSorted);
     // 后台拉取云端最新数据
     const { cloudGetCheckIns } = await import('@/lib/cloud-sync');
     try {
-      const cloudCIs: any[] = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
-      if (cloudCIs && cloudCIs.length > 0) {
-        setCheckIn(cloudCIs.find((ci: any) => ci.date === todayKey) ?? null);
-        setAllCheckIns(cloudCIs as DailyCheckIn[]);
+      const cloudCIs = await cloudGetCheckIns(Number(requestedFamilyId), 30);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
+      if (Array.isArray(cloudCIs)) {
+        const cloudSorted = [...cloudCIs].sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
+        setCheckIn((cloudSorted[0] as DailyCheckIn | undefined) ?? null);
+        setAllCheckIns(cloudSorted as DailyCheckIn[]);
+        await AsyncStorage.setItem(`daily_checkins_v2:${requestedFamilyId}`, JSON.stringify(cloudCIs));
       }
     } catch {
       // 网络不可用时保持已展示的本地缓存
     }
-    const [, fp, lp] = await Promise.all([getUserProfile(), getFamilyProfile(familyId), getProfile()]);
-    setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
-  }, [familyId]);
+    const [fp, lp] = await Promise.all([getFamilyProfile(requestedFamilyId), getProfile()]);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    const allowLegacyFallback = memberships.length === 1;
+    setElderNickname(fp?.nickname || fp?.name || activeMembership?.room.elderName || (allowLegacyFallback ? lp?.nickname || lp?.name : undefined) || '家人');
+  }, [familyId, familyReady, memberships.length, activeMembership?.room.elderName]);
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try { await loadJoinerData(); } finally { setRefreshing(false); }
@@ -2539,7 +2553,7 @@ function JoinerCheckinView() {
         {/* Header */}
         <View style={{ marginBottom: 20 }}>
           <Text style={{ fontSize: 22, fontWeight: '800', color: '#2D1B4E', marginBottom: 4 }}>每日打卡</Text>
-          <Text style={{ fontSize: 14, color: '#888' }}>{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</Text>
+          <Text style={{ fontSize: 14, color: '#888' }}>主照顾者记录日期：{checkIn?.date ?? viewerTodayKey}</Text>
         </View>
 
         {/* Read-only notice */}
@@ -2550,7 +2564,7 @@ function JoinerCheckinView() {
 
         {/* Today status */}
         <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: '#2D1B4E', marginBottom: 12 }}>今日状态</Text>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: '#2D1B4E', marginBottom: 12 }}>最新打卡状态</Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <View style={{ flex: 1, backgroundColor: morningDone ? '#FFF3E0' : '#F5F5F5', borderRadius: 12, padding: 12, alignItems: 'center' }}>
               <Text style={{ fontSize: 24, marginBottom: 6 }}>🌅</Text>
@@ -2583,9 +2597,8 @@ function JoinerCheckinView() {
 }
 
 export default function CheckinScreen() {
-  const [isCreator, setIsCreator] = useState<boolean | null>(null);
-  useFocusEffect(useCallback(() => { getCurrentUserIsCreator().then(v => setIsCreator(v)); }, []));
-  if (isCreator === null) return null;
-  if (!isCreator) return <JoinerCheckinView />;
+  const { activeMembership, ready } = useFamilyContext();
+  if (!ready || !activeMembership) return null;
+  if (activeMembership.role !== 'creator') return <JoinerCheckinView />;
   return <CheckinScreenContent />;
 }

@@ -200,7 +200,8 @@ export async function cloudGetMyRooms() {
     return await client.family.myRooms.query();
   } catch (e) {
     console.warn('[CloudSync] myRooms failed:', e);
-    return [];
+    // null 表示网络/认证请求失败；[] 只表示服务器成功确认账号当前没有家庭。
+    return null;
   }
 }
 
@@ -211,7 +212,8 @@ export async function cloudGetRoomDetail(roomId: number) {
     return await client.family.getRoomDetail.query({ roomId });
   } catch (e) {
     console.warn('[CloudSync] getRoomDetail failed:', e);
-    return null;
+    // 交给调用方区分断网与 NOT_FOUND/FORBIDDEN；不能把所有失败都伪装成“房间不存在”。
+    throw e;
   }
 }
 
@@ -269,8 +271,8 @@ export async function cloudDeleteAnnouncement(announcementId: number, roomId: nu
 // ─── Check-in Sync ─────────────────────────────────────────────────────────────────────
 
 /** Sync a check-in to the server (call after local save) */
-export async function cloudSyncCheckIn(checkIn: any) {
-  const roomId = await getActiveRoomId();
+export async function cloudSyncCheckIn(checkIn: any, explicitRoomId?: number | string | null) {
+  const roomId = explicitRoomId ? Number(explicitRoomId) : await getActiveRoomId();
   if (!roomId) return null;
   try {
     const client = getClient();
@@ -311,13 +313,14 @@ export async function cloudSyncCheckIn(checkIn: any) {
 /** Fetch check-ins from server (for family members to view) */
 export async function cloudGetCheckIns(roomId?: number, limit = 30) {
   const rid = roomId ?? await getActiveRoomId();
-  if (!rid) return [];
+  if (!rid) return null;
   try {
     const client = getClient();
     return await client.family.getCheckIns.query({ roomId: rid, limit });
   } catch (e) {
     console.warn('[CloudSync] getCheckIns failed:', e);
-    return [];
+    // null 表示网络或权限失败；[] 才表示服务器成功返回“没有打卡记录”。
+    return null;
   }
 }
 
@@ -349,6 +352,19 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
     });
   } catch (e) {
     console.warn('[CloudSync] syncDiary failed:', e);
+    return null;
+  }
+}
+
+/** Delete one diary from the server. The server verifies room membership and authorship. */
+export async function cloudDeleteDiary(diaryId: number, roomId?: number) {
+  const rid = roomId ?? await getActiveRoomId();
+  if (!rid) return null;
+  try {
+    const client = getClient();
+    return await client.family.deleteDiary.mutate({ roomId: rid, diaryId });
+  } catch (e) {
+    console.warn('[CloudSync] deleteDiary failed:', e);
     return null;
   }
 }
@@ -452,13 +468,14 @@ export async function cloudPostAnnouncement(params: {
 /** Fetch announcements from server */
 export async function cloudGetAnnouncements(roomId?: number, limit = 50) {
   const rid = roomId ?? await getActiveRoomId();
-  if (!rid) return [];
+  if (!rid) return null;
   try {
     const client = getClient();
     return await client.family.getAnnouncements.query({ roomId: rid, limit });
   } catch (e) {
     console.warn('[CloudSync] getAnnouncements failed:', e);
-    return [];
+    // null 表示网络失败；[] 表示服务器确认当前家庭没有公告。
+    return null;
   }
 }
 
@@ -508,13 +525,13 @@ export async function cloudSaveBriefing(briefing: any, roomId?: number) {
 /** Fetch briefings from server (family members can view) */
 export async function cloudGetBriefings(roomId?: number, limit = 14) {
   const rid = roomId ?? await getActiveRoomId();
-  if (!rid) return [];
+  if (!rid) return null;
   try {
     const client = getClient();
     return await client.family.getBriefings.query({ roomId: rid, limit });
   } catch (e) {
     console.warn('[CloudSync] getBriefings failed:', e);
-    return [];
+    return null;
   }
 }
 
@@ -548,29 +565,34 @@ export async function cloudSyncMedication(med: any, serverMedId?: number, roomId
 /** Fetch medications from server */
 export async function cloudGetMedications(roomId?: number) {
   const rid = roomId ?? await getActiveRoomId();
-  if (!rid) return [];
+  if (!rid) return null;
   try {
     const client = getClient();
     return await client.family.getMedications.query({ roomId: rid });
   } catch (e) {
     console.warn('[CloudSync] getMedications failed:', e);
-    return [];
+    // null 表示加载失败；[] 表示服务器确认当前家庭没有用药记录。
+    return null;
   }
 }
 
-/** Delete a medication from the server by matching name (local id is string, server id is number) */
-export async function cloudDeleteMedication(medName: string, roomId?: number) {
+/** Delete a medication using its stable server ID, with name matching only for legacy local rows. */
+export async function cloudDeleteMedication(serverMedId: number | undefined, medName: string, roomId?: number) {
   const rid = roomId ?? await getActiveRoomId();
-  if (!rid) return;
+  if (!rid) return null;
   try {
     const client = getClient();
-    // Find the server-side medication by name
-    const serverMeds = await client.family.getMedications.query({ roomId: rid });
-    const match = serverMeds.find((m: any) => m.name === medName);
-    if (!match) return; // not yet synced to server, nothing to delete
-    await client.family.deleteMedication.mutate({ roomId: rid, medicationId: match.id });
+    let medicationId = serverMedId;
+    if (!medicationId) {
+      const serverMeds = await client.family.getMedications.query({ roomId: rid });
+      const match = serverMeds.find((m: any) => m.name === medName);
+      if (!match) return { success: true }; // 从未同步到服务器，本地可直接删除。
+      medicationId = match.id;
+    }
+    return await client.family.deleteMedication.mutate({ roomId: rid, medicationId });
   } catch (e) {
     console.warn('[CloudSync] deleteMedication failed:', e);
+    return null;
   }
 }
 

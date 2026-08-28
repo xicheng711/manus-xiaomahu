@@ -175,6 +175,15 @@ export async function updateDiaryEntry(id: number, data: Partial<InsertDiaryEntr
   await db.update(diaryEntries).set(data).where(eq(diaryEntries.id, id));
 }
 
+export async function deleteDiaryEntryById(roomId: number, diaryId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // MySQL 表未依赖级联删除，先清互动记录，再删除日记本身。
+  await db.delete(diaryReads).where(and(eq(diaryReads.roomId, roomId), eq(diaryReads.diaryId, diaryId)));
+  await db.delete(diaryComments).where(and(eq(diaryComments.roomId, roomId), eq(diaryComments.diaryId, diaryId)));
+  await db.delete(diaryEntries).where(and(eq(diaryEntries.roomId, roomId), eq(diaryEntries.id, diaryId)));
+}
+
 export async function getDiaryEntriesByRoom(roomId: number, limit = 100) {
   const db = await getDb();
   if (!db) return [];
@@ -347,22 +356,28 @@ export async function getBriefingByDate(roomId: number, date: string) {
 export async function upsertMedication(data: InsertMedication & { id?: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  if (data.id) {
-    // Update by primary key
-    await db.update(medications).set(data).where(eq(medications.id, data.id));
-    return data;
+  const { id, ...values } = data;
+  if (id) {
+    const existing = await db.select({ id: medications.id }).from(medications)
+      .where(and(eq(medications.id, id), eq(medications.roomId, values.roomId)))
+      .limit(1);
+    if (!existing[0]) throw new Error("Medication not found in this room");
+    await db.update(medications).set(values)
+      .where(and(eq(medications.id, id), eq(medications.roomId, values.roomId)));
+    return { id, ...values };
   }
-  // No id: find existing by roomId + name to avoid duplicates
+  // No id: find existing by roomId + name to avoid duplicate creates from legacy clients.
   const existing = await db.select().from(medications)
-    .where(and(eq(medications.roomId, data.roomId), eq(medications.name, data.name)))
+    .where(and(eq(medications.roomId, values.roomId), eq(medications.name, values.name)))
     .limit(1);
   if (existing.length > 0) {
     const existingId = existing[0].id;
-    await db.update(medications).set(data).where(eq(medications.id, existingId));
-    return { id: existingId, ...data };
+    await db.update(medications).set(values)
+      .where(and(eq(medications.id, existingId), eq(medications.roomId, values.roomId)));
+    return { id: existingId, ...values };
   }
-  const result = await db.insert(medications).values(data);
-  return { id: result[0].insertId, ...data };
+  const result = await db.insert(medications).values(values);
+  return { id: result[0].insertId, ...values };
 }
 
 export async function getMedicationsByRoom(roomId: number) {
@@ -371,10 +386,11 @@ export async function getMedicationsByRoom(roomId: number) {
   return db.select().from(medications).where(eq(medications.roomId, roomId));
 }
 
-export async function deleteMedication(id: number) {
+export async function deleteMedication(id: number, roomId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(medications).where(eq(medications.id, id));
+  await db.delete(medications)
+    .where(and(eq(medications.id, id), eq(medications.roomId, roomId)));
 }
 
 // ─── Room Management ────────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { getMedications, saveMedication, updateMedication, deleteMedication, Medication, getProfile, getUserProfile, getFamilyProfile, CareNeedType, CareNeedsProfile, getCurrentUserIsCreator } from '@/lib/storage';
+import { getMedications, saveMedication, saveMedications, updateMedication, deleteMedication, syncPendingMedications, Medication, getProfile, getFamilyProfile, CareNeedType, CareNeedsProfile } from '@/lib/storage';
 import { cloudGetMedications } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
@@ -94,18 +94,16 @@ function MedCard({ med, onToggle, onDelete, onEdit, index, isCreator }: { med: M
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function MedicationScreenContent() {
   const params = useLocalSearchParams<{ refresh?: string }>();
-  const { activeMembership } = useFamilyContext();
+  const { memberships, activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(familyId);
+  activeFamilyRef.current = familyId;
+  const isCreator = activeMembership?.role === 'creator';
   const [meds, setMeds] = useState<Medication[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
   const [careNeeds, setCareNeeds] = useState<CareNeedType[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingMed, setEditingMed] = useState<Medication | null>(null);
-  const [isCreator, setIsCreator] = useState(true);
-
-  useFocusEffect(useCallback(() => {
-    getCurrentUserIsCreator().then(setIsCreator);
-  }, []));
   const [name, setName] = useState('');
   const [dosage, setDosage] = useState('');
   const [freqIdx, setFreqIdx] = useState(0);
@@ -134,22 +132,62 @@ function MedicationScreenContent() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadMeds = useCallback(async () => {
-    const creator = await getCurrentUserIsCreator();
-    if (creator) {
-      getMedications(familyId).then(setMeds);
-    } else {
-      cloudGetMedications().then(cloudMeds => {
-        if (cloudMeds && cloudMeds.length > 0) {
-          setMeds(cloudMeds as unknown as Medication[]);
-        } else {
-          getMedications(familyId).then(setMeds);
-        }
-      }).catch(() => getMedications(familyId).then(setMeds));
+    const requestedFamilyId = familyId;
+    if (!familyReady || !requestedFamilyId) {
+      setMeds([]);
+      return;
     }
-    const [fp, lp] = await Promise.all([getFamilyProfile(familyId), getProfile()]);
-    setElderNickname(fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人');
-    setCareNeeds(fp?.careNeeds?.selectedNeeds || lp?.careNeeds?.selectedNeeds || []);
-  }, [familyId]);
+
+    // 先显示当前家庭本地缓存，网络更新在后台完成。
+    let local = await getMedications(requestedFamilyId);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    setMeds(local);
+    if (isCreator) {
+      await syncPendingMedications(requestedFamilyId).catch(() => {});
+      local = await getMedications(requestedFamilyId);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
+      setMeds(local);
+    }
+
+    const [cloudMeds, fp, lp] = await Promise.all([
+      cloudGetMedications(Number(requestedFamilyId)),
+      getFamilyProfile(requestedFamilyId),
+      getProfile(),
+    ]);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+
+    if (Array.isArray(cloudMeds)) {
+      const remoteIds = new Set<number>();
+      const mergedRemote: Medication[] = cloudMeds.map((remote: any) => {
+        const serverMedId = Number(remote.id);
+        remoteIds.add(serverMedId);
+        const existing = local.find(item => item.serverMedId === serverMedId)
+          ?? local.find(item => !item.serverMedId && item.name === remote.name);
+        return {
+          ...existing,
+          id: existing?.id ?? `cloud_${serverMedId}`,
+          serverMedId,
+          name: remote.name ?? '',
+          dosage: remote.dosage ?? '',
+          frequency: remote.frequency ?? '',
+          times: Array.isArray(remote.times) ? remote.times : [],
+          notes: remote.notes ?? '',
+          icon: remote.icon ?? '💊',
+          active: remote.active ?? true,
+          reminderEnabled: remote.reminderEnabled ?? true,
+          color: remote.color ?? undefined,
+        };
+      });
+      const localPending = local.filter(item => item.syncPending || !item.serverMedId);
+      const merged = [...mergedRemote, ...localPending.filter(item => !mergedRemote.some(remote => remote.id === item.id))];
+      await saveMedications(merged, requestedFamilyId);
+      if (activeFamilyRef.current === requestedFamilyId) setMeds(merged);
+    }
+
+    const allowLegacyFallback = memberships.length === 1;
+    setElderNickname(fp?.nickname || fp?.name || activeMembership?.room.elderName || (allowLegacyFallback ? lp?.nickname || lp?.name : undefined) || '家人');
+    setCareNeeds(fp?.careNeeds?.selectedNeeds || (allowLegacyFallback ? lp?.careNeeds?.selectedNeeds : undefined) || []);
+  }, [familyId, familyReady, memberships.length, activeMembership?.room.elderName, isCreator]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -196,8 +234,14 @@ function MedicationScreenContent() {
       Alert.alert('请输入药物名称');
       return;
     }
-    const [fp, lp] = await Promise.all([getFamilyProfile(familyId), getProfile()]);
-    const nickname = fp?.nickname || fp?.name || lp?.nickname || lp?.name || '家人';
+    const requestedFamilyId = familyId;
+    if (!requestedFamilyId) {
+      Alert.alert('家庭信息尚未准备好', '请稍后重试。');
+      return;
+    }
+    const [fp, lp] = await Promise.all([getFamilyProfile(requestedFamilyId), getProfile()]);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    const nickname = fp?.nickname || fp?.name || activeMembership?.room.elderName || (memberships.length === 1 ? lp?.nickname || lp?.name : undefined) || '家人';
 
     if (editingMed) {
       // ── Edit existing ── (updateMedication 自带云端同步)
@@ -210,7 +254,7 @@ function MedicationScreenContent() {
         icon,
         reminderEnabled,
       };
-      await updateMedication(editingMed.id, patch, familyId);
+      await updateMedication(editingMed.id, patch, requestedFamilyId);
       const updated = meds.map(m => m.id === editingMed.id ? { ...m, ...patch } : m);
       setMeds(updated);
       // handle reminders—差集算法：取消已删除的时间点，新增新时间点
@@ -246,7 +290,7 @@ function MedicationScreenContent() {
         icon,
         active: true,
         reminderEnabled,
-      }, familyId);
+      }, requestedFamilyId);
       setMeds(prev => [...prev, newMed]);
       if (reminderEnabled) {
         for (const t of selectedTimes) {
@@ -276,9 +320,12 @@ function MedicationScreenContent() {
       { text: '取消', style: 'cancel' },
       {
         text: '删除', style: 'destructive', onPress: async () => {
-          // deleteMedication 自带云端同步
-          await deleteMedication(id, familyId);
-          setMeds(prev => prev.filter(m => m.id !== id));
+          try {
+            await deleteMedication(id, familyId);
+            setMeds(prev => prev.filter(m => m.id !== id));
+          } catch (error: any) {
+            Alert.alert('删除失败', error?.message || '无法同步删除，请检查网络后重试');
+          }
         }
       }
     ]);
