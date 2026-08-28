@@ -17,6 +17,7 @@ import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn, getCurrentMember, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
+  waitForServerDiaryId,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
@@ -224,11 +225,13 @@ function TagOption({ tag, selected, onPress }: { tag: string; selected: boolean;
 
 export default function DiaryEditScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; readOnly?: string; fromDiary?: string }>();
+  const params = useLocalSearchParams<{ id?: string; readOnly?: string; fromDiary?: string; roomId?: string }>();
   const existingId = params.id;
   const fromDiaryList = params.fromDiary === '1';
-  const { activeMembership, ready: familyReady } = useFamilyContext();
+  const notificationRoomId = params.roomId ? String(params.roomId) : null;
+  const { memberships, activeMembership, ready: familyReady, switchFamily } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const targetFamilyReady = !notificationRoomId || familyId === notificationRoomId;
   const [roleReadOnly, setRoleReadOnly] = useState(params.readOnly === '1');
   const isReadOnly = roleReadOnly;
   const scrollRef = useRef<ScrollView>(null);
@@ -255,6 +258,7 @@ export default function DiaryEditScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [saving, setSaving] = useState(false); // 防止「结束并保存」重复点击
   const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null);
+  const [serverDiaryId, setServerDiaryId] = useState<number | null>(null);
 
   const entryRef = useRef<DiaryEntry | null>(null);
   // conversationRef 必须在 setConversation 包装函数之前声明，避免 TDZ 问题
@@ -281,13 +285,28 @@ export default function DiaryEditScreen() {
     ).start();
   }, []);
 
-  // 等待 familyId 就绪后再加载日记（避免 familyId 为 undefined 时读取错误的 storage key）
+  // 通知可能来自另一个家庭：先切换到通知对应家庭，避免从错误的缓存和房间读取日记。
   useEffect(() => {
-    if (existingId && familyReady && !entryLoadedRef.current) {
+    if (!familyReady || !notificationRoomId || familyId === notificationRoomId) return;
+    const stillBelongsToTargetFamily = memberships.some(item => item.familyId === notificationRoomId);
+    if (!stillBelongsToTargetFamily) {
+      Alert.alert('无法打开这篇日记', '你已不在这篇日记所属的家庭中。');
+      router.replace('/(tabs)/diary' as any);
+      return;
+    }
+    switchFamily(notificationRoomId).catch(() => {
+      Alert.alert('暂时无法切换家庭', '请稍后从家庭列表中重试。');
+      router.replace('/(tabs)/diary' as any);
+    });
+  }, [familyReady, familyId, memberships, notificationRoomId, router, switchFamily]);
+
+  // 等待目标 familyId 就绪后再加载日记（避免读取错误家庭的 storage key）。
+  useEffect(() => {
+    if (existingId && familyReady && targetFamilyReady && !entryLoadedRef.current) {
       entryLoadedRef.current = true;
       loadExistingEntry(existingId);
     }
-  }, [familyReady, existingId]);
+  }, [familyReady, targetFamilyReady, existingId]);
 
   // 新建日记时，按当前家庭读取本机草稿；已发布日记绝不读取草稿覆盖内容。
   useEffect(() => {
@@ -458,6 +477,7 @@ export default function DiaryEditScreen() {
     }
     if (entry) {
       entryRef.current = entry;
+      setServerDiaryId(entry.serverDiaryId ?? (/^cloud_\d+$/.test(entry.id) ? Number(entry.id.replace('cloud_', '')) : null));
       const moodIdx = MOOD_OPTIONS.findIndex(m => m.emoji === entry!.moodEmoji);
       setSelectedMood(moodIdx >= 0 ? moodIdx : 0);
       if (entry.caregiverMoodEmoji) {
@@ -490,8 +510,11 @@ export default function DiaryEditScreen() {
   );
 
   function returnToDiaryList() {
-    // 从日记列表 push 进来时使用 back，保留列表组件、展开状态和滚动位置。
-    if (fromDiaryList && router.canGoBack()) router.back();
+    // 查看已有日记时优先返回来源页面：
+    // - 从日记列表进入，可保留列表展开状态和滚动位置；
+    // - 从首页活动进入，可回到原来的首页位置。
+    // 新建日记只有明确来自日记列表时才 back，其他入口仍回日记本。
+    if (router.canGoBack() && (fromDiaryList || !!existingId)) router.back();
     else router.replace('/(tabs)/diary' as any);
   }
 
@@ -576,6 +599,14 @@ export default function DiaryEditScreen() {
     setDraftRestoredAt(null);
     setEntryId(savedEntry.id);
     entryRef.current = savedEntry;
+    setServerDiaryId(savedEntry.serverDiaryId ?? null);
+    // 云端创建完成后立即显示家人互动区，无需离开页面再重新打开。
+    waitForServerDiaryId(savedEntry.id).then(id => {
+      if (id) {
+        setServerDiaryId(id);
+        entryRef.current = entryRef.current ? { ...entryRef.current, serverDiaryId: id } : entryRef.current;
+      }
+    }).catch(() => {});
     setSubmitted(true);
     setSubmitting(false);
     // 云端同步已在 saveDiaryEntry 内部完成，此处不再重复调用以避免服务端重复创建日记条目
@@ -693,6 +724,7 @@ export default function DiaryEditScreen() {
         // updateDiaryEntry 内部已处理云同步（conversationFinished:true 时会触发带通知的 syncDiary）
         // 不需要额外调用 cloudSyncDiary，否则会发送重复通知
         await updateDiaryEntry(eid, { conversation: latestConv, conversationFinished: true }, familyId ?? undefined);
+        if (entryRef.current) entryRef.current = { ...entryRef.current, conversation: latestConv, conversationFinished: true };
       }
       // 立即更新 UI 状态为已结束，防止返回后重新打开日记时仍可继续对话
       setFinished(true);
@@ -704,9 +736,10 @@ export default function DiaryEditScreen() {
   }
 
   const shimmerTranslate = shimmerAnim.interpolate({ inputRange: [-1, 1], outputRange: [-300, 300] });
-  const interactionDiaryId = entryRef.current?.serverDiaryId
+  const interactionDiaryId = serverDiaryId
     ?? (existingId && /^cloud_\d+$/.test(existingId) ? Number(existingId.replace('cloud_', '')) : null);
   const interactionRoomId = familyId ? Number(familyId) : null;
+  const canShowInteractions = submitted && finished && entryRef.current?.conversationFinished !== false;
 
   if (loadingEntry) {
     return (
@@ -947,7 +980,7 @@ export default function DiaryEditScreen() {
               )}
 
               {/* 正式发布后显示阅读回执和家庭留言；作者本人不会被计入阅读者。 */}
-              {submitted && finished && (
+              {canShowInteractions && (
                 <DiaryInteractions
                   diaryId={interactionDiaryId}
                   roomId={interactionRoomId}

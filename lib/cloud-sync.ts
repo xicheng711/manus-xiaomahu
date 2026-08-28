@@ -382,13 +382,14 @@ export async function cloudMarkDiaryRead(diaryId: number, roomId?: number) {
 /** Fetch readers and family comments for one diary. */
 export async function cloudGetDiaryInteractions(diaryId: number, roomId?: number) {
   const rid = roomId ?? await getActiveRoomId();
-  if (!rid) return { readers: [], comments: [] };
+  if (!rid) return { readers: [], comments: [], loadFailed: true };
   try {
     const client = getClient();
-    return await client.family.getDiaryInteractions.query({ roomId: rid, diaryId });
+    const result = await client.family.getDiaryInteractions.query({ roomId: rid, diaryId });
+    return { ...result, loadFailed: false };
   } catch (e) {
     console.warn('[CloudSync] getDiaryInteractions failed:', e);
-    return { readers: [], comments: [] };
+    return { readers: [], comments: [], loadFailed: true };
   }
 }
 

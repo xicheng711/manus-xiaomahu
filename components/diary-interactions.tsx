@@ -53,6 +53,7 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
   const [readers, setReaders] = useState<DiaryReader[]>([]);
   const [comments, setComments] = useState<DiaryComment[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const [commentText, setCommentText] = useState('');
 
@@ -62,8 +63,11 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
     try {
       if (recordRead) await cloudMarkDiaryRead(diaryId, roomId);
       const data = await cloudGetDiaryInteractions(diaryId, roomId);
-      setReaders(Array.isArray(data?.readers) ? data.readers as DiaryReader[] : []);
-      setComments(Array.isArray(data?.comments) ? data.comments as DiaryComment[] : []);
+      setLoadFailed(Boolean(data?.loadFailed));
+      if (!data?.loadFailed) {
+        setReaders(Array.isArray(data?.readers) ? data.readers as DiaryReader[] : []);
+        setComments(Array.isArray(data?.comments) ? data.comments as DiaryComment[] : []);
+      }
     } finally {
       setLoading(false);
     }
@@ -92,9 +96,11 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
 
   if (!enabled || !diaryId || !roomId) return null;
 
-  const readerText = readers.length > 0
-    ? `已被 ${readers.map(reader => `${reader.readerEmoji || '👤'} ${reader.readerName}`).join('、')} 阅读`
-    : '还没有其他家人阅读';
+  const readerText = loadFailed
+    ? '阅读信息暂未加载'
+    : readers.length > 0
+      ? `已被 ${readers.map(reader => `${reader.readerEmoji || '👤'} ${reader.readerName}`).join('、')} 阅读`
+      : '还没有其他家人阅读';
 
   return (
     <View style={styles.section}>
@@ -113,7 +119,16 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true }: Props) {
         </TouchableOpacity>
       </View>
 
-      {comments.length > 0 ? (
+      {loading && comments.length === 0 && readers.length === 0 ? (
+        <View style={styles.statusRow}>
+          <ActivityIndicator size="small" color="#A66B7E" />
+          <Text style={styles.statusText}>正在加载家人互动…</Text>
+        </View>
+      ) : loadFailed ? (
+        <TouchableOpacity style={styles.statusRow} onPress={() => loadInteractions(false)} activeOpacity={0.75}>
+          <Text style={styles.statusText}>网络暂时不可用，点击重试</Text>
+        </TouchableOpacity>
+      ) : comments.length > 0 ? (
         <View style={styles.commentsList}>
           {comments.map(comment => (
             <View key={comment.id} style={styles.commentRow}>
@@ -186,6 +201,8 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 11, color: '#A89DA0' },
   commentContent: { fontSize: 14, lineHeight: 21, color: '#53464A' },
   emptyText: { marginTop: 14, fontSize: 13, color: '#A89DA0' },
+  statusRow: { minHeight: 46, marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  statusText: { fontSize: 13, color: '#94878B' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 14 },
   input: {
     flex: 1,

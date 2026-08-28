@@ -59,15 +59,20 @@ function buildFeed(
 
   const latest = checkIns[0];
   if (latest) {
+    const dayStart = new Date(`${latest.date}T00:00:00`).getTime();
+    const completedAtMs = latest.completedAt ? new Date(latest.completedAt).getTime() : NaN;
+    const validCompletedAtMs = Number.isFinite(completedAtMs) ? completedAtMs : null;
     if (latest.morningDone) {
+      // 同一条打卡记录的 completedAt 会在晚间保存时更新，不能再把它当作早间完成时间。
+      const morningHasExactTime = !latest.eveningDone && !!latest.completedAt;
       items.push({
         id: `ci-m-${latest.id}`, type: 'checkin',
-        time: latest.completedAt ? timeStr(latest.completedAt) : '早间',
+        time: morningHasExactTime ? timeStr(latest.completedAt) : '早间',
         icon: '✅', color: AppColors.green.strong, bg: AppColors.green.soft, tag: '早间打卡',
         title: '今日早间打卡完成',
         detail: `心情 ${latest.caregiverMoodEmoji || '😊'} · 睡眠 ${latest.sleepHours}h · ${latest.medicationTaken ? '用药已服' : '用药待记录'}`,
         author: null,
-        sortKey: latest.completedAt ? new Date(latest.completedAt).getTime() : Date.now() - 3600000,
+        sortKey: morningHasExactTime && validCompletedAtMs ? validCompletedAtMs : dayStart + 8 * 3600000,
       });
     }
     if (latest.eveningDone) {
@@ -78,7 +83,7 @@ function buildFeed(
         title: '今日护理完成',
         detail: `心情 ${latest.moodEmoji || '😴'} · ${latest.medicationTaken ? '用药已按时服用' : '用药记录未完成'} · 饮食：${latest.mealOption || latest.mealNotes || '未记录'}`,
         author: null,
-        sortKey: latest.completedAt ? new Date(latest.completedAt).getTime() : Date.now() - 1800000,
+        sortKey: validCompletedAtMs ?? dayStart + 20 * 3600000,
       });
     }
   }
@@ -106,7 +111,8 @@ function buildFeed(
       title: d.content.length > 20 ? d.content.slice(0, 20) + '…' : d.content,
       detail: d.tags && d.tags.length ? d.tags.slice(0, 3).join(' · ') : `${d.moodEmoji || '😊'} ${d.moodLabel || ''}`,
       author: d.authorName || caregiverName || '照顾者',  // 优先用日记自带的 authorName
-      sortKey: new Date(d.date).getTime(),  // Sort by date field (YYYY-MM-DD) instead of createdAt (UTC)
+      // createdAt 用于同一天不同活动的真实先后顺序；date 仍只负责“是否属于今天”的筛选。
+      sortKey: d.createdAt ? new Date(d.createdAt).getTime() : new Date(`${d.date}T12:00:00`).getTime(),
     });
   });
 
@@ -124,7 +130,8 @@ function buildFeed(
     });
   });
 
-  return items.sort((a, b) => a.sortKey - b.sortKey);
+  // 活动流按最新在前展示，符合通知和家庭动态的阅读习惯。
+  return items.sort((a, b) => b.sortKey - a.sortKey);
 }
 
 function AnnouncementCard({ latest, onViewAll, onCompose }: {

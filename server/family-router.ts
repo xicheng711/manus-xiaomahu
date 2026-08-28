@@ -473,7 +473,7 @@ export const familyRouter = router({
             userId,
             `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
             diaryPreview || '点击查看完整日记',
-            { type: 'diary', screen: 'diary' },
+            { type: 'diary', screen: 'diary', diaryId: input.serverDiaryId, roomId: input.roomId },
             'syncDiary-update',
           );
         }
@@ -509,7 +509,7 @@ export const familyRouter = router({
           userId,
           `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
           diaryPreview || '点击查看完整日记',
-          { type: 'diary', screen: 'diary' },
+          { type: 'diary', screen: 'diary', diaryId: entry.id, roomId: input.roomId },
           'syncDiary',
         );
       }
@@ -534,7 +534,10 @@ export const familyRouter = router({
       const member = await requireRoomMember(userId, input.roomId);
       const diary = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
       if (!diary) throw new Error("日记不存在");
-      if (diary.authorUserId === userId) return { success: true, recorded: false };
+      // 尚未“结束并保存”的对话不应产生阅读回执；旧版 null 数据仍视为已发布以保持兼容。
+      if (diary.conversationFinished === false || diary.authorUserId === userId) {
+        return { success: true, recorded: false };
+      }
       await markDiaryRead({
         roomId: input.roomId,
         diaryId: input.diaryId,
@@ -553,6 +556,7 @@ export const familyRouter = router({
       await requireRoomMember(userId, input.roomId);
       const diary = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
       if (!diary) throw new Error("日记不存在");
+      if (diary.conversationFinished === false) return { readers: [], comments: [] };
       return getDiaryInteractions(input.roomId, input.diaryId);
     }),
 
@@ -568,6 +572,7 @@ export const familyRouter = router({
       const member = await requireRoomMember(userId, input.roomId);
       const diary = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
       if (!diary) throw new Error("日记不存在");
+      if (diary.conversationFinished === false) throw new Error("日记尚未发布，暂时不能留言");
       const comment = await addDiaryComment({
         roomId: input.roomId,
         diaryId: input.diaryId,
@@ -576,6 +581,17 @@ export const familyRouter = router({
         authorEmoji: member.emoji,
         content: input.content,
       });
+      const members = await getRoomMembers(input.roomId);
+      const diaryAuthorName = members.find(item => item.userId === diary.authorUserId)?.name || '家人';
+      const preview = input.content.length > 60 ? `${input.content.slice(0, 60)}…` : input.content;
+      await notifyRoomMembers(
+        input.roomId,
+        userId,
+        `${member.name || '家人'} 在 ${diaryAuthorName} 的日记下留言了`,
+        preview,
+        { type: 'diary_comment', screen: 'diary', diaryId: input.diaryId, roomId: input.roomId },
+        'addDiaryComment',
+      );
       return { success: true, comment };
     }),
 

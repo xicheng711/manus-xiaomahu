@@ -68,7 +68,18 @@ export default function RootLayout() {
           // 传入 refresh=1 参数，让目标页面在 useFocusEffect 里检测到并自动刷新最新数据
           switch (screen) {
             case "diary":
-              router.push({ pathname: "/(tabs)/diary", params: { refresh: Date.now() } } as any);
+              if (data?.diaryId) {
+                router.push({
+                  pathname: "/diary-edit",
+                  params: {
+                    id: `cloud_${data.diaryId}`,
+                    roomId: data?.roomId ? String(data.roomId) : undefined,
+                    refresh: Date.now(),
+                  },
+                } as any);
+              } else {
+                router.push({ pathname: "/(tabs)/diary", params: { refresh: Date.now() } } as any);
+              }
               break;
             case "family":
               router.push({ pathname: "/(tabs)/family", params: { refresh: Date.now() } } as any);
