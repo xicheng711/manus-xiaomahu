@@ -9,7 +9,7 @@ import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, getNapMinutes, hasRecordedNap, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
@@ -888,7 +888,7 @@ export default function ShareScreen() {
             sleepHours: cItem?.sleepHours ?? 0,
             awakeHours: cItem?.awakeHours ?? 0,
             nightWakings: cItem?.nightWakings ?? 0,
-            napMinutes: cItem?.napMinutes ?? (cItem?.daytimeNap ? 30 : 0),
+            napMinutes: getNapMinutes(cItem),
           };
         });
         setWeeklyData(joinerWeekly);
@@ -1186,7 +1186,7 @@ export default function ShareScreen() {
             sleepHours: ci?.sleepHours ?? 0,
             awakeHours: ci?.awakeHours ?? 0,
             nightWakings: ci?.nightWakings ?? 0,
-            napMinutes: ci?.napMinutes ?? (ci?.daytimeNap ? 30 : 0),
+            napMinutes: getNapMinutes(ci),
           };
         });
         setWeeklyData(joinerWeekly);
@@ -1219,7 +1219,7 @@ export default function ShareScreen() {
           sleepQuality: ci.sleepQuality ?? undefined,
           moodScore: ci.moodScore ?? undefined,
           medicationTaken: ci.medicationTaken ?? undefined,
-          napMinutes: ci.napMinutes ?? (ci.daytimeNap ? 30 : undefined),
+          napMinutes: hasRecordedNap(ci) ? getNapMinutes(ci) : undefined,
           notes: ci.eveningNotes || ci.morningNotes || undefined,
           // 只有用户实际选择了饮食选项才传，否则不传（避免 AI 默认为较差）
           mealSituation: ci.mealOption
@@ -1258,7 +1258,7 @@ export default function ShareScreen() {
   function buildLocalBriefing(nickname: string, caregiver: string, ci: DailyCheckIn) {
     const sleepLabel = ci.sleepQuality === 'good' ? '良好' : ci.sleepQuality === 'fair' ? '一般' : '较差';
     const dateStr = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
-    const napMins = ci.napMinutes ?? (ci.daytimeNap ? 30 : 0);
+    const napMins = getNapMinutes(ci);
     const napStr = napMins > 0 ? (napMins >= 60 ? `${(napMins / 60).toFixed(1).replace('.0', '')}小时` : `${napMins}分钟`) : '';
     const encouragements = [
       `${nickname}今天辛苦了，有您的陪伴是最大的安心 ❤️`,

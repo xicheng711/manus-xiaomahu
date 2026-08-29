@@ -15,6 +15,7 @@ import {
   getProfile, getAllCheckIns, getDiaryEntries, getFamilyAnnouncements,
   saveFamilyAnnouncement,
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember, mergeCloudDiariesIntoLocal,
+  getNapMinutes, hasRecordedNap,
 } from '@/lib/storage';
 import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements, cloudGetRoomDetail, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { TrendChart } from '@/components/trend-chart';
@@ -42,9 +43,34 @@ function timeStr(iso: string): string {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
+function getNapDisplay(checkIn?: Partial<DailyCheckIn> | null): string {
+  const minutes = getNapMinutes(checkIn);
+  if (minutes <= 0) return '没有小睡';
+  return minutes >= 60
+    ? `${(minutes / 60).toFixed(1).replace('.0', '')}小时`
+    : `${Math.round(minutes)}分钟`;
+}
+
 // Prefer localTimeStr (writer's local time) over createdAt (UTC timestamp)
 function getTimeDisplay(entry: DiaryEntry): string {
   return entry.localTimeStr || (entry.createdAt ? timeStr(entry.createdAt) : entry.date);
+}
+
+/** 首页公告始终显示发布者记录的日期和时间，避免跨天、跨时区混淆。 */
+function getAnnouncementDateTime(announcement: FamilyAnnouncement): string {
+  const time = announcement.localTimeStr || timeStr(announcement.createdAt);
+  const rawDate = announcement.date || '';
+  const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    const thisYear = String(new Date().getFullYear());
+    return `${year === thisYear ? '' : `${year}/`}${Number(month)}/${Number(day)} ${time}`;
+  }
+  const created = new Date(announcement.createdAt);
+  if (!Number.isNaN(created.getTime())) {
+    return `${created.getMonth() + 1}/${created.getDate()} ${time}`;
+  }
+  return time;
 }
 
 function buildFeed(
@@ -153,7 +179,7 @@ function AnnouncementCard({ latest, onViewAll, onCompose }: {
             <View style={styles.announceFooter}>
               <Text style={styles.announceAuthorEmoji}>{latest.authorEmoji}</Text>
               <Text style={styles.announceAuthorName}>{latest.authorName}</Text>
-              <Text style={styles.announceTime}> · {(latest as any).localTimeStr || timeStr(latest.createdAt)}</Text>
+              <Text style={styles.announceTime}> · {getAnnouncementDateTime(latest)}</Text>
             </View>
           </View>
         ) : null}
@@ -799,10 +825,10 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
             </View>
 
             {/* 白天小睡 */}
-            {latestCheckIn?.napDuration && latestCheckIn.napDuration !== '没有' && (
+            {hasRecordedNap(latestCheckIn) && (
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingHorizontal: 4 }}>
                 <Text style={{ fontSize: 14, marginRight: 6 }}>☀️</Text>
-                <Text style={{ fontSize: 13, color: '#B8860B', fontWeight: '500' }}>白天小睡：{latestCheckIn.napDuration}</Text>
+                <Text style={{ fontSize: 13, color: '#B8860B', fontWeight: '500' }}>白天小睡：{getNapDisplay(latestCheckIn)}</Text>
               </View>
             )}
             {/* 最新日记摘要 */}

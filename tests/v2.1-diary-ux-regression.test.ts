@@ -543,3 +543,55 @@ describe('App-wide keyboard and text-input safeguards', () => {
     expect(profile).toContain("Alert.alert('资料没有保存成功'");
   });
 });
+
+
+describe('Daytime nap compatibility and homepage announcement date', () => {
+  const storage = read('lib/storage.ts');
+  const trend = read('components/trend-chart.tsx');
+  const checkin = read('app/(tabs)/checkin.tsx');
+  const index = read('app/(tabs)/index.tsx');
+  const joinerHome = read('components/joiner-home.tsx');
+  const share = read('app/share.tsx');
+  const db = read('server/db.ts');
+
+  it('normalizes exact, boolean, structured, and legacy-label nap values through one shared parser', () => {
+    expect(storage).toContain("'少于20分钟': 15");
+    expect(storage).toContain("'20-60分钟': 45");
+    expect(storage).toContain("'1小时以上': 90");
+    expect(storage).toContain('export function hasRecordedNap');
+    expect(storage).toContain('export function getNapMinutes');
+    expect(storage).toContain('return list.map(normalizeCheckIn)');
+  });
+
+  it('distinguishes an explicitly recorded zero-minute nap from an unfilled day in the trend chart', () => {
+    expect(trend).toContain('hasData: hasRecordedNap(c)');
+    expect(trend).toContain('getNapMinutes(c)');
+    expect(trend).toContain('已记录 ${napRecorded.length} 天 · 均未小睡');
+    expect(trend).toContain('暂未填写小睡记录');
+  });
+
+  it('does not overwrite a missing cloud nap value with zero before legacy normalization', () => {
+    expect(index).toContain('daytimeNap: c.daytimeNap,');
+    expect(index).toContain('napMinutes: c.napMinutes,');
+    expect(index).not.toContain('napMinutes: c.napMinutes ?? 0,');
+  });
+
+  it('uses the same normalized nap value in check-in details, Joiner home, summaries, and shared briefings', () => {
+    expect(checkin).toContain('getNapDisplay(selectedDay)');
+    expect(checkin).toContain('getNapDisplay(checkIn)');
+    expect(joinerHome).toContain('getNapDisplay(latestCheckIn)');
+    expect(share).toContain('napMinutes: getNapMinutes(cItem)');
+    expect(share).toContain('napMinutes: getNapMinutes(ci)');
+  });
+
+  it('shows the announcement publisher date and time together on the homepage card', () => {
+    expect(joinerHome).toContain('function getAnnouncementDateTime(announcement: FamilyAnnouncement)');
+    expect(joinerHome).toContain('announcement.localTimeStr || timeStr(announcement.createdAt)');
+    expect(joinerHome).toContain('· {getAnnouncementDateTime(latest)}');
+  });
+
+  it('auto-migrates missing nap columns on older MySQL deployments', () => {
+    expect(db).toContain("table: 'check_ins',      column: 'daytimeNap'");
+    expect(db).toContain("table: 'check_ins',      column: 'napMinutes'");
+  });
+});

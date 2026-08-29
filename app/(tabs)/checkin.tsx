@@ -10,7 +10,7 @@ import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, getNapMinutes, hasRecordedNap } from '@/lib/storage';
 import { getSessionToken } from '@/lib/_core/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
@@ -21,6 +21,14 @@ import * as Haptics from 'expo-haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
 
 const { width } = Dimensions.get('window');
+
+function getNapDisplay(checkIn?: Partial<DailyCheckIn> | null): string {
+  const minutes = getNapMinutes(checkIn);
+  if (minutes <= 0) return '没有小睡';
+  return minutes >= 60
+    ? `${(minutes / 60).toFixed(1).replace('.0', '')}小时`
+    : `${Math.round(minutes)}分钟`;
+}
 
 // ─── Scroll Picker ───────────────────────────────────────────────────────────
 function ScrollPicker({ items, selectedIndex, onSelect, itemHeight = 52 }: {
@@ -407,8 +415,8 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                       {selectedDay.nightAwakenings ? (
                         <Text style={calStyles.popupItem}>🌙 夜醒：{selectedDay.nightAwakenings}</Text>
                       ) : null}
-                      {selectedDay.napDuration && selectedDay.napDuration !== '没有' && (
-                        <Text style={calStyles.popupItem}>☀️ 白天小睡：{selectedDay.napDuration}</Text>
+                      {!selectedDay.eveningDone && hasRecordedNap(selectedDay) && (
+                        <Text style={calStyles.popupItem}>☀️ 白天小睡：{getNapDisplay(selectedDay)}</Text>
                       )}
                       {selectedDay.morningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.morningNotes}</Text> : null}
                     </View>
@@ -428,6 +436,7 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                       </Text>
                       <Text style={calStyles.popupItem}>💊 用药：{selectedDay.medicationTaken != null ? (selectedDay.medicationTaken ? '✅ 已按时服药' : '❌ 未服药') : '未记录'}</Text>
                       {selectedDay.mealNotes ? <Text style={calStyles.popupItem}>🍽️ 饮食：{selectedDay.mealNotes}</Text> : selectedDay.mealOption ? <Text style={calStyles.popupItem}>🍽️ 饮食：{selectedDay.mealOption}</Text> : null}
+                      {hasRecordedNap(selectedDay) && <Text style={calStyles.popupItem}>☀️ 白天小睡：{getNapDisplay(selectedDay)}</Text>}
                       {selectedDay.eveningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.eveningNotes}</Text> : null}
                     </View>
                   ) : (
@@ -626,9 +635,9 @@ function CheckinLanding({
                   <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>🍜 {checkIn.mealNotes}</Text>
                 </View>
               )}
-              {checkIn.napDuration && checkIn.napDuration !== '没有' && (
+              {hasRecordedNap(checkIn) && (
                 <View style={[styles.checkinChip, { backgroundColor: 'rgba(255,200,100,0.15)' }]}>
-                  <Text style={[styles.checkinChipText, { color: '#B8860B' }]}>☀️ 白天小睡 {checkIn.napDuration}</Text>
+                  <Text style={[styles.checkinChipText, { color: '#B8860B' }]}>☀️ 白天小睡 {getNapDisplay(checkIn)}</Text>
                 </View>
               )}
             </View>

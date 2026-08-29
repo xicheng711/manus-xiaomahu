@@ -492,6 +492,53 @@ function normalizeMoodScore(c: DailyCheckIn): DailyCheckIn {
   return c;
 }
 
+const LEGACY_NAP_MINUTES: Record<string, number> = {
+  none: 0,
+  lt20: 15,
+  '20to60': 45,
+  gt60: 90,
+  '没有': 0,
+  '少于20分钟': 15,
+  '20-60分钟': 45,
+  '1小时以上': 90,
+};
+
+/** 这条打卡是否真正填写过白天小睡，而不是字段尚不存在的旧记录。 */
+export function hasRecordedNap(c?: Partial<DailyCheckIn> | null): boolean {
+  return !!c && (
+    c.napMinutes != null ||
+    c.daytimeNap != null ||
+    !!c.napDuration ||
+    c.sleepInput?.napDuration != null
+  );
+}
+
+/**
+ * 统一解析新旧版本的小睡数据。旧版本只保存分类或 daytimeNap，
+ * 因此采用分类中点用于趋势展示；无法确定时以 30 分钟作为兼容值。
+ */
+export function getNapMinutes(c?: Partial<DailyCheckIn> | null): number {
+  if (!c) return 0;
+  if (c.napMinutes != null && Number.isFinite(Number(c.napMinutes))) {
+    return Math.max(0, Number(c.napMinutes));
+  }
+  const structured = c.sleepInput?.napDuration;
+  if (structured && LEGACY_NAP_MINUTES[structured] != null) {
+    return LEGACY_NAP_MINUTES[structured];
+  }
+  if (c.napDuration && LEGACY_NAP_MINUTES[c.napDuration] != null) {
+    return LEGACY_NAP_MINUTES[c.napDuration];
+  }
+  return c.daytimeNap ? 30 : 0;
+}
+
+function normalizeCheckIn(c: DailyCheckIn): DailyCheckIn {
+  const normalized = normalizeMoodScore(c);
+  if (!hasRecordedNap(normalized)) return normalized;
+  const napMinutes = getNapMinutes(normalized);
+  return { ...normalized, napMinutes, daytimeNap: napMinutes > 0 };
+}
+
 export async function getAllCheckIns(roomId?: string): Promise<DailyCheckIn[]> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.CHECK_INS, rid);
@@ -506,14 +553,14 @@ export async function getAllCheckIns(roomId?: string): Promise<DailyCheckIn[]> {
         await AsyncStorage.setItem(key, legacy);
         await AsyncStorage.removeItem(KEYS.CHECK_INS);
         const list: DailyCheckIn[] = JSON.parse(legacy);
-        return list.map(normalizeMoodScore);
+        return list.map(normalizeCheckIn);
       }
       await AsyncStorage.setItem(`${KEYS.CHECK_INS}:legacy_unassigned_backup`, legacy);
       await AsyncStorage.removeItem(KEYS.CHECK_INS);
     }
   }
   const list: DailyCheckIn[] = raw ? JSON.parse(raw) : [];
-  return list.map(normalizeMoodScore);
+  return list.map(normalizeCheckIn);
 }
 
 export async function getTodayCheckIn(roomId?: string): Promise<DailyCheckIn | null> {
@@ -649,8 +696,8 @@ export async function getWeeklySleepData(days = 7, roomId?: string): Promise<Arr
       sleepType: checkin?.sleepType,
       sleepSegments: checkin?.sleepSegments ?? [],
       nightWakings: checkin?.nightWakings ?? 0,
-      daytimeNap: checkin?.daytimeNap ?? false,
-      napMinutes: checkin?.napMinutes ?? (checkin?.daytimeNap ? 30 : 0),
+      daytimeNap: getNapMinutes(checkin) > 0,
+      napMinutes: getNapMinutes(checkin),
       hasMorningData: checkin?.morningDone ?? false,
     });
   }

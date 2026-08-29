@@ -18,6 +18,8 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     { table: 'announcements',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'diary_entries',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'family_members', column: 'birthYear',    definition: 'int' },
+    { table: 'check_ins',      column: 'daytimeNap',   definition: 'tinyint(1) NULL' },
+    { table: 'check_ins',      column: 'napMinutes',   definition: 'int NULL' },
     { table: 'medications',    column: 'clientId',     definition: 'varchar(100)' },
   ];
 

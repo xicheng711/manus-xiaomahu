@@ -17,7 +17,7 @@ import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
-  waitForServerDiaryId, syncDiaryEntryNow,
+  waitForServerDiaryId, syncDiaryEntryNow, getNapMinutes, hasRecordedNap,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
@@ -634,6 +634,7 @@ export default function DiaryEditScreen() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
 
     setAiLoading(true);
+    const napMinutesForContext = getNapMinutes(todayCheckIn);
     let aiText = `${caregiverName}，辛苦了！您的每一份记录都是对${elderNickname}最好的关爱。照顾好自己，才能更好地照顾家人 💕`;
     try {
       const result = await replyMutation.mutateAsync({
@@ -647,7 +648,11 @@ export default function DiaryEditScreen() {
           sleepRange: todayCheckIn.sleepRange,
           sleepQuality: todayCheckIn.sleepQuality,
           nightAwakenings: todayCheckIn.nightAwakenings,
-          napDuration: todayCheckIn.napDuration,
+          napDuration: hasRecordedNap(todayCheckIn)
+            ? (napMinutesForContext > 0
+              ? (napMinutesForContext >= 60 ? `${(napMinutesForContext / 60).toFixed(1).replace('.0', '')}小时` : `${Math.round(napMinutesForContext)}分钟`)
+              : '没有')
+            : undefined,
           moodScore: todayCheckIn.moodScore,
           medicationTaken: todayCheckIn.medicationTaken,
           mealNotes: todayCheckIn.mealNotes,

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
-import { DailyCheckIn, DiaryEntry } from '@/lib/storage';
+import { DailyCheckIn, DiaryEntry, getNapMinutes, hasRecordedNap } from '@/lib/storage';
 import { AppColors } from '@/lib/design-tokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -420,8 +420,8 @@ function NapChart({ data }: {
       <View style={napStyles.barsArea}>
         {data.map((d, i) => {
           const fillH = d.hasData ? Math.max(4, (d.value / maxVal) * chartH) : 0;
-          const barColor = d.hasData ? '#F59E0B' : 'transparent';
-          const labelColor = d.hasData ? '#D97706' : AppColors.text.tertiary;
+          const barColor = d.hasData ? (d.value > 0 ? '#F59E0B' : '#A7C4AD') : 'transparent';
+          const labelColor = d.hasData ? (d.value > 0 ? '#D97706' : '#6B8F71') : AppColors.text.tertiary;
           const isToday = d.isToday ?? false;
 
           return (
@@ -605,32 +605,39 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       const d = new Date(c.date);
       return d.getFullYear() === currentYear && d.getMonth() === m;
     });
-    const withNap = monthCheckIns.filter(c => (c.napMinutes ?? 0) > 0);
+    const recorded = monthCheckIns.filter(hasRecordedNap);
+    const withNap = recorded.filter(c => getNapMinutes(c) > 0);
     const avg = withNap.length > 0
-      ? withNap.reduce((s, c) => s + (c.napMinutes ?? 0), 0) / withNap.length
+      ? withNap.reduce((s, c) => s + getNapMinutes(c), 0) / withNap.length
       : 0;
-    return { label, value: Math.round(avg), hasData: withNap.length > 0 };
+    return { label, value: Math.round(avg), hasData: recorded.length > 0 };
   });
 
   const napData = period === 'year' ? yearNapData : dateRange.map(date => {
     const c = checkInMap.get(date);
     const d = new Date(date + 'T12:00:00');
-    const napMins = c?.napMinutes ?? 0;
+    const napMins = getNapMinutes(c);
     return {
       label: DAY_LABELS[d.getDay()],
       value: napMins,
-      hasData: !!c && napMins > 0,
+      hasData: hasRecordedNap(c),
       isToday: date === todayStr,
     };
   });
 
-  const napWithData = (period === 'year' ? checkIns.filter(c => new Date(c.date).getFullYear() === currentYear) : periodCheckIns)
-    .filter(c => (c.napMinutes ?? 0) > 0);
+  const napScope = period === 'year'
+    ? checkIns.filter(c => new Date(c.date).getFullYear() === currentYear)
+    : periodCheckIns;
+  const napRecorded = napScope.filter(hasRecordedNap);
+  const napWithData = napRecorded.filter(c => getNapMinutes(c) > 0);
   const avgNap = napWithData.length > 0
-    ? napWithData.reduce((s, c) => s + (c.napMinutes ?? 0), 0) / napWithData.length : 0;
-  const napSubtitle = avgNap > 0
-    ? `${period === 'year' ? yearLabel : periodLabel}平均 ${avgNap >= 60 ? (avgNap / 60).toFixed(1) + 'h' : Math.round(avgNap) + '分钟'}`
-    : `${period === 'year' ? yearLabel : periodLabel}暂无小睡记录`;
+    ? napWithData.reduce((s, c) => s + getNapMinutes(c), 0) / napWithData.length : 0;
+  const scopeLabel = period === 'year' ? yearLabel : periodLabel;
+  const napSubtitle = napRecorded.length === 0
+    ? `${scopeLabel}暂未填写小睡记录`
+    : napWithData.length === 0
+      ? `${scopeLabel}已记录 ${napRecorded.length} 天 · 均未小睡`
+      : `${scopeLabel}已记录 ${napRecorded.length} 天 · 小睡 ${napWithData.length} 天 · 平均 ${avgNap >= 60 ? (avgNap / 60).toFixed(1) + 'h' : Math.round(avgNap) + '分钟'}`;
 
 
   // 心情分数：优先用晚间打卡的 moodScore（照顾者真实心情），其次用日记 caregiverMoodEmoji，最后兜底旧 caregiverMoodScore

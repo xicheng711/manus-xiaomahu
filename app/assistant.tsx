@@ -9,7 +9,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import {
   getProfile, getUserProfile, getFamilyProfile,
   getYesterdayCheckIn, getTodayCheckIn, upsertCheckIn,
-  getWeeklySleepData, DailyCheckIn, todayStr,
+  getWeeklySleepData, DailyCheckIn, todayStr, getNapMinutes,
   saveBriefing, getTodayBriefing, getLatestBriefing, CareBriefing,
 } from '@/lib/storage';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
@@ -284,7 +284,7 @@ export default function AssistantScreen() {
   const medTaken = ci?.medicationTaken;
   const mealLabel = ci?.mealOption ?? null;
   const sleepH = ci?.sleepHours ?? 0;
-  const napMins = ci?.napMinutes ?? (ci?.daytimeNap ? 30 : 0);
+  const napMins = getNapMinutes(ci);
   const napLabel = napMins === 0 ? '无小睡' : napMins >= 60 ? `${(napMins / 60).toFixed(1).replace('.0', '')}小时` : `${napMins}分钟`;
 
   return (
