@@ -35,7 +35,7 @@ describe('extractJSON', () => {
       }
       try { JSON.parse(sub); return sub; } catch {}
     }
-    throw new Error('Failed to parse Gemini JSON response');
+    throw new Error('Failed to parse AI JSON response');
   }
 
   it('should parse valid JSON directly', () => {
