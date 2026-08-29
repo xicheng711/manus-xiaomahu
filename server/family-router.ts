@@ -750,6 +750,7 @@ export const familyRouter = router({
     .input(z.object({
       roomId: z.number(),
       serverMedId: z.number().optional(),
+      clientId: z.string().min(1).max(100).optional(),
       name: z.string(),
       dosage: z.string().optional(),
       frequency: z.string().optional(),
@@ -775,6 +776,7 @@ export const familyRouter = router({
       const med = await upsertMedication({
         id: input.serverMedId,
         roomId: input.roomId,
+        clientId: input.clientId ?? null,
         name: input.name,
         dosage: input.dosage ?? null,
         frequency: input.frequency ?? null,

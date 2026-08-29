@@ -248,7 +248,7 @@ describe('Family-scoped cache recovery beyond diaries', () => {
     expect(storage).toContain('serverMedId?: number');
     expect(storage).toContain('syncPending?: boolean');
     expect(storage).toContain('export async function syncPendingMedications');
-    expect(storage).toContain('cloudDeleteMedication(serverId, target.name, Number(rid), deleteEvent)');
+    expect(storage).toContain('cloudDeleteMedication(serverId, target.name, Number(rid), deleteEvent, clientId)');
   });
 
   it('distinguishes empty cloud data from network failures for cached family content', () => {
@@ -442,5 +442,45 @@ describe('Warm local-time Joiner greeting', () => {
     expect(joinerHome).toContain('numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}');
     expect(joinerHome).toContain('numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}');
     expect(joinerHome).toContain('greetingBlock: { flex: 1, minWidth: 0, paddingRight: 12 }');
+  });
+});
+
+
+describe('Final interaction and medication race-condition safeguards', () => {
+  const interactions = read('components/diary-interactions.tsx');
+  const schema = read('drizzle/schema.ts');
+  const db = read('server/db.ts');
+  const familyDb = read('server/family-db.ts');
+  const router = read('server/family-router.ts');
+  const cloud = read('lib/cloud-sync.ts');
+  const storage = read('lib/storage.ts');
+  const medication = read('app/(tabs)/medication.tsx');
+
+  it('clears old diary interactions and rejects stale async results when switching diary or family', () => {
+    expect(interactions).toContain('const scopeKey = enabled && diaryId && roomId');
+    expect(interactions).toContain('if (scopeKeyRef.current !== requestedScope) return');
+    expect(interactions).toContain('setReaders([])');
+    expect(interactions).toContain('setComments([])');
+    expect(interactions).toContain('setCommentText(\'\')');
+  });
+
+  it('uses a room-scoped client id to make medication creation idempotent', () => {
+    expect(schema).toContain('clientId: varchar("clientId", { length: 100 })');
+    expect(schema).toContain('uniqueIndex("uq_medications_room_client").on(table.roomId, table.clientId)');
+    expect(db).toContain("column: 'clientId'");
+    expect(db).toContain('uq_medications_room_client (roomId, clientId)');
+    expect(router).toContain('clientId: z.string().min(1).max(100).optional()');
+    expect(familyDb).toContain('eq(medications.clientId, values.clientId)');
+    expect(cloud).toContain("clientId: String(med.id || '').replace(/^cloud_/, '') || undefined");
+    expect(medication).toContain('remoteClientId ? local.find');
+  });
+
+  it('serializes medication writes and waits before deletion so stale requests cannot recreate deleted medicine', () => {
+    expect(storage).toContain('const medicationSyncQueue = new Map<string, Promise<void>>()');
+    expect(storage).toContain('enqueueMedicationSync(rid ?? undefined, med.id');
+    expect(storage).toContain('enqueueMedicationSync(rid ?? undefined, id');
+    expect(storage).toContain('await waitForMedicationSync(rid ?? undefined, id)');
+    expect(storage).toContain('cloudDeleteMedication(serverId, target.name, Number(rid), deleteEvent, clientId)');
+    expect(cloud).toContain('serverMeds.find((m: any) => m.clientId === clientId)');
   });
 });

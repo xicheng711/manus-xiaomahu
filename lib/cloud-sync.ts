@@ -559,6 +559,7 @@ export async function cloudSyncMedication(med: any, serverMedId?: number, roomId
     return await client.family.syncMedication.mutate({
       roomId: rid,
       serverMedId,
+      clientId: String(med.id || '').replace(/^cloud_/, '') || undefined,
       name: med.name,
       dosage: med.dosage,
       frequency: med.frequency,
@@ -604,7 +605,7 @@ export async function cloudGetMedicationChanges(roomId?: number, limit = 100) {
 }
 
 /** Delete a medication using its stable server ID, with name matching only for legacy local rows. */
-export async function cloudDeleteMedication(serverMedId: number | undefined, medName: string, roomId?: number, changeEvent?: any) {
+export async function cloudDeleteMedication(serverMedId: number | undefined, medName: string, roomId?: number, changeEvent?: any, clientId?: string) {
   const rid = roomId ?? await getActiveRoomId();
   if (!rid) return null;
   try {
@@ -612,7 +613,10 @@ export async function cloudDeleteMedication(serverMedId: number | undefined, med
     let medicationId = serverMedId;
     if (!medicationId) {
       const serverMeds = await client.family.getMedications.query({ roomId: rid });
-      const match = serverMeds.find((m: any) => m.name === medName);
+      // 新客户端按 clientId 精确关联；只有真正的旧数据才使用名称兼容匹配。
+      const match = clientId
+        ? serverMeds.find((m: any) => m.clientId === clientId)
+        : serverMeds.find((m: any) => m.name === medName);
       if (!match) return { success: true }; // 从未同步到服务器，本地可直接删除。
       medicationId = match.id;
     }

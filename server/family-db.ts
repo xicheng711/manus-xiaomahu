@@ -386,7 +386,16 @@ export async function upsertMedication(data: InsertMedication & { id?: number })
       .where(and(eq(medications.id, id), eq(medications.roomId, values.roomId)));
     return { id, ...values };
   }
-  // No id: find existing by roomId + name to avoid duplicate creates from legacy clients.
+  // 新客户端始终携带 clientId；唯一索引让首次响应丢失后的重试仍复用同一条记录。
+  if (values.clientId) {
+    await db.insert(medications).values(values).onDuplicateKeyUpdate({ set: values });
+    const rows = await db.select().from(medications)
+      .where(and(eq(medications.roomId, values.roomId), eq(medications.clientId, values.clientId)))
+      .limit(1);
+    if (!rows[0]) throw new Error("Medication upsert failed");
+    return rows[0];
+  }
+  // 旧客户端没有 clientId，继续按 roomId + name 去重以保持兼容。
   const existing = await db.select().from(medications)
     .where(and(eq(medications.roomId, values.roomId), eq(medications.name, values.name)))
     .limit(1);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -61,33 +61,46 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true, onInputFocu
   const [sending, setSending] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
   const [commentText, setCommentText] = useState('');
+  const scopeKey = enabled && diaryId && roomId ? `${roomId}:${diaryId}` : '';
+  const scopeKeyRef = useRef(scopeKey);
+  scopeKeyRef.current = scopeKey;
 
   const loadInteractions = useCallback(async (recordRead = false) => {
     if (!enabled || !diaryId || !roomId) return;
+    const requestedScope = `${roomId}:${diaryId}`;
     setLoading(true);
     try {
       if (recordRead) await cloudMarkDiaryRead(diaryId, roomId);
       const data = await cloudGetDiaryInteractions(diaryId, roomId);
+      if (scopeKeyRef.current !== requestedScope) return;
       setLoadFailed(Boolean(data?.loadFailed));
       if (!data?.loadFailed) {
         setReaders(Array.isArray(data?.readers) ? data.readers as DiaryReader[] : []);
         setComments(Array.isArray(data?.comments) ? data.comments as DiaryComment[] : []);
       }
     } finally {
-      setLoading(false);
+      if (scopeKeyRef.current === requestedScope) setLoading(false);
     }
   }, [diaryId, enabled, roomId]);
 
   useEffect(() => {
-    loadInteractions(true).catch(() => {});
-  }, [loadInteractions]);
+    setReaders([]);
+    setComments([]);
+    setCommentText('');
+    setLoadFailed(false);
+    setSending(false);
+    setDeletingCommentId(null);
+    if (scopeKey) loadInteractions(true).catch(() => {});
+  }, [loadInteractions, scopeKey]);
 
   const handleSend = useCallback(async () => {
     const content = commentText.trim();
     if (!content || sending || !diaryId || !roomId) return;
+    const requestedScope = `${roomId}:${diaryId}`;
     setSending(true);
     try {
       const result = await cloudAddDiaryComment(diaryId, content, roomId);
+      if (scopeKeyRef.current !== requestedScope) return;
       if (!result?.success) {
         Alert.alert('留言没有发送成功', '请检查网络后重试。');
         return;
@@ -95,7 +108,7 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true, onInputFocu
       setCommentText('');
       await loadInteractions(false);
     } finally {
-      setSending(false);
+      if (scopeKeyRef.current === requestedScope) setSending(false);
     }
   }, [commentText, diaryId, loadInteractions, roomId, sending]);
 
@@ -107,16 +120,18 @@ export function DiaryInteractions({ diaryId, roomId, enabled = true, onInputFocu
         text: '删除',
         style: 'destructive',
         onPress: async () => {
+          const requestedScope = scopeKeyRef.current;
           setDeletingCommentId(comment.id);
           try {
             const result = await cloudDeleteDiaryComment(comment.id, roomId);
+            if (scopeKeyRef.current !== requestedScope) return;
             if (!result?.success) {
               Alert.alert('删除没有成功', '请检查网络后重试，留言仍然保留。');
               return;
             }
             setComments(current => current.filter(item => item.id !== comment.id));
           } finally {
-            setDeletingCommentId(null);
+            if (scopeKeyRef.current === requestedScope) setDeletingCommentId(null);
           }
         },
       },

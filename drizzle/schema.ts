@@ -226,6 +226,8 @@ export type InsertBriefing = typeof briefings.$inferInsert;
 export const medications = mysqlTable("medications", {
   id: int("id").autoincrement().primaryKey(),
   roomId: int("roomId").notNull(),
+  // 客户端生成且在同一家庭内唯一；断网重试时用于复用同一条云端记录。
+  clientId: varchar("clientId", { length: 100 }),
   name: varchar("name", { length: 100 }).notNull(),
   dosage: varchar("dosage", { length: 100 }),
   frequency: varchar("frequency", { length: 50 }),
@@ -237,7 +239,9 @@ export const medications = mysqlTable("medications", {
   color: varchar("color", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, table => [
+  uniqueIndex("uq_medications_room_client").on(table.roomId, table.clientId),
+]);
 
 export type Medication = typeof medications.$inferSelect;
 export type InsertMedication = typeof medications.$inferInsert;

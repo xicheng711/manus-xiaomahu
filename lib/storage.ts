@@ -659,6 +659,31 @@ export async function getWeeklySleepData(days = 7, roomId?: string): Promise<Arr
 
 // ─── Medications ──────────────────────────────────────────────────────────────
 
+// 同一药物的云端操作按顺序执行：避免用户快速修改或立即删除时，请求乱序造成旧状态覆盖或重复创建。
+const medicationSyncQueue = new Map<string, Promise<void>>();
+
+function medicationQueueKey(roomId: string | undefined, medicationId: string) {
+  return `${roomId || 'default'}:${medicationId}`;
+}
+
+function enqueueMedicationSync(roomId: string | undefined, medicationId: string, task: () => Promise<void>): Promise<void> {
+  const key = medicationQueueKey(roomId, medicationId);
+  const previous = medicationSyncQueue.get(key) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(task)
+    .catch(error => console.warn('[xiaomahu] 用药云端同步失败，已保留本地待同步状态', error));
+  medicationSyncQueue.set(key, next);
+  next.finally(() => {
+    if (medicationSyncQueue.get(key) === next) medicationSyncQueue.delete(key);
+  });
+  return next;
+}
+
+async function waitForMedicationSync(roomId: string | undefined, medicationId: string): Promise<void> {
+  await medicationSyncQueue.get(medicationQueueKey(roomId, medicationId));
+}
+
 function medicationServerId(med: Medication): number | undefined {
   if (Number.isFinite(med.serverMedId)) return Number(med.serverMedId);
   const rawId = String(med.id ?? '').replace(/^cloud_/, '');
@@ -795,7 +820,8 @@ export async function saveMedication(data: Omit<Medication, 'id'>, roomId?: stri
   await AsyncStorage.setItem(key, JSON.stringify(all));
   await savePendingMedicationChange(changeEvent, rid ?? undefined);
   // Cloud sync: sync medication and its idempotent adjustment events together.
-  cloudSyncMedication(med, undefined, rid ? Number(rid) : undefined, pendingChanges).then(async result => {
+  enqueueMedicationSync(rid ?? undefined, med.id, async () => {
+    const result = await cloudSyncMedication(med, undefined, rid ? Number(rid) : undefined, pendingChanges);
     const serverMedId = result?.medication?.id;
     if (!result?.success || !serverMedId) return;
     const sentIds = pendingChanges.map(event => event.eventId);
@@ -806,7 +832,7 @@ export async function saveMedication(data: Omit<Medication, 'id'>, roomId?: stri
     const remaining = (latest[latestIdx].pendingChanges ?? []).filter(event => !sentIds.includes(event.eventId));
     latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(serverMedId), pendingChanges: remaining, syncPending: remaining.length > 0 };
     await AsyncStorage.setItem(key, JSON.stringify(latest));
-  }).catch(() => {});
+  });
   return med;
 }
 
@@ -828,10 +854,16 @@ export async function updateMedication(id: string, data: Partial<Medication>, ro
     await savePendingMedicationChange(changeEvent, rid ?? undefined);
     // Cloud sync: update the same server row together with all unsynced history events.
     const serverMedId = medicationServerId(all[idx]);
-    cloudSyncMedication(all[idx], serverMedId, rid ? Number(rid) : undefined, pendingChanges).then(async result => {
-      const resolvedId = result?.medication?.id ?? serverMedId;
+    enqueueMedicationSync(rid ?? undefined, id, async () => {
+      const latestBeforeSync = await getMedications(rid ?? undefined);
+      const target = latestBeforeSync.find(item => item.id === id);
+      if (!target) return;
+      const queuedChanges = target.pendingChanges ?? [];
+      const currentServerId = medicationServerId(target) ?? serverMedId;
+      const result = await cloudSyncMedication(target, currentServerId, rid ? Number(rid) : undefined, queuedChanges);
+      const resolvedId = result?.medication?.id ?? currentServerId;
       if (!result?.success || !resolvedId) return;
-      const sentIds = pendingChanges.map(event => event.eventId);
+      const sentIds = queuedChanges.map(event => event.eventId);
       await markMedicationChangesSynced(sentIds, result.recordedChanges ?? [], rid ?? undefined);
       const latest = await getMedications(rid ?? undefined);
       const latestIdx = latest.findIndex(item => item.id === id);
@@ -840,23 +872,46 @@ export async function updateMedication(id: string, data: Partial<Medication>, ro
         latest[latestIdx] = { ...latest[latestIdx], serverMedId: Number(resolvedId), pendingChanges: remaining, syncPending: remaining.length > 0 };
         await AsyncStorage.setItem(key, JSON.stringify(latest));
       }
-    }).catch(() => {});
+    });
   }
 }
 
 export async function deleteMedication(id: string, roomId?: string, changeEvent?: MedicationChangeEvent): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
+  // 新增/修改与删除严格串行，避免旧同步请求在删除成功后又把药物创建回来。
+  await waitForMedicationSync(rid ?? undefined, id);
   const all = await getMedications(rid ?? undefined);
   const target = all.find(m => m.id === id);
   if (!target) return;
 
-  const serverId = medicationServerId(target);
+  let serverId = medicationServerId(target);
+  const clientId = String(target.id || '').replace(/^cloud_/, '') || undefined;
+  if (rid && !serverId && target.syncPending) {
+    // 如果首次创建的响应丢失，clientId 会让服务端复用原记录；如果尚未创建，则先完成创建再删除。
+    const pendingChanges = target.pendingChanges ?? [];
+    const syncResult = await cloudSyncMedication(target, undefined, Number(rid), pendingChanges);
+    if (syncResult?.success && syncResult.medication?.id) {
+      serverId = Number(syncResult.medication.id);
+      await markMedicationChangesSynced(
+        pendingChanges.map(event => event.eventId),
+        syncResult.recordedChanges ?? [],
+        rid,
+      );
+    }
+  }
+
   const deleteEvent = changeEvent ? { ...changeEvent, medicationId: serverId ?? changeEvent.medicationId } : undefined;
   await savePendingMedicationChange(deleteEvent, rid ?? undefined);
   if (rid) {
-    const result = await cloudDeleteMedication(serverId, target.name, Number(rid), deleteEvent);
-    if (!result?.success) throw new Error('云端删除失败，请检查网络后重试');
+    const result = await cloudDeleteMedication(serverId, target.name, Number(rid), deleteEvent, clientId);
+    if (!result?.success) {
+      if (deleteEvent) {
+        const history = await getMedicationChanges(rid);
+        await saveMedicationChanges(history.filter(event => event.eventId !== deleteEvent.eventId), rid);
+      }
+      throw new Error('云端删除失败，请检查网络后重试');
+    }
     if (deleteEvent) await markMedicationChangesSynced([deleteEvent.eventId], [], rid);
   }
   await AsyncStorage.setItem(key, JSON.stringify(all.filter(m => m.id !== id)));

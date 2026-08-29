@@ -180,7 +180,9 @@ function MedicationScreenContent() {
     if (Array.isArray(cloudMeds)) {
       const mergedRemote: Medication[] = cloudMeds.map((remote: any) => {
         const serverMedId = Number(remote.id);
+        const remoteClientId = typeof remote.clientId === 'string' ? remote.clientId : undefined;
         const existing = local.find(item => item.serverMedId === serverMedId)
+          ?? (remoteClientId ? local.find(item => String(item.id).replace(/^cloud_/, '') === remoteClientId) : undefined)
           ?? local.find(item => !item.serverMedId && item.name === remote.name);
         return {
           ...existing,

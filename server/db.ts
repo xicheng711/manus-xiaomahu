@@ -18,6 +18,7 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     { table: 'announcements',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'diary_entries',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'family_members', column: 'birthYear',    definition: 'int' },
+    { table: 'medications',    column: 'clientId',     definition: 'varchar(100)' },
   ];
 
   for (const { table, column, definition } of columnsToAdd) {
@@ -38,6 +39,26 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     } catch (e: any) {
       console.warn(`[Database] Migration warning (${table}.${column}):`, e?.message ?? e);
     }
+  }
+
+  // 用药幂等索引：现有记录 clientId 均为空，不影响历史数据；新客户端按 roomId + clientId 去重。
+  try {
+    const rows: any[] = await (db as any).execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'medications'
+         AND INDEX_NAME = 'uq_medications_room_client'
+       LIMIT 1`
+    );
+    const exists = Array.isArray(rows[0]) ? rows[0].length > 0 : rows.length > 0;
+    if (!exists) {
+      await (db as any).execute(
+        'ALTER TABLE medications ADD UNIQUE KEY uq_medications_room_client (roomId, clientId)'
+      );
+      console.log('[Database] Migration: added medications room/client idempotency index');
+    }
+  } catch (e: any) {
+    console.warn('[Database] Migration warning (uq_medications_room_client):', e?.message ?? e);
   }
 
   // 日记互动表：CREATE TABLE IF NOT EXISTS 在 MySQL 8.0 可安全重复执行。
