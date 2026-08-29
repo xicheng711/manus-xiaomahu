@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput,
+  View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView,
   StyleSheet, Animated, Dimensions, Platform, Image, Keyboard, Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -273,11 +273,13 @@ export default function OnboardingScreen() {
   }
 
   function nextStep() {
+    Keyboard.dismiss();
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     animateTransition(() => setStep(s => s + 1));
   }
 
   function prevStep() {
+    Keyboard.dismiss();
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // 返回角色选择页时重置 userType，避免状态残留
     animateTransition(() => {
@@ -291,6 +293,7 @@ export default function OnboardingScreen() {
 
   function addMedication() {
     if (!medName.trim()) return;
+    Keyboard.dismiss();
     const med: MedDraft = {
       id: generateId(),
       name: medName.trim(),
@@ -548,10 +551,16 @@ export default function OnboardingScreen() {
         ))}
       </View>
 
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           onScrollBeginDrag={Keyboard.dismiss}
           contentContainerStyle={styles.scrollContent}
         >
@@ -1188,7 +1197,7 @@ export default function OnboardingScreen() {
             <View style={styles.inviteCodeBanner}>
               <Text style={styles.inviteCodeLabel}>家庭共享码</Text>
               <Text style={styles.inviteCodeValue}>{previewRoomCode}</Text>
-              <Text style={styles.inviteCodeHint}>把这串码发给家人{'\n'}他们可以在设置时选择"加入家庭"直接加入</Text>
+              <Text style={styles.inviteCodeHint}>把这串码发给家人{'\n'}他们可以在设置时选择“加入家庭”直接加入</Text>
             </View>
             <View style={styles.summaryCard}>
               <View style={styles.summaryRow}>
@@ -1296,6 +1305,7 @@ export default function OnboardingScreen() {
           );
         })()}
       </View>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
@@ -1314,6 +1324,7 @@ const styles = StyleSheet.create({
   sparklePink: { backgroundColor: '#FCA5A5', width: 8, height: 8, borderRadius: 4 },
   sparkleTopRight: { top: -4, right: -4 },
   sparkleBottomLeft: { bottom: -8, left: -8 },
+  keyboardAvoider: { flex: 1 },
   content: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 32 },
   stepContainer: { alignItems: 'center', paddingTop: 8 },

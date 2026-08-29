@@ -484,3 +484,62 @@ describe('Final interaction and medication race-condition safeguards', () => {
     expect(cloud).toContain('serverMeds.find((m: any) => m.clientId === clientId)');
   });
 });
+
+
+describe('App-wide keyboard and text-input safeguards', () => {
+  const createFamily = read('app/(modals)/create-family.tsx');
+  const familySettings = read('app/(modals)/family-settings.tsx');
+  const onboarding = read('app/onboarding.tsx');
+  const family = read('app/(tabs)/family.tsx');
+  const joinerHome = read('components/joiner-home.tsx');
+  const diaryEdit = read('app/diary-edit.tsx');
+  const diaryDetail = read('app/diary-detail.tsx');
+  const profile = read('app/profile.tsx');
+  const checkin = read('app/(tabs)/checkin.tsx');
+  const medication = read('app/(tabs)/medication.tsx');
+
+  it('keeps onboarding and create-family fixed footers above the keyboard', () => {
+    expect(onboarding).toContain('<KeyboardAvoidingView');
+    expect(onboarding).toContain("behavior={Platform.OS === 'ios' ? 'padding' : 'height'}");
+    expect(onboarding).toContain('keyboardDismissMode={Platform.OS === \'ios\' ? \'interactive\' : \'on-drag\'}');
+    expect(onboarding).toContain('function nextStep() {\n    Keyboard.dismiss();');
+    expect(createFamily).toContain('<KeyboardAvoidingView');
+    expect(createFamily).toContain('keyboardDismissMode={Platform.OS === \'ios\' ? \'interactive\' : \'on-drag\'}');
+    expect(createFamily).toContain('function animateNext() {\n    Keyboard.dismiss();');
+  });
+
+  it('keeps family confirmation and announcement inputs visible and prevents duplicate posting', () => {
+    expect(familySettings).toContain('<KeyboardAvoidingView');
+    expect(familySettings).toContain('autoFocus');
+    expect(familySettings).toContain('onSubmitEditing={() => {');
+    expect(family).toContain('const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false)');
+    expect(family).toContain('if (isPostingAnnouncement || !requestedFamilyId');
+    expect(family).toContain('disabled={!composeText.trim() || isPostingAnnouncement}');
+    expect(family).toContain('submitBehavior="newline"');
+    expect(family).toContain('keyboardDismissMode={Platform.OS === \'ios\' ? \'interactive\' : \'on-drag\'}');
+  });
+
+  it('lets both caregiver and Joiner announcements use multiline newline input with safe failure feedback', () => {
+    expect(joinerHome).toContain('submitBehavior="newline"');
+    expect(joinerHome).toContain('blurOnSubmit={false}');
+    expect(joinerHome).toContain('disabled={!content.trim() || posting}');
+    expect(joinerHome).toContain("Alert.alert('公告没有发布成功'");
+    expect(family).toContain("Alert.alert('公告没有发布成功'");
+  });
+
+  it('keeps diary conversations stable while sending and all long-form inputs newline-friendly', () => {
+    expect(diaryEdit).toContain('returnKeyType="send"\n                      blurOnSubmit={false}');
+    expect(diaryDetail).toContain('returnKeyType="send"\n                    blurOnSubmit={false}');
+    expect(checkin).toContain('submitBehavior="newline"');
+    expect((checkin.match(/blurOnSubmit=\{false\}/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((medication.match(/submitBehavior="newline"/g) ?? []).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('keeps profile forms scrollable and prevents repeated profile saves', () => {
+    expect(profile).toContain('const [savingProfileEdit, setSavingProfileEdit] = useState(false)');
+    expect(profile).toContain('if (savingProfileEdit) return');
+    expect(profile).toContain('disabled={savingProfileEdit}');
+    expect(profile).toContain('keyboardDismissMode={Platform.OS === \'ios\' ? \'interactive\' : \'on-drag\'}');
+    expect(profile).toContain("Alert.alert('资料没有保存成功'");
+  });
+});

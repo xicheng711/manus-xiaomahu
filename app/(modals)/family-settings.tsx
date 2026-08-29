@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Modal, Platform, Keyboard, Alert,
+  StyleSheet, Modal, Platform, Keyboard, KeyboardAvoidingView, Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -190,7 +190,11 @@ export default function FamilySettingsModal() {
 
       {/* Delete Step 2: Type family name */}
       <Modal visible={showDeleteStep2} transparent animationType="fade">
-        <View style={s.dialogOverlay}>
+        <KeyboardAvoidingView
+          style={s.dialogOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
           <View style={s.dialog}>
             <Text style={s.dialogTitle}>最终确认</Text>
             <Text style={s.dialogBody}>
@@ -202,6 +206,11 @@ export default function FamilySettingsModal() {
               value={deleteConfirmText}
               onChangeText={setDeleteConfirmText}
               placeholderTextColor={AppColors.text.tertiary}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (deleteConfirmText === familyName && !deleting) handleDelete();
+              }}
             />
             <View style={s.dialogBtns}>
               <TouchableOpacity style={s.dialogCancelBtn} onPress={() => setShowDeleteStep2(false)}>
@@ -216,7 +225,7 @@ export default function FamilySettingsModal() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Leave Confirm */}

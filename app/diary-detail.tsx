@@ -361,6 +361,7 @@ export default function DiaryDetailScreen() {
                     placeholder="继续和小马虎说说...💗"
                     placeholderTextColor={AppColors.text.tertiary}
                     returnKeyType="send"
+                    blurOnSubmit={false}
                     onSubmitEditing={handleFollowUp}
                     editable={!followUpLoading}
                   />

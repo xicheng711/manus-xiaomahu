@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Animated, Easing, Modal, TextInput, Platform,
-  Keyboard, KeyboardAvoidingView, TouchableWithoutFeedback, Image,
+  Keyboard, KeyboardAvoidingView, TouchableWithoutFeedback, Image, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -253,18 +253,23 @@ function PostAnnouncementModal({ visible, onClose, onPosted, member }: {
   async function handlePost() {
     if (!content.trim() || posting) return;
     setPosting(true);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await saveFamilyAnnouncement({
-      authorId: member?.id ?? 'unknown',
-      authorName: member?.name ?? '家庭成员',
-      authorEmoji: member?.emoji ?? '👤',
-      authorColor: member?.color ?? AppColors.text.secondary,
-      content: content.trim(),
-      emoji: ANNOUNCE_TYPES.find(t => t.key === type)?.emoji,
-      type,
-    });
-    setPosting(false);
-    setDone(true);
+    try {
+      await saveFamilyAnnouncement({
+        authorId: member?.id ?? 'unknown',
+        authorName: member?.name ?? '家庭成员',
+        authorEmoji: member?.emoji ?? '👤',
+        authorColor: member?.color ?? AppColors.text.secondary,
+        content: content.trim(),
+        emoji: ANNOUNCE_TYPES.find(t => t.key === type)?.emoji,
+        type,
+      });
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setDone(true);
+    } catch (error: any) {
+      Alert.alert('公告没有发布成功', error?.message || '请检查网络后重试，输入内容仍为你保留。');
+    } finally {
+      setPosting(false);
+    }
   }
 
   function handleClose() {
@@ -306,8 +311,9 @@ function PostAnnouncementModal({ visible, onClose, onPosted, member }: {
                       placeholderTextColor={AppColors.text.tertiary}
                       multiline
                       numberOfLines={4}
-                      returnKeyType="done"
-                      blurOnSubmit
+                      returnKeyType="default"
+                      submitBehavior="newline"
+                      blurOnSubmit={false}
                     />
                     <View style={styles.typeRow}>
                       {ANNOUNCE_TYPES.map(t => (
@@ -322,16 +328,16 @@ function PostAnnouncementModal({ visible, onClose, onPosted, member }: {
                       ))}
                     </View>
                     <TouchableOpacity
-                      style={[styles.postSubmitBtn, !content.trim() && styles.postSubmitBtnDisabled]}
+                      style={[styles.postSubmitBtn, (!content.trim() || posting) && styles.postSubmitBtnDisabled]}
                       onPress={handlePost}
                       activeOpacity={0.85}
-                      disabled={!content.trim()}
+                      disabled={!content.trim() || posting}
                     >
-                      <Text style={[styles.postSubmitText, !content.trim() && styles.postSubmitTextDisabled]}>
+                      <Text style={[styles.postSubmitText, (!content.trim() || posting) && styles.postSubmitTextDisabled]}>
                         {posting ? '发布中…' : '发布公告'}
                       </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.cancelBtn} onPress={handleClose}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={handleClose} disabled={posting}>
                       <Text style={styles.cancelBtnText}>取消</Text>
                     </TouchableOpacity>
                   </>

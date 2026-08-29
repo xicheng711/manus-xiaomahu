@@ -1078,6 +1078,7 @@ export default function DiaryEditScreen() {
                       onChangeText={setFollowUpInput}
                       placeholderTextColor="#C4A0B8"
                       returnKeyType="send"
+                      blurOnSubmit={false}
                       onSubmitEditing={handleFollowUp}
                       editable={!followUpLoading}
                     />

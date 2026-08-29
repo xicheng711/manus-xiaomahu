@@ -57,6 +57,7 @@ export default function ProfileScreen() {
 
   // 详情编辑 Modal
   const [showEditModal, setShowEditModal] = useState(false);
+  const [savingProfileEdit, setSavingProfileEdit] = useState(false);
   const [editTarget, setEditTarget] = useState<'caregiver' | 'elder'>('caregiver');
   const [draftCaregiverName, setDraftCaregiverName] = useState('');
   const [draftCaregiverBirthYear, setDraftCaregiverBirthYear] = useState('');
@@ -363,6 +364,10 @@ export default function ProfileScreen() {
   };
 
   const saveEditModal = async () => {
+    if (savingProfileEdit) return;
+    setSavingProfileEdit(true);
+    Keyboard.dismiss();
+    try {
     if (editTarget === 'caregiver') {
       const year = parseInt(draftCaregiverBirthYear);
       const zodiac = !isNaN(year) ? getZodiac(year) : null;
@@ -444,6 +449,11 @@ export default function ProfileScreen() {
       }
     }
     setShowEditModal(false);
+    } catch (error: any) {
+      Alert.alert('资料没有保存成功', error?.message || '请稍后重试，刚才输入的内容仍为你保留。');
+    } finally {
+      setSavingProfileEdit(false);
+    }
   };
 
   const toggleNotifications = async (value: boolean) => {
@@ -980,7 +990,13 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  <ScrollView
+                      style={styles.modalForm}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                      onScrollBeginDrag={Keyboard.dismiss}
+                    >
                     {editTarget === 'caregiver' ? (
                       <>
                         <Text style={styles.modalLabel}>您的姓名</Text>
@@ -1032,8 +1048,12 @@ export default function ProfileScreen() {
                       </>
                     )}
                     
-                    <TouchableOpacity style={styles.modalSubmitBtn} onPress={saveEditModal}>
-                      <Text style={styles.modalSubmitBtnText}>保存修改</Text>
+                    <TouchableOpacity
+                      style={[styles.modalSubmitBtn, savingProfileEdit && { opacity: 0.55 }]}
+                      onPress={saveEditModal}
+                      disabled={savingProfileEdit}
+                    >
+                      <Text style={styles.modalSubmitBtnText}>{savingProfileEdit ? '保存中…' : '保存修改'}</Text>
                     </TouchableOpacity>
                     <View style={{ height: 20 }} />
                   </ScrollView>
@@ -1082,7 +1102,13 @@ export default function ProfileScreen() {
 
                   {/* 加入家庭表单 */}
                   {familyModalTab === 'join' && (
-                    <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <ScrollView
+                      style={styles.modalForm}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                      onScrollBeginDrag={Keyboard.dismiss}
+                    >
                       <Text style={styles.modalLabel}>邀请码（6位）</Text>
                       <TextInput
                         style={styles.modalInput}

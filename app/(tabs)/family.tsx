@@ -418,6 +418,7 @@ export default function FamilyScreen() {
   const [composeText, setComposeText] = useState('');
   const [composeType, setComposeType] = useState<FamilyAnnouncement['type']>('daily');
   const [composeEmoji, setComposeEmoji] = useState('');
+  const [isPostingAnnouncement, setIsPostingAnnouncement] = useState(false);
 
   // Briefing state
   const [briefingData, setBriefingData] = useState<any>(null);
@@ -785,31 +786,40 @@ export default function FamilyScreen() {
   async function handlePostAnnouncement() {
     const requestedFamilyId = familyId;
     const postingMember = activeMembership?.room.members.find(member => member.id === activeMembership.myMemberId) ?? currentMember;
-    if (!requestedFamilyId || !composeText.trim() || !postingMember) return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const newAnn = await saveFamilyAnnouncement({
-      authorId: postingMember.id,
-      authorName: postingMember.name,
-      authorEmoji: postingMember.emoji,
-      authorColor: postingMember.color,
-      content: composeText.trim(),
-      emoji: composeEmoji,
-      type: composeType,
-    }, requestedFamilyId);
-    setComposeText('');
-    setComposeEmoji('');
-    setComposeType('daily');
-    setShowCompose(false);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setNewAnnouncementId(newAnn.id);
-    // NOTE: cloudPostAnnouncement is already called inside saveFamilyAnnouncement().
-    // Do NOT call it again here — that would cause duplicate announcements and double push notifications.
-    await loadData();
-    // Scroll to top to show new announcement
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
-      setTimeout(() => setNewAnnouncementId(null), 2000);
-    }, 300);
+    if (isPostingAnnouncement || !requestedFamilyId || !composeText.trim() || !postingMember) return;
+    setIsPostingAnnouncement(true);
+    Keyboard.dismiss();
+    try {
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const newAnn = await saveFamilyAnnouncement({
+        authorId: postingMember.id,
+        authorName: postingMember.name,
+        authorEmoji: postingMember.emoji,
+        authorColor: postingMember.color,
+        content: composeText.trim(),
+        emoji: composeEmoji,
+        type: composeType,
+      }, requestedFamilyId);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
+      setComposeText('');
+      setComposeEmoji('');
+      setComposeType('daily');
+      setShowCompose(false);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setNewAnnouncementId(newAnn.id);
+      // NOTE: cloudPostAnnouncement is already called inside saveFamilyAnnouncement().
+      // Do NOT call it again here — that would cause duplicate announcements and double push notifications.
+      await loadData();
+      // Scroll to top to show new announcement
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        setTimeout(() => setNewAnnouncementId(null), 2000);
+      }, 300);
+    } catch (error: any) {
+      Alert.alert('公告没有发布成功', error?.message || '请检查网络后重试，输入内容仍为你保留。');
+    } finally {
+      setIsPostingAnnouncement(false);
+    }
   }
 
   async function handleDeleteAnnouncement(id: string) {
@@ -1232,14 +1242,25 @@ export default function FamilyScreen() {
       )}
 
       {/* Compose Modal */}
-      <Modal visible={showCompose} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCompose(false)}>
+      <Modal visible={showCompose} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => !isPostingAnnouncement && setShowCompose(false)}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.modal}>
           {/* Cancel button top-left */}
-          <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowCompose(false)}>
+          <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowCompose(false)} disabled={isPostingAnnouncement}>
             <Text style={styles.modalCancel}>取消</Text>
           </TouchableOpacity>
 
+          <ScrollView
+            contentContainerStyle={styles.composeScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
           {/* Author info — centered */}
           <View style={styles.composeAuthorCenter}>
             <View style={[styles.composeAvatarLarge, { backgroundColor: currentMember.color + '20', borderColor: currentMember.color }]}>
@@ -1275,6 +1296,9 @@ export default function FamilyScreen() {
             numberOfLines={5}
             textAlignVertical="top"
             placeholderTextColor={AppColors.text.tertiary}
+            returnKeyType="default"
+            submitBehavior="newline"
+            blurOnSubmit={false}
             autoFocus
           />
 
@@ -1293,15 +1317,17 @@ export default function FamilyScreen() {
 
           {/* Publish button -- bottom of modal */}
           <TouchableOpacity
-            style={[styles.modalPublishBtn, !composeText.trim() && { opacity: 0.4 }]}
+            style={[styles.modalPublishBtn, (!composeText.trim() || isPostingAnnouncement) && { opacity: 0.4 }]}
             onPress={handlePostAnnouncement}
-            disabled={!composeText.trim()}
+            disabled={!composeText.trim() || isPostingAnnouncement}
             activeOpacity={0.85}
           >
-            <Text style={styles.modalPublishBtnText}>📢 发布公告</Text>
+            <Text style={styles.modalPublishBtnText}>{isPostingAnnouncement ? '正在发布…' : '📢 发布公告'}</Text>
           </TouchableOpacity>
+          </ScrollView>
         </View>
         </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Hidden briefing card for screenshot capture */}
@@ -1737,6 +1763,7 @@ const styles = StyleSheet.create({
   modalPost: { fontSize: 16, fontWeight: '700', color: AppColors.coral.primary },
   composeAuthorCenter: { alignItems: 'center', gap: 4, marginBottom: 20 },
   composeAvatarLarge: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, marginBottom: 4 },
+  composeScrollContent: { flexGrow: 1, paddingBottom: 24 },
   composeAvatarLargeText: { fontSize: 32 },
   composeAuthor: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   composeAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },

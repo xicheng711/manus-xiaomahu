@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Animated, Easing, Platform, Image, Alert,
+  View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView,
+  StyleSheet, Animated, Easing, Platform, Image, Alert, Keyboard,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -78,6 +78,7 @@ export default function CreateFamilyModal() {
   }
 
   function animateNext() {
+    Keyboard.dismiss();
     Animated.sequence([
       Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
     ]).start(() => {
@@ -92,6 +93,7 @@ export default function CreateFamilyModal() {
 
   async function handleFinish() {
     if (saving) return;
+    Keyboard.dismiss();
     setSaving(true);
     try {
       if (Platform.OS !== 'web') await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -163,10 +165,17 @@ export default function CreateFamilyModal() {
         ))}
       </View>
 
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          onScrollBeginDrag={Keyboard.dismiss}
           showsVerticalScrollIndicator={false}
         >
           {step === 0 && (
@@ -183,6 +192,8 @@ export default function CreateFamilyModal() {
                 onChangeText={setElderName}
                 placeholderTextColor="#B0B8C1"
                 maxLength={20}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
                 autoFocus
               />
 
@@ -237,6 +248,8 @@ export default function CreateFamilyModal() {
                 onChangeText={setMyName}
                 placeholderTextColor="#B0B8C1"
                 maxLength={20}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
                 autoFocus
               />
 
@@ -342,6 +355,7 @@ export default function CreateFamilyModal() {
           </TouchableOpacity>
         )}
       </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -357,6 +371,7 @@ const styles = StyleSheet.create({
   stepDot: { width: 24, height: 4, borderRadius: 2, backgroundColor: AppColors.border.soft },
   stepDotActive: { backgroundColor: AppColors.coral.primary },
 
+  keyboardAvoider: { flex: 1 },
   content: { flex: 1 },
   scroll: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 },
 
