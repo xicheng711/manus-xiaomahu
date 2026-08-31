@@ -105,9 +105,9 @@ function MoodGauge({ avgMood, prevAvg }: { avgMood: number; prevAvg: number | nu
 }
 
 const gaugeStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   badge: {
-    width: 60, height: 60, borderRadius: 18,
+    width: 58, height: 58, borderRadius: 16,
     alignItems: 'center', justifyContent: 'center', gap: 0,
   },
   badgeEmoji: { fontSize: 24, lineHeight: 28 },
@@ -483,106 +483,130 @@ const monthlyLineStyles = StyleSheet.create({
   monthLabel: { width: '100%', fontSize: 9.5, lineHeight: 13, color: AppColors.text.tertiary, textAlign: 'center' },
 });
 
-function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean; isToday?: boolean; nightWakings?: number; nightAwakeShort?: string | null; awakeHours?: number }[] }) {
-  const chartH = 110;
-  const maxVal = 12;
-  const barW = 22;
+type WeeklySleepPoint = {
+  label: string;
+  value: number;
+  hasData: boolean;
+  isToday?: boolean;
+  nightWakings?: number;
+  nightAwakeShort?: string | null;
+  awakeHours?: number;
+};
+
+function SleepOverviewChart({ data }: { data: WeeklySleepPoint[] }) {
+  const chartHeight = 74;
+  const maxValue = 12;
+  const latestDataIndex = data.reduce((latest, point, index) => point.hasData ? index : latest, -1);
+  const focusPoint = latestDataIndex >= 0 ? data[latestDataIndex] : null;
+  const recorded = data.filter(point => point.hasData);
+  const average = recorded.length > 0
+    ? recorded.reduce((sum, point) => sum + point.value, 0) / recorded.length
+    : 0;
+  const focusDetail = focusPoint
+    ? (focusPoint.awakeHours ?? 0) > 0
+      ? `夜间清醒 ${(focusPoint.awakeHours ?? 0).toFixed(1)}h`
+      : (focusPoint.nightWakings ?? 0) > 0
+        ? `夜醒 ${focusPoint.nightWakings} 次${focusPoint.nightAwakeShort ? ` · ${focusPoint.nightAwakeShort}` : ''}`
+        : '夜间状态平稳'
+    : '完成早间打卡后显示';
 
   return (
-    <View style={sleepStyles.root}>
-      {/* Y-axis */}
-      <View style={[sleepStyles.yAxis, { height: chartH }]}>
-        <Text style={sleepStyles.yLabel}>12h</Text>
-        <Text style={sleepStyles.yLabel}>6h</Text>
-        <Text style={sleepStyles.yLabel}>0</Text>
+    <View style={sleepOverviewStyles.root}>
+      <View style={sleepOverviewStyles.primaryData}>
+        <Text style={sleepOverviewStyles.eyebrow}>
+          {focusPoint?.isToday ? '今日睡眠' : focusPoint ? '最近睡眠' : '睡眠记录'}
+        </Text>
+        <View style={sleepOverviewStyles.valueRow}>
+          <Text
+            style={[sleepOverviewStyles.value, !focusPoint && sleepOverviewStyles.valueEmpty]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            {focusPoint ? focusPoint.value.toFixed(1) : '--'}
+          </Text>
+          <Text style={sleepOverviewStyles.unit}>h</Text>
+        </View>
+        <Text style={sleepOverviewStyles.focusDate} numberOfLines={1}>
+          {focusPoint ? `星期${focusPoint.label}` : '暂无记录'}
+        </Text>
+        <Text style={sleepOverviewStyles.focusDetail} numberOfLines={1}>
+          {focusDetail}
+        </Text>
       </View>
 
-      {/* Bars */}
-      <View style={sleepStyles.barsArea}>
-        {data.map((d, i) => {
-          const sleepH = d.hasData ? Math.max(6, (d.value / maxVal) * chartH) : 0;
-          const awakeH = (d.hasData && (d.awakeHours ?? 0) > 0)
-            ? Math.max(4, ((d.awakeHours ?? 0) / maxVal) * chartH)
-            : 0;
-          const totalFillH = sleepH + awakeH;
-          const barColor = !d.hasData
-            ? 'transparent'
-            : d.value >= 7 ? AppColors.green.primary
-            : d.value >= 5 ? '#F0A500'
-            : AppColors.coral.primary;
-          const labelColor = !d.hasData ? AppColors.text.tertiary
-            : d.value >= 7 ? AppColors.green.primary
-            : d.value >= 5 ? '#F0A500'
-            : AppColors.coral.primary;
-          const isToday = d.isToday ?? false;
-          const hasWaking = d.hasData && (d.nightWakings ?? 0) > 0;
-          const hasAwake = d.hasData && (d.awakeHours ?? 0) > 0;
+      <View style={sleepOverviewStyles.divider} />
 
-          return (
-            <View key={i} style={sleepStyles.barCol}>
-              {/* sleep value label */}
-              <Text style={[sleepStyles.valueLabel, { color: labelColor, opacity: d.hasData ? 1 : 0 }]}>
-                {d.hasData ? `${d.value}h` : ''}
-              </Text>
-              {/* track + stacked fill */}
-              <View style={[sleepStyles.track, { height: chartH, width: barW }]}>
-                {/* 底部：睡眠时间（绿/橙/红） */}
-                <View style={{ width: barW, height: totalFillH, borderRadius: 8, overflow: 'hidden', justifyContent: 'flex-start' }}>
-                  {/* 顶部：清醒时间（橙红色） */}
-                  {hasAwake && (
-                    <View style={{ height: awakeH, width: barW, backgroundColor: '#FB923C' }} />
-                  )}
-                  {/* 底部：睡眠时间 */}
-                  <View style={{ height: sleepH, width: barW, backgroundColor: barColor }} />
+      <View style={sleepOverviewStyles.trendArea}>
+        <View style={sleepOverviewStyles.trendHeader}>
+          <Text style={sleepOverviewStyles.trendTitle}>近7天趋势</Text>
+          <Text style={sleepOverviewStyles.trendAverage}>
+            {recorded.length > 0 ? `平均 ${average.toFixed(1)}h` : '等待记录'}
+          </Text>
+        </View>
+        <View style={sleepOverviewStyles.barsArea}>
+          {data.map((point, index) => {
+            const fillHeight = point.hasData
+              ? Math.max(5, Math.min(chartHeight, (point.value / maxValue) * chartHeight))
+              : 0;
+            const isFocus = index === latestDataIndex;
+            return (
+              <View
+                key={`${point.label}-${index}`}
+                style={sleepOverviewStyles.barColumn}
+                accessible
+                accessibilityLabel={`星期${point.label}${point.hasData ? `睡眠${point.value.toFixed(1)}小时` : '暂无睡眠记录'}`}
+              >
+                <View style={[sleepOverviewStyles.track, { height: chartHeight }]}>
+                  {point.hasData ? (
+                    <View
+                      style={[
+                        sleepOverviewStyles.fill,
+                        {
+                          height: fillHeight,
+                          backgroundColor: isFocus ? AppColors.coral.primary : AppColors.green.primary,
+                        },
+                      ]}
+                    />
+                  ) : null}
                 </View>
+                <Text style={[sleepOverviewStyles.dayLabel, isFocus && sleepOverviewStyles.dayLabelFocus]} numberOfLines={1}>
+                  {point.label}
+                </Text>
               </View>
-              {/* day label */}
-              <Text style={[sleepStyles.dayLabel, isToday && sleepStyles.dayLabelToday]}>
-                {d.label}
-              </Text>
-              {/* night waking / awake time indicator */}
-              <View style={sleepStyles.wakeRow}>
-                {hasAwake ? (
-                  <Text style={sleepStyles.wakeLabel}>
-                    {'🌙'}{(d.awakeHours ?? 0).toFixed(1)}h
-                  </Text>
-                ) : hasWaking ? (
-                  <Text style={sleepStyles.wakeLabel}>
-                    {'🌙'}{d.nightWakings}{d.nightAwakeShort ? ` ${d.nightAwakeShort}` : '次'}
-                  </Text>
-                ) : (
-                  <Text style={sleepStyles.wakeEmpty}>{d.hasData ? '—' : ''}</Text>
-                )}
-              </View>
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
       </View>
     </View>
   );
 }
 
-const sleepStyles = StyleSheet.create({
-  root: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
-  yAxis: { width: 26, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 4, paddingTop: 16 },
-  yLabel: { fontSize: 9, color: AppColors.text.tertiary },
-  barsArea: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
-  barCol: { flex: 1, minWidth: 0, alignItems: 'center', gap: 4 },
-  valueLabel: { width: '100%', fontSize: 10, fontWeight: '600', marginBottom: 2, minHeight: 14, textAlign: 'center' },
+const sleepOverviewStyles = StyleSheet.create({
+  root: { flexDirection: 'row', alignItems: 'stretch', minHeight: 126 },
+  primaryData: { width: '39%', minWidth: 0, justifyContent: 'center', paddingRight: 12 },
+  eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: AppColors.text.secondary },
+  valueRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 3 },
+  value: { flexShrink: 1, fontSize: 42, lineHeight: 48, letterSpacing: -1.4, fontWeight: '900', color: AppColors.green.strong },
+  valueEmpty: { color: AppColors.text.tertiary },
+  unit: { fontSize: 17, lineHeight: 25, fontWeight: '800', color: AppColors.green.muted, marginLeft: 2, marginBottom: 3 },
+  focusDate: { fontSize: 11, lineHeight: 15, color: AppColors.text.tertiary, fontWeight: '600', marginTop: 1 },
+  focusDetail: { fontSize: 10, lineHeight: 14, color: AppColors.text.tertiary, marginTop: 3 },
+  divider: { width: 1, marginVertical: 2, backgroundColor: AppColors.border.light },
+  trendArea: { flex: 1, minWidth: 0, paddingLeft: 12 },
+  trendHeader: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  trendTitle: { fontSize: 11, lineHeight: 15, fontWeight: '700', color: AppColors.text.secondary },
+  trendAverage: { flexShrink: 1, fontSize: 9, lineHeight: 13, color: AppColors.text.tertiary, textAlign: 'right' },
+  barsArea: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', paddingTop: 5 },
+  barColumn: { flex: 1, minWidth: 0, height: 94, alignItems: 'center', justifyContent: 'flex-end' },
   track: {
-    backgroundColor: AppColors.border.soft,
-    borderRadius: 8,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
+    width: 13, maxWidth: '72%', borderRadius: 7,
+    backgroundColor: AppColors.bg.secondary,
+    justifyContent: 'flex-end', overflow: 'hidden',
   },
-  fill: {
-    borderRadius: 8,
-  },
-  dayLabel: { width: '100%', fontSize: 10, color: AppColors.text.tertiary, marginTop: 4, textAlign: 'center' },
-  dayLabelToday: { color: AppColors.green.strong, fontWeight: '700' },
-  wakeRow: { width: '100%', alignItems: 'center', marginTop: 2, minHeight: 14 },
-  wakeLabel: { width: '100%', fontSize: 9, color: AppColors.purple.strong, fontWeight: '600', textAlign: 'center' },
-  wakeEmpty: { fontSize: 9, color: AppColors.border.soft },
+  fill: { width: '100%', borderRadius: 7 },
+  dayLabel: { width: '100%', fontSize: 9, lineHeight: 13, color: AppColors.text.tertiary, textAlign: 'center', marginTop: 4 },
+  dayLabelFocus: { color: AppColors.coral.primary, fontWeight: '800' },
 });
 
 // ─── Nap Bar Chart ──────────────────────────────────────────────────────────
@@ -899,7 +923,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
             <Text style={styles.sectionIcon}>😴</Text>
           </View>
           <View style={styles.sectionHeaderText}>
-            <Text style={styles.sectionTitle}>{patientNickname}的夜晚睡眠时长</Text>
+            <Text style={styles.sectionTitle}>{patientNickname}的睡眠概览</Text>
             <Text style={styles.sectionSubtitle}>{sleepSubtitle}</Text>
           </View>
         </View>
@@ -914,7 +938,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
             unit="hours"
           />
         ) : (
-          <SleepChart data={sleepData} />
+          <SleepOverviewChart data={sleepData} />
         )}
       </View>
 
@@ -983,47 +1007,47 @@ const styles = StyleSheet.create({
   container: { gap: 0 },
   toggleRow: { alignItems: 'center', marginBottom: 14 },
   periodToggle: {
-    flexDirection: 'row', backgroundColor: AppColors.bg.secondary, borderRadius: 12, padding: 3,
+    flexDirection: 'row', backgroundColor: AppColors.bg.secondary, borderRadius: 14, padding: 3,
   },
-  periodBtn: { paddingHorizontal: 28, paddingVertical: 8, borderRadius: 10 },
+  periodBtn: { paddingHorizontal: 28, paddingVertical: 8, borderRadius: 11 },
   periodBtnActive: {
     backgroundColor: AppColors.surface.whiteStrong,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 5, elevation: 1,
   },
-  periodBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.text.tertiary },
+  periodBtnText: { fontSize: 15, lineHeight: 19, fontWeight: '700', color: AppColors.text.tertiary },
   periodBtnTextActive: { color: AppColors.text.primary },
   dateNav: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: 14, paddingHorizontal: 2,
   },
-  dateNavPeriod: { fontSize: 18, fontWeight: '900', color: AppColors.text.primary, letterSpacing: -0.3 },
-  dateNavRange: { fontSize: 13, color: AppColors.text.tertiary, marginTop: 3 },
+  dateNavPeriod: { fontSize: 20, lineHeight: 25, fontWeight: '900', color: AppColors.text.primary, letterSpacing: -0.4 },
+  dateNavRange: { fontSize: 12, lineHeight: 17, color: AppColors.text.tertiary, marginTop: 2 },
   dateNavArrows: { flexDirection: 'row', gap: 8 },
   arrowBtn: {
-    width: 40, height: 40, borderRadius: 14,
+    width: 38, height: 38, borderRadius: 12,
     backgroundColor: AppColors.surface.whiteStrong,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
   arrowBtnDisabled: { opacity: 0.3 },
   arrowText: { fontSize: 22, fontWeight: '600', color: AppColors.text.primary, lineHeight: 26 },
   arrowTextDisabled: { color: AppColors.text.tertiary },
   sectionCard: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 22, padding: 18, marginBottom: 16,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, padding: 18, marginBottom: 14,
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05, shadowRadius: 14, elevation: 2,
   },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   sectionIconWrap: {
-    width: 44, height: 44, borderRadius: 14,
+    width: 42, height: 42, borderRadius: 14,
     backgroundColor: AppColors.green.soft,
     alignItems: 'center', justifyContent: 'center',
   },
-  sectionIcon: { fontSize: 22 },
-  sectionHeaderText: { flex: 1 },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary },
-  sectionSubtitle: { fontSize: 12, color: AppColors.text.tertiary, marginTop: 2 },
+  sectionIcon: { fontSize: 21, lineHeight: 26 },
+  sectionHeaderText: { flex: 1, minWidth: 0 },
+  sectionTitle: { fontSize: 16, lineHeight: 21, fontWeight: '800', color: AppColors.text.primary },
+  sectionSubtitle: { fontSize: 12, lineHeight: 17, color: AppColors.text.secondary, marginTop: 2 },
   emptyHint: {
     paddingVertical: 22, paddingHorizontal: 14, alignItems: 'center',
     backgroundColor: AppColors.bg.soft, borderRadius: 16,

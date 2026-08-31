@@ -631,7 +631,8 @@ describe('Warm ivory homepage visual system', () => {
   });
 
   it('uses equal-width columns for sleep, nap, and medication trend alignment', () => {
-    expect((trend.match(/barCol: \{ flex: 1, minWidth: 0/g) ?? []).length).toBe(2);
+    expect(trend).toContain("barColumn: { flex: 1, minWidth: 0");
+    expect((trend.match(/barCol: \{ flex: 1, minWidth: 0/g) ?? []).length).toBe(1);
     expect(trend).toContain("valueLabel: { width: '100%'");
     expect(trend).toContain("dayLabel: { width: '100%'");
     expect(trend).toContain('dotCol: { flex: 1, minWidth: 0');
@@ -931,5 +932,61 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
     expect(rootLayout).toContain("announcementId: data?.announcementId ? String(data.announcementId) : undefined");
     expect(familyPage).toContain("params.openComments === '1'");
     expect(familyPage).toContain('visibleOlderAnnouncements');
+  });
+});
+
+
+describe('Sleep overview card and restrained warm visual hierarchy', () => {
+  const trend = read('components/trend-chart.tsx');
+  const caregiverHome = read('app/(tabs)/index.tsx');
+  const joinerHome = read('components/joiner-home.tsx');
+  const weeklyOverview = trend.slice(
+    trend.indexOf('function SleepOverviewChart'),
+    trend.indexOf('const sleepOverviewStyles'),
+  );
+
+  it('shows one prominent latest sleep value beside a compact seven-day trend', () => {
+    expect(trend).toContain('function SleepOverviewChart');
+    expect(trend).toContain("focusPoint?.isToday ? '今日睡眠' : focusPoint ? '最近睡眠' : '睡眠记录'");
+    expect(trend).toContain("{focusPoint ? focusPoint.value.toFixed(1) : '--'}");
+    expect(trend).toContain('近7天趋势');
+    expect(trend).toContain("recorded.length > 0 ? `平均 ${average.toFixed(1)}h` : '等待记录'");
+    expect(weeklyOverview).not.toContain('<Text style={[sleepOverviewStyles.valueLabel');
+  });
+
+  it('uses the rightmost recorded day as the focus and keeps missing days distinct from zero', () => {
+    expect(trend).toContain('data.reduce((latest, point, index) => point.hasData ? index : latest, -1)');
+    expect(trend).toContain('point.hasData ? (');
+    expect(trend).toContain("point.hasData ? `睡眠${point.value.toFixed(1)}小时` : '暂无睡眠记录'");
+    expect(trend).toContain('backgroundColor: AppColors.bg.secondary');
+  });
+
+  it('bottom-aligns seven equal-width bars and highlights only the latest valid day', () => {
+    expect(trend).toContain("barsArea: { flex: 1, flexDirection: 'row', alignItems: 'flex-end'");
+    expect(trend).toContain("barColumn: { flex: 1, minWidth: 0");
+    expect(trend).toContain('backgroundColor: isFocus ? AppColors.coral.primary : AppColors.green.primary');
+    expect(trend).toContain('dayLabelFocus: { color: AppColors.coral.primary');
+  });
+
+  it('keeps the monthly line chart and gives caregivers and Joiners the exact same component', () => {
+    expect(trend).toContain('<MonthlyLineChart');
+    expect(trend).toContain('<SleepOverviewChart data={sleepData} />');
+    expect(caregiverHome).toContain('<TrendChart checkIns={allCheckIns}');
+    expect(joinerHome).toContain('<TrendChart');
+  });
+
+  it('stays readable on narrow phones without changing the established information architecture', () => {
+    expect(trend).toContain("primaryData: { width: '39%', minWidth: 0");
+    expect(trend).toContain('trendArea: { flex: 1, minWidth: 0');
+    expect(trend).toContain('adjustsFontSizeToFit');
+    expect(trend).toContain('minimumFontScale={0.75}');
+    expect(trend).toContain("sectionCard: {\n    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20");
+  });
+
+  it('uses warm ivory surfaces, low-opacity shadows, stronger type hierarchy, and retains friendly Emoji', () => {
+    expect(trend).toContain('shadowOpacity: 0.05, shadowRadius: 14, elevation: 2');
+    expect(trend).toContain("sectionTitle: { fontSize: 16, lineHeight: 21, fontWeight: '800'");
+    expect(trend).toContain('<Text style={styles.sectionIcon}>😴</Text>');
+    expect(trend).toContain('<Text style={styles.sectionIcon}>☀️</Text>');
   });
 });
