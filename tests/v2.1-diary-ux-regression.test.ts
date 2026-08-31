@@ -750,3 +750,20 @@ describe('Final end-to-end audit safeguards', () => {
     expect(family).not.toMatch(/cloudGet(?:CheckIns|Diaries)[^\n]*\.catch\(\(\) => \[\]\)/);
   });
 });
+
+
+describe('Joiner tab bar alignment regression', () => {
+  const tabsLayout = read('app/(tabs)/_layout.tsx');
+
+  it('reuses the standard navigation button props for the disabled check-in tab', () => {
+    expect(tabsLayout).toContain('}: BottomTabBarButtonProps & {');
+    expect(tabsLayout).toContain('<HapticTab');
+    expect(tabsLayout).toContain('{...buttonProps}');
+    expect(tabsLayout).toContain('tabBarButton: (props) => <DisabledTabButton {...props}');
+  });
+
+  it('does not give the Joiner-only check-in button an independent fixed height', () => {
+    expect(tabsLayout).not.toContain('style={styles.disabledTabBtn}');
+    expect(tabsLayout).not.toContain('disabledTabBtn: {');
+  });
+});

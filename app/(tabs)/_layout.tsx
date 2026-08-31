@@ -1,7 +1,8 @@
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
-import { Platform, View, Text, StyleSheet, TouchableOpacity, Animated } from "react-native";
+import { Platform, View, Text, StyleSheet, Animated } from "react-native";
+import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { AppColors, Gradients } from "@/lib/design-tokens";
 import { useFamilyContext } from "@/lib/family-context";
@@ -67,24 +68,20 @@ function TabIcon({
 
 // ─── 禁用 Tab 按钮（joiner 视角，点击时弹出提示） ────────────────────
 function DisabledTabButton({
-  route,
-  isJoiner,
   onShowToast,
-}: {
-  route: string;
-  isJoiner: boolean;
+  ...buttonProps
+}: BottomTabBarButtonProps & {
   onShowToast: () => void;
 }) {
+  // 复用与其他 Tab 完全相同的导航按钮容器、children 和布局属性；仅替换点击行为。
+  // 不再自定义固定高度，否则会绕过 tabBarItemStyle 并在带安全区的设备上产生垂直偏移。
   return (
-    <TouchableOpacity
-      style={styles.disabledTabBtn}
-      activeOpacity={0.7}
+    <HapticTab
+      {...buttonProps}
       onPress={onShowToast}
       accessibilityRole="button"
-      accessibilityLabel="仅主照顾者可操作"
-    >
-      <TabIcon route={route} focused={false} isJoiner={isJoiner} />
-    </TouchableOpacity>
+      accessibilityLabel="每日打卡，仅主照顾者可操作"
+    />
   );
 }
 
@@ -174,7 +171,7 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen name="index"      options={{ title: "首页",    tabBarIcon: ({ focused }) => <TabIcon route="index"      focused={focused} isJoiner={isJoiner} /> }} />
-        <Tabs.Screen name="checkin"    options={{ title: "每日打卡", tabBarIcon: ({ focused }) => <TabIcon route="checkin"    focused={focused} isJoiner={isJoiner} />, ...(isJoiner ? { tabBarButton: () => <DisabledTabButton route="checkin"    isJoiner={isJoiner} onShowToast={showToast} /> } : {}) }} />
+        <Tabs.Screen name="checkin"    options={{ title: "每日打卡", tabBarIcon: ({ focused }) => <TabIcon route="checkin"    focused={focused} isJoiner={isJoiner} />, ...(isJoiner ? { tabBarButton: (props) => <DisabledTabButton {...props} onShowToast={showToast} /> } : {}) }} />
         <Tabs.Screen name="medication" options={{ title: "用药记录", tabBarIcon: ({ focused }) => <TabIcon route="medication" focused={focused} isJoiner={isJoiner} /> }} />
         <Tabs.Screen name="diary"      options={{ title: "日记",    tabBarIcon: ({ focused }) => <TabIcon route="diary"      focused={focused} isJoiner={isJoiner} /> }} />
         <Tabs.Screen name="family"     options={{ title: "家人共享", tabBarIcon: ({ focused }) => <TabIcon route="family"     focused={focused} isJoiner={isJoiner} /> }} />
@@ -228,13 +225,6 @@ const styles = StyleSheet.create({
   },
   tabLabelFaded: {
     color: AppColors.text.tertiary,
-  },
-  disabledTabBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 58,
-    opacity: 0.82,
   },
   // Toast 样式
   toast: {
