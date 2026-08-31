@@ -865,6 +865,8 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
   const storage = read('lib/storage.ts');
   const familyPage = read('app/(tabs)/family.tsx');
   const comments = read('components/announcement-comments.tsx');
+  const keyboardScroll = read('hooks/use-keyboard-aware-scroll.ts');
+  const checkin = read('app/(tabs)/checkin.tsx');
   const rootLayout = read('app/_layout.tsx');
 
   it('stores comments in a dedicated cloud table with family, announcement, idempotency, and local date-time fields', () => {
@@ -917,11 +919,31 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
   it('keeps multiline input above the keyboard and preserves text when sending fails', () => {
     expect(familyPage).toContain('<KeyboardAvoidingView');
     expect(familyPage).toContain("behavior={Platform.OS === 'ios' ? 'padding' : 'height'}");
-    expect(familyPage).toContain('scrollResponderScrollNativeHandleToKeyboard(nativeHandle, 120, true)');
+    expect(familyPage).toContain('onLayout={handleCommentScrollLayout}');
+    expect(keyboardScroll).toContain('UIManager.measureLayout(');
+    expect(keyboardScroll).toContain('inputY + inputHeight - visibleHeight + extraClearance');
+    expect(keyboardScroll).toContain('scrollResponderScrollNativeHandleToKeyboard?.(');
     expect(comments).toContain('multiline');
     expect(comments).toContain('submitBehavior="newline"');
     expect(comments).toContain('刚才输入的文字仍然保留');
     expect(comments).toContain('setCommentText(\'\')');
+  });
+
+  it('hides the floating publish button throughout comment editing and restores it only after the keyboard closes', () => {
+    expect(familyPage).toContain("activeSection === 'broadcast' && !keyboardVisible && !commentInputFocused");
+    expect(comments).toContain('onBlur={onInputBlur}');
+    expect(keyboardScroll).toContain("const keyboardHideEvent = 'keyboardDidHide'");
+    expect(keyboardScroll).toContain('setKeyboardVisible(false)');
+  });
+
+  it('applies the same diary-style keyboard movement to every morning and evening check-in text field', () => {
+    expect(checkin).toContain('useKeyboardAwareScroll(32)');
+    expect(checkin).toContain('keyboardVerticalOffset={0}');
+    expect(checkin).toContain('formKeyboardVisible && styles.containerKeyboardOpen');
+    expect(checkin).toContain('containerKeyboardOpen: { paddingBottom: 220 }');
+    expect((checkin.match(/onFocus=\{event => revealFormInput\(event\.nativeEvent\.target\)\}/g) ?? []).length).toBe(3);
+    expect((checkin.match(/onBlur=\{blurFormInput\}/g) ?? []).length).toBe(3);
+    expect((checkin.match(/submitBehavior="newline"/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
   it('sends an explicit object notification and opens the exact announcement comments after switching profiles', () => {

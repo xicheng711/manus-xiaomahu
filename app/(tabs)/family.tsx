@@ -36,6 +36,7 @@ import { FamilySkeleton } from '@/components/skeleton-loader';
 import { cloudGetAnnouncements, cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiac } from '@/lib/zodiac';
+import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -494,7 +495,14 @@ export default function FamilyScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const fabBreath = useRef(new Animated.Value(1)).current;
-  const scrollRef = useRef<any>(null);
+  const {
+    scrollRef,
+    keyboardVisible,
+    inputFocused: commentInputFocused,
+    revealInput: revealCommentInput,
+    blurInput: handleCommentInputBlur,
+    onScrollLayout: handleCommentScrollLayout,
+  } = useKeyboardAwareScroll(28);
   const handledAnnouncementTargetRef = useRef<string | null>(null);
   const [newAnnouncementId, setNewAnnouncementId] = useState<string | null>(null);
   const briefingCardRef = useRef<View>(null);
@@ -990,14 +998,6 @@ export default function FamilyScreen() {
       setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }), 380);
     }
   };
-  const revealCommentInput = (nativeHandle: number | null) => {
-    if (nativeHandle && scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard) {
-      scrollRef.current.scrollResponderScrollNativeHandleToKeyboard(nativeHandle, 120, true);
-      return;
-    }
-    scrollRef.current?.scrollToEnd({ animated: true });
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -1078,6 +1078,7 @@ export default function FamilyScreen() {
       {/* Content */}
       <ScrollView
         ref={scrollRef}
+        onLayout={handleCommentScrollLayout}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(120, insets.bottom + 110) }}
@@ -1115,6 +1116,7 @@ export default function FamilyScreen() {
                   forceOpenComments={targetAnnouncementId === Number(ann.serverAnnouncementId ?? ann.id)}
                   onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
                   onCommentInputFocus={revealCommentInput}
+                  onCommentInputBlur={handleCommentInputBlur}
                   onReactionToggle={async (emoji) => {
                     if (!currentMember) return;
                     // Server-first: toggle reaction on server, then refresh from cloud
@@ -1154,6 +1156,7 @@ export default function FamilyScreen() {
                     forceOpenComments={targetAnnouncementId === Number(ann.serverAnnouncementId ?? ann.id)}
                     onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
                     onCommentInputFocus={revealCommentInput}
+                    onCommentInputBlur={handleCommentInputBlur}
                     onReactionToggle={async (emoji) => {
                       if (!currentMember) return;
                       // Server-first: toggle reaction on server, then refresh from cloud
@@ -1331,7 +1334,7 @@ export default function FamilyScreen() {
       </ScrollView>
 
       {/* Compose FAB — round circle, bottom-right, anyone can post */}
-      {activeSection === 'broadcast' && (
+      {activeSection === 'broadcast' && !keyboardVisible && !commentInputFocused && (
         <Animated.View style={[styles.fabWrap, { bottom: insets.bottom + 16, transform: [{ scale: fabBreath }] }]}>
           <TouchableOpacity
             style={styles.fabBtn}
@@ -1590,7 +1593,7 @@ const REACTION_EMOJIS = ['👍', '❤️', '👏', '🙏', '😢', '✨'];
 
 function AnnouncementCard({
   ann, typeInfo, isOwn, onDelete, isNew, currentMember, roomId,
-  forceOpenComments, onLayoutY, onCommentInputFocus, onReactionToggle,
+  forceOpenComments, onLayoutY, onCommentInputFocus, onCommentInputBlur, onReactionToggle,
 }: {
   ann: FamilyAnnouncement;
   typeInfo: typeof ANNOUNCEMENT_TYPES[0];
@@ -1602,6 +1605,7 @@ function AnnouncementCard({
   forceOpenComments?: boolean;
   onLayoutY?: (y: number) => void;
   onCommentInputFocus?: (nativeHandle: number | null) => void;
+  onCommentInputBlur?: () => void;
   onReactionToggle?: (emoji: string) => Promise<void>;
 }) {
   const [showPicker, setShowPicker] = useState(false);
@@ -1718,6 +1722,7 @@ function AnnouncementCard({
                   Alert.alert('公告正在同步', '公告同步完成后就可以写评论了。');
                   return;
                 }
+                if (commentsOpen) Keyboard.dismiss();
                 setCommentsOpen(open => !open);
                 setShowPicker(false);
                 setShowReactorsFor(null);
@@ -1773,6 +1778,7 @@ function AnnouncementCard({
               roomId={roomId}
               announcementAuthorName={ann.authorName}
               onInputFocus={onCommentInputFocus}
+              onInputBlur={onCommentInputBlur}
             />
           ) : null}
         </View>

@@ -14,6 +14,7 @@ import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getPr
 import { getSessionToken } from '@/lib/_core/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
+import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -721,6 +722,13 @@ function CheckinScreenContent() {
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('您');
   const [streak, setStreak] = useState(1);
+  const {
+    scrollRef: formScrollRef,
+    keyboardVisible: formKeyboardVisible,
+    revealInput: revealFormInput,
+    blurInput: blurFormInput,
+    onScrollLayout: handleFormScrollLayout,
+  } = useKeyboardAwareScroll(32);
 
   // Morning fields — v5.0 睡眠记录（快捷 / 详细）
   const [sleepType, setSleepType] = useState<'quick' | 'detailed'>('quick');
@@ -912,6 +920,7 @@ function CheckinScreenContent() {
   }
 
   function nextStep() {
+    Keyboard.dismiss();
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const maxSteps = mode === 'morning' ? morningSteps.length : eveningSteps.length;
     if (step < maxSteps - 1) {
@@ -922,6 +931,7 @@ function CheckinScreenContent() {
   }
 
   function prevStep() {
+    Keyboard.dismiss();
     if (step > 0) {
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       animateStep(() => setStep(s => s - 1));
@@ -1535,6 +1545,9 @@ function CheckinScreenContent() {
               placeholderTextColor="#B8BCC0"
               blurOnSubmit={false}
               returnKeyType="default"
+              submitBehavior="newline"
+              onFocus={event => revealFormInput(event.nativeEvent.target)}
+              onBlur={blurFormInput}
             />
           </View>
         </View>
@@ -1622,6 +1635,8 @@ function CheckinScreenContent() {
             submitBehavior="newline"
             blurOnSubmit={false}
             returnKeyType="default"
+            onFocus={event => revealFormInput(event.nativeEvent.target)}
+            onBlur={blurFormInput}
           />
         </View>
       ),
@@ -1701,6 +1716,9 @@ function CheckinScreenContent() {
           placeholderTextColor="#B8BCC0"
           blurOnSubmit={false}
           returnKeyType="default"
+          submitBehavior="newline"
+          onFocus={event => revealFormInput(event.nativeEvent.target)}
+          onBlur={blurFormInput}
         />
       ),
     },
@@ -1736,9 +1754,17 @@ function CheckinScreenContent() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={0}
       >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScrollBeginDrag={Keyboard.dismiss}>
+      <ScrollView
+        ref={formScrollRef}
+        onLayout={handleFormScrollLayout}
+        contentContainerStyle={[styles.container, formKeyboardVisible && styles.containerKeyboardOpen]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={Keyboard.dismiss}
+      >
         {/* Header */}
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
           <View>
@@ -1802,6 +1828,7 @@ function CheckinScreenContent() {
 
 const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 40 },
+  containerKeyboardOpen: { paddingBottom: 220 },
 
   // Landing
   landingContainer: { padding: 20, paddingBottom: 40 },

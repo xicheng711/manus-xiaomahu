@@ -27,6 +27,7 @@ type Props = {
   roomId: number;
   announcementAuthorName: string;
   onInputFocus?: (nativeHandle: number | null) => void;
+  onInputBlur?: () => void;
 };
 
 function localTimeStr(): string {
@@ -74,6 +75,7 @@ export function AnnouncementComments({
   roomId,
   announcementAuthorName,
   onInputFocus,
+  onInputBlur,
 }: Props) {
   const [comments, setComments] = useState<AnnouncementComment[]>([]);
   const [commentText, setCommentText] = useState('');
@@ -278,8 +280,10 @@ export function AnnouncementComments({
           onFocus={() => {
             const revealInput = () => onInputFocus?.(findNodeHandle(inputRef.current));
             revealInput();
-            setTimeout(revealInput, 320);
+            setTimeout(revealInput, 120);
+            setTimeout(revealInput, 360);
           }}
+          onBlur={onInputBlur}
         />
         <TouchableOpacity
           onPress={handleSend}
