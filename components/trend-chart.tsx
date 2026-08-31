@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated, Easing 
 import { DailyCheckIn, DiaryEntry, getNapMinutes, hasRecordedNap } from '@/lib/storage';
 import { AppColors } from '@/lib/design-tokens';
 import { resolveSharedDataAnchorDate } from '@/lib/shared-date-range';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_W = SCREEN_WIDTH - 80;
@@ -48,6 +49,14 @@ function getMonthRange(offset: number): { start: Date; end: Date; label: string 
 function dateStr(d: Date): string {
   // 使用本地日期格式（与打卡保存的 todayStr() 一致），避免 UTC 时区偏移导致日期不匹配
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getDateKeyYearMonth(value: string): { year: number; month: number } | null {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  return Number.isFinite(year) && month >= 0 && month <= 11 ? { year, month } : null;
 }
 
 function buildDateRange(start: Date, end: Date): string[] {
@@ -297,6 +306,183 @@ const curveStyles = StyleSheet.create({
   xLabel: { fontSize: 10, color: AppColors.text.tertiary, textAlign: 'center', flex: 1 },
 });
 
+type MonthlyTrendPoint = { label: string; value: number; hasData: boolean };
+
+function MonthlyLineChart({
+  data,
+  selectedMonth,
+  onSelectMonth,
+  maxValue,
+  midValue,
+  color,
+  unit,
+}: {
+  data: MonthlyTrendPoint[];
+  selectedMonth: number;
+  onSelectMonth: (monthIndex: number) => void;
+  maxValue: number;
+  midValue: number;
+  color: string;
+  unit: 'hours' | 'minutes';
+}) {
+  const yAxisWidth = 30;
+  const plotWidth = CHART_W - yAxisWidth;
+  const plotHeight = 112;
+  const plotTop = 30;
+  const xAxisHeight = 30;
+  const totalHeight = plotTop + plotHeight + xAxisHeight;
+  const horizontalInset = 5;
+  const stepX = (plotWidth - horizontalInset * 2) / Math.max(1, data.length - 1);
+  const xFor = (index: number) => horizontalInset + index * stepX;
+  const yFor = (value: number) => plotHeight - (Math.min(maxValue, Math.max(0, value)) / maxValue) * plotHeight;
+  const selected = data[selectedMonth];
+  const selectedX = xFor(selectedMonth);
+  const selectedY = selected?.hasData ? yFor(selected.value) : plotHeight;
+  const tooltipWidth = 58;
+  const tooltipLeft = Math.max(
+    yAxisWidth,
+    Math.min(yAxisWidth + selectedX - tooltipWidth / 2, CHART_W - tooltipWidth),
+  );
+  const tooltipTop = selected?.hasData
+    ? Math.max(0, plotTop + selectedY - 28)
+    : plotTop + plotHeight - 26;
+  const formatValue = (value: number) => unit === 'hours'
+    ? `${value.toFixed(1)}h`
+    : value >= 60
+      ? `${(value / 60).toFixed(1)}h`
+      : `${Math.round(value)}m`;
+  const formatMinutesAxis = (minutes: number) => {
+    const hours = minutes / 60;
+    return `${Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1)}h`;
+  };
+  const yLabels = unit === 'hours'
+    ? [`${maxValue}h`, `${midValue}h`, '0']
+    : [formatMinutesAxis(maxValue), formatMinutesAxis(midValue), '0'];
+
+  const lineSegments: string[] = [];
+  for (let index = 1; index < data.length; index += 1) {
+    const previous = data[index - 1];
+    const current = data[index];
+    if (!previous.hasData || !current.hasData) continue;
+    lineSegments.push(`M ${xFor(index - 1)} ${yFor(previous.value)} L ${xFor(index)} ${yFor(current.value)}`);
+  }
+
+  return (
+    <View style={[monthlyLineStyles.root, { width: CHART_W, height: totalHeight }]}>
+      <View style={[monthlyLineStyles.yAxis, { top: plotTop, height: plotHeight, width: yAxisWidth }]}>
+        {yLabels.map(label => <Text key={label} style={monthlyLineStyles.yLabel}>{label}</Text>)}
+      </View>
+
+      <View style={[monthlyLineStyles.plot, { left: yAxisWidth, top: plotTop, width: plotWidth, height: plotHeight }]}>
+        <Svg width={plotWidth} height={plotHeight}>
+          {[0, plotHeight / 2, plotHeight].map(y => (
+            <Line
+              key={y}
+              x1={0}
+              x2={plotWidth}
+              y1={y}
+              y2={y}
+              stroke={AppColors.border.soft}
+              strokeWidth={1}
+              strokeDasharray="3 5"
+            />
+          ))}
+          {lineSegments.map((path, index) => (
+            <Path
+              key={`segment-${index}`}
+              d={path}
+              fill="none"
+              stroke={color}
+              strokeWidth={3}
+              strokeLinecap="round"
+            />
+          ))}
+          {data.map((point, index) => point.hasData ? (
+            <React.Fragment key={point.label}>
+              {index === selectedMonth && (
+                <Circle cx={xFor(index)} cy={yFor(point.value)} r={9} fill={`${color}22`} />
+              )}
+              <Circle
+                cx={xFor(index)}
+                cy={yFor(point.value)}
+                r={index === selectedMonth ? 5 : 3.5}
+                fill={index === selectedMonth ? color : AppColors.surface.whiteStrong}
+                stroke={color}
+                strokeWidth={index === selectedMonth ? 2.5 : 2}
+              />
+            </React.Fragment>
+          ) : null)}
+        </Svg>
+      </View>
+
+      <View
+        style={[
+          monthlyLineStyles.selectedValue,
+          { left: tooltipLeft, top: tooltipTop, width: tooltipWidth, borderColor: `${color}44` },
+        ]}
+        pointerEvents="none"
+      >
+        <Text style={[monthlyLineStyles.selectedValueText, { color }]}>
+          {selected?.hasData ? formatValue(selected.value) : '暂无'}
+        </Text>
+      </View>
+
+      <View style={[monthlyLineStyles.touchLayer, { left: yAxisWidth, top: plotTop, width: plotWidth, height: plotHeight }]}>
+        {data.map((point, index) => (
+          <TouchableOpacity
+            key={point.label}
+            style={monthlyLineStyles.touchColumn}
+            onPress={() => onSelectMonth(index)}
+            activeOpacity={1}
+            accessibilityRole="button"
+            accessibilityLabel={`${point.label}${point.hasData ? formatValue(point.value) : '暂无记录'}`}
+          />
+        ))}
+      </View>
+
+      <View style={[monthlyLineStyles.xAxis, { left: yAxisWidth, top: plotTop + plotHeight, width: plotWidth, height: xAxisHeight }]}>
+        {data.map((point, index) => (
+          <TouchableOpacity
+            key={point.label}
+            style={monthlyLineStyles.monthCell}
+            onPress={() => onSelectMonth(index)}
+            activeOpacity={0.7}
+          >
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+              style={[monthlyLineStyles.monthLabel, index === selectedMonth && { color, fontWeight: '800' }]}
+            >
+              {point.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const monthlyLineStyles = StyleSheet.create({
+  root: { position: 'relative', alignSelf: 'center' },
+  yAxis: { position: 'absolute', left: 0, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 6 },
+  yLabel: { fontSize: 10, lineHeight: 12, color: AppColors.text.tertiary },
+  plot: { position: 'absolute' },
+  touchLayer: { position: 'absolute', flexDirection: 'row' },
+  touchColumn: { flex: 1, height: '100%' },
+  selectedValue: {
+    position: 'absolute', minHeight: 22, borderRadius: 9, borderWidth: 1,
+    backgroundColor: AppColors.surface.whiteStrong,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 5, elevation: 2,
+  },
+  selectedValueText: { fontSize: 10, lineHeight: 13, fontWeight: '800' },
+  xAxis: { position: 'absolute', flexDirection: 'row', alignItems: 'flex-end' },
+  monthCell: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 1 },
+  monthLabel: { width: '100%', fontSize: 9.5, lineHeight: 13, color: AppColors.text.tertiary, textAlign: 'center' },
+});
+
 function SleepChart({ data }: { data: { label: string; value: number; hasData: boolean; isToday?: boolean; nightWakings?: number; nightAwakeShort?: string | null; awakeHours?: number }[] }) {
   const chartH = 110;
   const maxVal = 12;
@@ -529,13 +715,18 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   const anchorDate = resolveSharedDataAnchorDate(checkIns);
 
   const currentYear = anchorDate.getFullYear();
+  const anchorMonth = anchorDate.getMonth();
   const yearLabel = `${currentYear}年`;
+  const [selectedYearMonth, setSelectedYearMonth] = useState(anchorMonth);
+  useEffect(() => {
+    setSelectedYearMonth(anchorMonth);
+  }, [currentYear, anchorMonth]);
 
   const yearSleepData = Array.from({ length: 12 }, (_, m) => {
     const label = `${m + 1}月`;
     const monthCheckIns = checkIns.filter(c => {
-      const d = new Date(c.date);
-      return d.getFullYear() === currentYear && d.getMonth() === m;
+      const parts = getDateKeyYearMonth(c.date);
+      return parts?.year === currentYear && parts.month === m;
     });
     const withSleep = monthCheckIns.filter(c => c.sleepHours > 0);
     const avg = withSleep.length > 0
@@ -547,8 +738,8 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   const yearMedData = Array.from({ length: 12 }, (_, m) => {
     const label = `${m + 1}月`;
     const monthCheckIns = checkIns.filter(c => {
-      const d = new Date(c.date);
-      return d.getFullYear() === currentYear && d.getMonth() === m && c.medicationTaken !== null;
+      const parts = getDateKeyYearMonth(c.date);
+      return parts?.year === currentYear && parts.month === m && c.medicationTaken !== null;
     });
     const taken = monthCheckIns.filter(c => c.medicationTaken === true).length;
     const total = monthCheckIns.length;
@@ -590,7 +781,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   });
 
   const relevantCheckIns = period === 'year'
-    ? checkIns.filter(c => new Date(c.date).getFullYear() === currentYear)
+    ? checkIns.filter(c => getDateKeyYearMonth(c.date)?.year === currentYear)
     : periodCheckIns;
   const sleepWithData = relevantCheckIns.filter(c => c.sleepHours > 0);
   const avgSleep = sleepWithData.length > 0
@@ -603,8 +794,8 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   const yearNapData = Array.from({ length: 12 }, (_, m) => {
     const label = `${m + 1}月`;
     const monthCheckIns = checkIns.filter(c => {
-      const d = new Date(c.date);
-      return d.getFullYear() === currentYear && d.getMonth() === m;
+      const parts = getDateKeyYearMonth(c.date);
+      return parts?.year === currentYear && parts.month === m;
     });
     const recorded = monthCheckIns.filter(hasRecordedNap);
     const withNap = recorded.filter(c => getNapMinutes(c) > 0);
@@ -627,12 +818,16 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   });
 
   const napScope = period === 'year'
-    ? checkIns.filter(c => new Date(c.date).getFullYear() === currentYear)
+    ? checkIns.filter(c => getDateKeyYearMonth(c.date)?.year === currentYear)
     : periodCheckIns;
   const napRecorded = napScope.filter(hasRecordedNap);
   const napWithData = napRecorded.filter(c => getNapMinutes(c) > 0);
   const avgNap = napWithData.length > 0
     ? napWithData.reduce((s, c) => s + getNapMinutes(c), 0) / napWithData.length : 0;
+  const yearNapMaxValue = Math.max(
+    120,
+    Math.ceil(Math.max(...yearNapData.filter(item => item.hasData).map(item => item.value), 0) / 60) * 60,
+  );
   const scopeLabel = period === 'year' ? yearLabel : periodLabel;
   const napSubtitle = napRecorded.length === 0
     ? `${scopeLabel}暂未填写小睡记录`
@@ -667,7 +862,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
             <TouchableOpacity
               key={p}
               style={[styles.periodBtn, period === p && styles.periodBtnActive]}
-              onPress={() => { setPeriod(p); setOffset(0); }}
+              onPress={() => { setPeriod(p); setOffset(0); if (p === 'year') setSelectedYearMonth(anchorMonth); }}
             >
               <Text style={[styles.periodBtnText, period === p && styles.periodBtnTextActive]}>
                 {p === '7d' ? '周' : '月'}
@@ -708,7 +903,19 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
             <Text style={styles.sectionSubtitle}>{sleepSubtitle}</Text>
           </View>
         </View>
-        <SleepChart data={sleepData} />
+        {period === 'year' ? (
+          <MonthlyLineChart
+            data={yearSleepData}
+            selectedMonth={selectedYearMonth}
+            onSelectMonth={setSelectedYearMonth}
+            maxValue={12}
+            midValue={6}
+            color={AppColors.green.primary}
+            unit="hours"
+          />
+        ) : (
+          <SleepChart data={sleepData} />
+        )}
       </View>
 
       {/* 白天小睡 card */}
@@ -722,7 +929,19 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
             <Text style={styles.sectionSubtitle}>{napSubtitle}</Text>
           </View>
         </View>
-        <NapChart data={napData} />
+        {period === 'year' ? (
+          <MonthlyLineChart
+            data={yearNapData}
+            selectedMonth={selectedYearMonth}
+            onSelectMonth={setSelectedYearMonth}
+            maxValue={yearNapMaxValue}
+            midValue={yearNapMaxValue / 2}
+            color="#F59E0B"
+            unit="minutes"
+          />
+        ) : (
+          <NapChart data={napData} />
+        )}
       </View>
 
       <View style={styles.sectionCard}>
@@ -732,7 +951,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
           </View>
           <View style={styles.sectionHeaderText}>
             <Text style={styles.sectionTitle}>{patientNickname}的用药情况</Text>
-            <Text style={styles.sectionSubtitle}>{periodLabel}服药记录</Text>
+            <Text style={styles.sectionSubtitle}>{period === 'year' ? yearLabel : periodLabel}服药记录</Text>
           </View>
         </View>
         <MedicationChart data={medData} />

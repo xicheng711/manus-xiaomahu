@@ -767,3 +767,37 @@ describe('Joiner tab bar alignment regression', () => {
     expect(tabsLayout).not.toContain('disabledTabBtn: {');
   });
 });
+
+
+describe('Monthly sleep and nap line-chart polish', () => {
+  const trend = read('components/trend-chart.tsx');
+
+  it('uses a shared SVG line chart for both annual sleep and nap views', () => {
+    expect(trend).toContain("import Svg, { Circle, Line, Path } from 'react-native-svg'");
+    expect(trend).toContain('function MonthlyLineChart');
+    expect(trend).toContain('data={yearSleepData}');
+    expect(trend).toContain('data={yearNapData}');
+    expect(trend).toContain('period === \'year\' ? (');
+  });
+
+  it('keeps all twelve month labels on one bottom-aligned row', () => {
+    expect(trend).toContain("xAxis: { position: 'absolute', flexDirection: 'row', alignItems: 'flex-end' }");
+    expect(trend).toContain("monthCell: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end'");
+    expect(trend).toContain('numberOfLines={1}');
+    expect(trend).toContain('adjustsFontSizeToFit');
+  });
+
+  it('shows one selected-month value while keeping the y-axis readable', () => {
+    expect(trend).toContain('const selected = data[selectedMonth]');
+    expect(trend).toContain('selected?.hasData ? formatValue(selected.value) : \'暂无\'');
+    expect(trend).toContain('onSelectMonth(index)');
+    expect(trend).toContain("? [`${maxValue}h`, `${midValue}h`, '0']");
+  });
+
+  it('preserves missing-month and explicit zero-nap semantics without timezone date parsing', () => {
+    expect(trend).toContain('if (!previous.hasData || !current.hasData) continue');
+    expect(trend).toContain('hasData: recorded.length > 0');
+    expect(trend).toContain('function getDateKeyYearMonth');
+    expect(trend).toContain('getDateKeyYearMonth(c.date)?.year === currentYear');
+  });
+});
