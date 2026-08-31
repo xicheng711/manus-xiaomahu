@@ -634,3 +634,20 @@ describe('Warm ivory homepage visual system', () => {
     expect(trend).toContain('<View style={styles.sectionCard}>');
   });
 });
+
+
+describe('Homepage card shadow integrity', () => {
+  const creatorHome = read('app/(tabs)/index.tsx');
+  const joinerHome = read('components/joiner-home.tsx');
+
+  it('keeps rounded gradient layers clipped without clipping the outer iOS card shadows', () => {
+    const smartCardStyles = creatorHome.slice(creatorHome.indexOf('smartCard: {'), creatorHome.indexOf('aiRow:', creatorHome.indexOf('smartCard: {')));
+    const quickCardStyles = creatorHome.slice(creatorHome.indexOf('quickCard: {'), creatorHome.indexOf('quickIconBox:', creatorHome.indexOf('quickCard: {')));
+    const announcementStyles = joinerHome.slice(joinerHome.indexOf('announceCard: {'), joinerHome.indexOf('announceHeader:', joinerHome.indexOf('announceCard: {')));
+
+    expect(creatorHome).toContain("style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}");
+    expect(smartCardStyles).not.toContain("overflow: 'hidden'");
+    expect(quickCardStyles).not.toContain("overflow: 'hidden'");
+    expect(announcementStyles).not.toContain("overflow: 'hidden'");
+  });
+});

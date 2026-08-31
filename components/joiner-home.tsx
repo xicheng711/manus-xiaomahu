@@ -1082,7 +1082,6 @@ const styles = StyleSheet.create({
   announceCard: {
     backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, marginBottom: 20,
     ...SHADOWS.md, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
-    overflow: 'hidden',
   },
   announceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
   announceHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },

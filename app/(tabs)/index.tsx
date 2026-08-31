@@ -279,7 +279,7 @@ function EnhancedSmartCard({
         <LinearGradient
           colors={['rgba(240,236,248,0.75)', 'rgba(232,226,244,0.45)']}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}
         />
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <LinearGradient
@@ -1101,7 +1101,7 @@ const styles = StyleSheet.create({
   // 智能卡片
   smartCard: {
     marginBottom: 20, backgroundColor: 'transparent', borderRadius: 22,
-    padding: 17, overflow: 'hidden',
+    padding: 17,
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
   },
   aiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
@@ -1128,7 +1128,7 @@ const styles = StyleSheet.create({
   quickItem: { flex: 1 },
   quickCard: {
     borderRadius: 24, padding: 16, paddingBottom: 14, height: 112,
-    flexDirection: 'column', alignItems: 'flex-start', overflow: 'hidden',
+    flexDirection: 'column', alignItems: 'flex-start',
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 15, elevation: 3,
   },
   quickIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
