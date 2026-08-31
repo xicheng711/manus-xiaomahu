@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { buildRecentDateKeys, localDateKey, resolveSharedDataAnchorDate } from "../lib/shared-date-range";
 
 /**
  * Tests for trend chart data preparation and share card logic.
@@ -98,6 +99,32 @@ describe("Trend Chart data logic", () => {
     const rate = Math.round((taken / checkIns.length) * 100);
     expect(taken).toBe(2);
     expect(rate).toBe(67);
+  });
+});
+
+describe("Cross-timezone shared record range", () => {
+  it("anchors New York's current range to the Beijing caregiver's next-day record", () => {
+    const newYorkNow = new Date(2026, 7, 31, 11, 0, 0);
+    const records = [{ date: "2026-09-01" }, { date: "2026-08-31" }];
+
+    const anchor = resolveSharedDataAnchorDate(records, newYorkNow);
+    expect(localDateKey(anchor)).toBe("2026-09-01");
+    expect(buildRecentDateKeys(anchor)).toEqual([
+      "2026-09-01", "2026-08-31", "2026-08-30", "2026-08-29",
+      "2026-08-28", "2026-08-27", "2026-08-26",
+    ]);
+  });
+
+  it("ignores corrupted records farther than one calendar day in the future", () => {
+    const now = new Date(2026, 7, 31, 11, 0, 0);
+    const anchor = resolveSharedDataAnchorDate([{ date: "2030-01-01" }], now);
+    expect(localDateKey(anchor)).toBe("2026-08-31");
+  });
+
+  it("keeps viewer today as the anchor when all shared records are current or older", () => {
+    const now = new Date(2026, 7, 31, 23, 0, 0);
+    const anchor = resolveSharedDataAnchorDate([{ date: "2026-08-30" }], now);
+    expect(localDateKey(anchor)).toBe("2026-08-31");
   });
 });
 

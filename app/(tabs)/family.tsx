@@ -13,6 +13,7 @@ import {
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
   joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
   getAllCheckIns, getDiaryEntries, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal,
+  mergeCloudAnnouncementsIntoLocal, syncPendingAnnouncements, syncPendingBriefings,
   getProfile, getFamilyProfile, getUserProfile,
   FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
@@ -504,9 +505,13 @@ export default function FamilyScreen() {
     const rLocal = requestedMembership.room;
     const m = rLocal.members.find(member => member.id === requestedMembership.myMemberId) ?? null;
     const creatorFlag = requestedMembership.role === 'creator' || m?.isCreator === true;
+    await Promise.all([
+      syncPendingAnnouncements(requestedFamilyId).catch(() => {}),
+      syncPendingBriefings(requestedFamilyId).catch(() => {}),
+    ]);
     const [localAnns, cloudAnns] = await Promise.all([
       getFamilyAnnouncements(30, requestedFamilyId),
-      cloudGetAnnouncements(Number(requestedFamilyId), 50).catch(() => null),
+      cloudGetAnnouncements(Number(requestedFamilyId), 50),
     ]);
     if (!isCurrentFamily()) return;
     // myMemberId is the authoritative member row id for the requested family.
@@ -603,43 +608,10 @@ export default function FamilyScreen() {
     // 优先使用服务器返回的最新成员数据（包含最新名字），避免本地缓存名字过时
     const serverMe = r?.members?.find((mem: any) => mem.isCurrentUser || String(mem.id) === String(myMemberId));
     setCurrentMemberState(serverMe ?? m);
-    // 优先使用云端公告（包含所有家庭成员发的），失败时降级读本地
-    // 注意：cloudAnns 的 createdAt 是 Date 对象（superjson 反序列化），需转为 ISO 字符串
-    // 关键修复：云端 localTimeStr 为空时，从本地缓存补充
-    // 重要：本地 id 是 generateId() 随机字符串，云端 id 是数据库自增整数，两者永远不匹配！
-    // 必须用 content+date+authorName 三元组匹配，而不是 id 匹配
-    const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [
-      `${la.content}|${la.date}|${la.authorName}`, la
-    ]));
+    // 只有服务器明确返回数组时才合并；网络失败为 null，必须保留本地缓存和待同步公告。
     const a: FamilyAnnouncement[] = Array.isArray(cloudAnns)
-      ? (cloudAnns as any[]).map((c: any) => {
-          const cloudId = String(c.id);
-          // 用内容+日期+作者名匹配本地缓存（因为本地id和云端id不同命名空间）
-          const contentKey = `${c.content ?? ''}|${c.date ?? ''}|${c.authorName ?? ''}`;
-          const localMatch = localAnnsMap.get(contentKey);
-          // 云端 localTimeStr 为空时，用本地缓存中同一条公告的 localTimeStr 补充
-          const localTimeStr = c.localTimeStr ?? localMatch?.localTimeStr ?? undefined;
-          return {
-            id: cloudId,
-            authorId: String(c.authorUserId ?? c.authorId ?? ''),
-            authorName: c.authorName ?? '',
-            authorEmoji: c.authorEmoji ?? '😊',
-            authorColor: c.authorColor ?? '#888',
-            content: c.content ?? '',
-            emoji: c.emoji ?? undefined,
-            type: c.type ?? 'daily',
-            date: c.date ?? '',
-            localTimeStr,
-            createdAt: c.createdAt instanceof Date
-              ? c.createdAt.toISOString()
-              : (typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString()),
-            reactions: c.reactions ?? [],
-          };
-        })
+      ? await mergeCloudAnnouncementsIntoLocal(cloudAnns, requestedFamilyId)
       : localAnns;
-    if (Array.isArray(cloudAnns)) {
-      await AsyncStorage.setItem(`family_announcements_v1:${requestedFamilyId}`, JSON.stringify(a));
-    }
     setAnnouncements(a);
     setIsCreator(creatorFlag);
 
@@ -651,8 +623,8 @@ export default function FamilyScreen() {
     if (!creatorFlag) {
       // Joiner: pull from cloud
       const [cloudCIs, cloudDiaries, cloudProfile] = await Promise.all([
-        cloudGetCheckIns(Number(requestedFamilyId)).catch(() => []),
-        cloudGetDiaries(Number(requestedFamilyId)).catch(() => []),
+        cloudGetCheckIns(Number(requestedFamilyId)),
+        cloudGetDiaries(Number(requestedFamilyId)),
         cloudGetElderProfile(Number(requestedFamilyId)).catch(() => null),
       ]);
       allCheckIns = Array.isArray(cloudCIs)
@@ -678,11 +650,11 @@ export default function FamilyScreen() {
       allCheckIns = localAll;
       diaryEntries = localDiaries;
       // 如果本地缓存为空（如退出登录后），立即从云端拉取数据
-      if (allCheckIns.length === 0 && diaryEntries.length === 0 && familyId) {
+      if (allCheckIns.length === 0 && diaryEntries.length === 0) {
         try {
           const [cloudCIs, cloudDiaries] = await Promise.all([
-            cloudGetCheckIns(Number(familyId), 60).catch(() => []),
-            cloudGetDiaries(Number(familyId), 100).catch(() => []),
+            cloudGetCheckIns(Number(requestedFamilyId), 60),
+            cloudGetDiaries(Number(requestedFamilyId), 100),
           ]);
           if (Array.isArray(cloudCIs)) {
             allCheckIns = await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId);
@@ -782,6 +754,9 @@ export default function FamilyScreen() {
       setComposeType('daily');
       setShowCompose(false);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (newAnn.syncPending) {
+        Alert.alert('公告已保存在本机', '网络恢复后会自动同步给家人，公告卡片会暂时显示“待同步”。');
+      }
       setNewAnnouncementId(newAnn.id);
       // NOTE: cloudPostAnnouncement is already called inside saveFamilyAnnouncement().
       // Do NOT call it again here — that would cause duplicate announcements and double push notifications.
@@ -802,16 +777,16 @@ export default function FamilyScreen() {
     // Server-first: delete on server before removing locally；始终锁定当前页面所属家庭。
     const roomId = familyId;
     const numericRoomId = roomId ? parseInt(roomId) : null;
-    const numericAnnId = parseInt(id);
-    if (numericRoomId && !isNaN(numericAnnId)) {
-      try {
-        await cloudDeleteAnnouncement(numericAnnId, numericRoomId);
-      } catch (e: any) {
-        Alert.alert('删除失败', e?.message || '无法删除公告，请稍后重试');
-        return; // Abort — do NOT delete locally if server rejected
+    const target = announcements.find(item => item.id === id);
+    const numericAnnId = target?.serverAnnouncementId ?? (/^\d+$/.test(id) ? Number(id) : null);
+    if (numericRoomId && numericAnnId) {
+      const result = await cloudDeleteAnnouncement(numericAnnId, numericRoomId);
+      if (!result?.success) {
+        Alert.alert('删除失败', '无法连接服务器，公告仍然保留，请稍后重试。');
+        return;
       }
     }
-    // Server succeeded (or no roomId to sync) — now delete locally
+    // Server succeeded, or this was a never-synced local announcement.
     await deleteFamilyAnnouncement(id, roomId);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await loadData();
@@ -997,14 +972,16 @@ export default function FamilyScreen() {
                   onReactionToggle={async (emoji) => {
                     if (!currentMember) return;
                     // Server-first: toggle reaction on server, then refresh from cloud
-                    const numericAnnId = parseInt(String(ann.id));
+                    const numericAnnId = ann.serverAnnouncementId ?? (/^\d+$/.test(String(ann.id)) ? Number(ann.id) : null);
                     const numericRoomId = familyId ? parseInt(familyId) : undefined;
-                    if (!isNaN(numericAnnId)) {
-                      const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
-                      if (result === null) {
-                        Alert.alert('操作失败', '无法同步表情，请稍后重试');
-                        return;
-                      }
+                    if (!numericAnnId) {
+                      Alert.alert('公告正在同步', '请稍后再添加表情回应。');
+                      return;
+                    }
+                    const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
+                    if (result === null) {
+                      Alert.alert('操作失败', '无法同步表情，请稍后重试');
+                      return;
                     }
                     // Reload from cloud so both creator and joiner see updated reactions
                     await loadData();
@@ -1500,9 +1477,12 @@ function AnnouncementCard({
       ? '--:--'
       : `${String(_annDate.getHours()).padStart(2, '0')}:${String(_annDate.getMinutes()).padStart(2, '0')}`;
   }
-  const date = ann.date !== todayStr()
-    ? new Date(ann.date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' '
-    : '';
+  // ann.date 是发布者设备保存的日历日期，不能用 new Date('YYYY-MM-DD') 按 UTC 解析。
+  const dateMatch = ann.date?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const currentYear = String(new Date().getFullYear());
+  const date = dateMatch
+    ? `${dateMatch[1] === currentYear ? '' : `${dateMatch[1]}/`}${Number(dateMatch[2])}/${Number(dateMatch[3])} `
+    : `${ann.date || ''}${ann.date ? ' ' : ''}`;
 
   const reactions = ann.reactions ?? [];
   const myId = currentMember?.id ?? '';
@@ -1527,7 +1507,7 @@ function AnnouncementCard({
             <Text style={card.authorEmoji}>{ann.authorEmoji}</Text>
             <Text style={[card.authorName, { color: ann.authorColor }]}>{ann.authorName}</Text>
             <Text style={card.roleLabel}>{typeInfo.label}</Text>
-            <Text style={card.time}>{date}{time}</Text>
+            <Text style={card.time}>{date}{time}{ann.syncPending ? ' · 待同步' : ''}</Text>
           </View>
           <Text style={card.content}>
             {ann.emoji ? ann.emoji + ' ' : ''}{ann.content}

@@ -56,8 +56,10 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
   const [activeMembership, setActiveMembership] = useState<FamilyMembership | null>(null);
   const [ready, setReady] = useState(false);
   const initialized = useRef(false);
+  const refreshGenerationRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    const refreshGeneration = ++refreshGenerationRef.current;
     await migrateToMultiFamily();
     let all = await getAllMemberships();
     const preferredActiveId = await getActiveFamilyId();
@@ -250,7 +252,16 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     }
     // ───────────────────────────────────────────────────────────────────────────────────────
 
-    const active = all.find(m => m.familyId === preferredActiveId) ?? all[0] ?? null;
+    // A user may switch profiles while reconciliation is in flight. Use the latest
+    // persisted selection and ignore superseded refreshes so an old request cannot
+    // switch the UI/global caches back to the previous family.
+    if (refreshGeneration !== refreshGenerationRef.current) return;
+    const latestActiveId = await getActiveFamilyId();
+    const active = all.find(m => m.familyId === latestActiveId)
+      ?? all.find(m => m.familyId === preferredActiveId)
+      ?? all[0]
+      ?? null;
+    if (refreshGeneration !== refreshGenerationRef.current) return;
     setMemberships(all);
     setActiveMembership(active);
     // Keep every active-family cache in sync only after the authoritative active membership is known.
@@ -318,10 +329,10 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
       try {
         const detail = await cloudGetRoomDetail(serverRoomId);
         if (!detail || !detail.room) {
-          // 服务端返回空，说明 room 已删除
-          await clearScopedFamilyData(familyId);
-          await removeMembership(familyId);
-          await refresh();
+          // cloudGetRoomDetail uses null for network/auth failures as well as absence.
+          // Keep the optimistic cached family; authoritative myRooms reconciliation
+          // will remove it only after the server successfully returns a room list.
+          console.warn('[FamilyContext] switchFamily bg-refresh returned no detail; keeping cached room');
           return;
         }
         // 提前读取当前用户的本地头像，用于 fallback
@@ -396,7 +407,8 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     // If it fails, throw so the caller can show an error to the user.
     const serverRoomId = parseInt(familyId);
     if (!isNaN(serverRoomId)) {
-      await cloudLeaveRoom(serverRoomId); // throws on failure
+      const result = await cloudLeaveRoom(serverRoomId);
+      if (!result?.success) throw new Error('暂时无法退出家庭，请检查网络后重试');
     }
     await removeMembership(familyId);
     await refresh();
@@ -407,7 +419,8 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     // If it fails, throw so the caller can show an error to the user.
     const serverRoomId = parseInt(familyId);
     if (!isNaN(serverRoomId)) {
-      await cloudDeleteRoom(serverRoomId); // throws on failure
+      const result = await cloudDeleteRoom(serverRoomId);
+      if (!result?.success) throw new Error('暂时无法解散家庭，请检查网络后重试');
     }
     await deleteFamilyAndData(familyId);
     await refresh();

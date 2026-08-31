@@ -16,6 +16,7 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
   // We check information_schema first, then add only if missing.
   const columnsToAdd: Array<{ table: string; column: string; definition: string }> = [
     { table: 'announcements',  column: 'localTimeStr', definition: 'varchar(10)' },
+    { table: 'announcements',  column: 'clientId',     definition: 'varchar(100)' },
     { table: 'diary_entries',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'family_members', column: 'birthYear',    definition: 'int' },
     { table: 'check_ins',      column: 'daytimeNap',   definition: 'tinyint(1) NULL' },
@@ -61,6 +62,49 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     }
   } catch (e: any) {
     console.warn('[Database] Migration warning (uq_medications_room_client):', e?.message ?? e);
+  }
+
+  // 公告幂等索引：历史公告 clientId 为空不受影响；新客户端按 roomId + clientId 去重。
+  try {
+    const rows: any[] = await (db as any).execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'announcements'
+         AND INDEX_NAME = 'uq_announcements_room_client'
+       LIMIT 1`
+    );
+    const exists = Array.isArray(rows[0]) ? rows[0].length > 0 : rows.length > 0;
+    if (!exists) {
+      await (db as any).execute(
+        'ALTER TABLE announcements ADD UNIQUE KEY uq_announcements_room_client (roomId, clientId)'
+      );
+      console.log('[Database] Migration: added announcements room/client idempotency index');
+    }
+  } catch (e: any) {
+    console.warn('[Database] Migration warning (uq_announcements_room_client):', e?.message ?? e);
+  }
+
+  // 简报按家庭 + 日期幂等：先保留每组最新一条，再创建唯一索引。
+  try {
+    const rows: any[] = await (db as any).execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'briefings'
+         AND INDEX_NAME = 'uq_briefings_room_date'
+       LIMIT 1`
+    );
+    const exists = Array.isArray(rows[0]) ? rows[0].length > 0 : rows.length > 0;
+    if (!exists) {
+      await (db as any).execute(
+        'DELETE older FROM briefings older INNER JOIN briefings newer ON older.roomId = newer.roomId AND older.date = newer.date AND older.id < newer.id'
+      );
+      await (db as any).execute(
+        'ALTER TABLE briefings ADD UNIQUE KEY uq_briefings_room_date (roomId, date)'
+      );
+      console.log('[Database] Migration: added briefings room/date idempotency index');
+    }
+  } catch (e: any) {
+    console.warn('[Database] Migration warning (uq_briefings_room_date):', e?.message ?? e);
   }
 
   // 日记互动表：CREATE TABLE IF NOT EXISTS 在 MySQL 8.0 可安全重复执行。

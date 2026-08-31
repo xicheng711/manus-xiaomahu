@@ -462,6 +462,7 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
 // ─── CheckinLanding ───────────────────────────────────────────────────────────
 function CheckinLanding({
   checkIn,
+  familyId,
   elderNickname,
   caregiverName = '照顾者',
   onStartMorning,
@@ -471,6 +472,7 @@ function CheckinLanding({
   refreshing = false,
 }: {
   checkIn: DailyCheckIn | null;
+  familyId?: string;
   elderNickname: string;
   caregiverName?: string;
   onStartMorning: () => void;
@@ -485,8 +487,12 @@ function CheckinLanding({
   const completedCount = (morningDone ? 1 : 0) + (eveningDone ? 1 : 0);
 
   useEffect(() => {
-    getAllCheckIns().then(setAllCheckIns);
-  }, [checkIn]);
+    let cancelled = false;
+    getAllCheckIns(familyId)
+      .then(items => { if (!cancelled) setAllCheckIns(items); })
+      .catch(() => { if (!cancelled) setAllCheckIns([]); });
+    return () => { cancelled = true; };
+  }, [checkIn, familyId]);
 
   const morningTime = morningDone && checkIn?.completedAt
     ? new Date(checkIn.completedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -939,8 +945,12 @@ function CheckinScreenContent() {
       );
       return;
     }
+    if (!familyId) {
+      Alert.alert('家庭信息尚未准备好', '请稍后重试。');
+      return;
+    }
     setSaving(true);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
     const data: Partial<DailyCheckIn> & { date: string } = { date: backfillDate || todayStr() };
     if (mode === 'morning') {
       // ── 构建结构化 SleepInput（v4.1 评分引擎输入）────────────────────────
@@ -1000,7 +1010,6 @@ function CheckinScreenContent() {
     // 立即刷新 checkIn 状态，确保返回 landing 时显示最新状态
     const refreshed = backfillDate ? await getCheckInByDate(backfillDate, familyId) : await getTodayCheckIn(familyId);
     if (refreshed) setCheckIn(refreshed);
-    setSaving(false);
     if (mode === 'morning') {
       if (Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1051,6 +1060,11 @@ function CheckinScreenContent() {
       Animated.spring(doneScale, { toValue: 1, speed: 8, bounciness: 10, useNativeDriver: true }),
     ]).start();
     setTimeout(() => setShowCelebration(false), 2500);
+    } catch (error: any) {
+      Alert.alert('打卡没有保存成功', error?.message || '请稍后重试，刚才填写的内容仍为你保留。');
+    } finally {
+      setSaving(false);
+    }
   }
 
   // ── Done State ──
@@ -1205,6 +1219,7 @@ function CheckinScreenContent() {
       <ScreenContainer containerClassName="bg-[#F7F1F3]">
         <CheckinLanding
           checkIn={checkIn}
+          familyId={familyId}
           elderNickname={elderNickname}
           caregiverName={caregiverName}
           onStartMorning={() => { setStep(0); setMode('morning'); }}

@@ -325,8 +325,33 @@ export async function getDiaryInteractionSummaries(roomId: number, diaryIds: num
 export async function createAnnouncement(data: InsertAnnouncement) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  if (data.clientId) {
+    await db.insert(announcements).values(data).onDuplicateKeyUpdate({
+      set: {
+        content: data.content,
+        emoji: data.emoji,
+        type: data.type,
+        date: data.date,
+        localTimeStr: data.localTimeStr,
+      },
+    });
+    const rows = await db.select().from(announcements)
+      .where(and(eq(announcements.roomId, data.roomId), eq(announcements.clientId, data.clientId)))
+      .limit(1);
+    if (!rows[0]) throw new Error("Announcement upsert failed");
+    return rows[0];
+  }
   const result = await db.insert(announcements).values(data);
   return { id: result[0].insertId, ...data };
+}
+
+export async function getAnnouncementByClientId(roomId: number, clientId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(announcements)
+    .where(and(eq(announcements.roomId, roomId), eq(announcements.clientId, clientId)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function getAnnouncementsByRoom(roomId: number, limit = 50) {
@@ -349,8 +374,12 @@ export async function addReaction(announcementId: number, reactions: any) {
 export async function createBriefing(data: InsertBriefing) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(briefings).values(data);
-  return { id: result[0].insertId, ...data };
+  await db.insert(briefings).values(data).onDuplicateKeyUpdate({ set: data });
+  const rows = await db.select().from(briefings)
+    .where(and(eq(briefings.roomId, data.roomId), eq(briefings.date, data.date)))
+    .limit(1);
+  if (!rows[0]) throw new Error("Briefing upsert failed");
+  return rows[0];
 }
 
 export async function getBriefingsByRoom(roomId: number, limit = 14) {

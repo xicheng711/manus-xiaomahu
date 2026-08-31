@@ -6,14 +6,14 @@ import {
   getProfile, getFamilyProfile,
   addOrUpdateMembership, saveFamilyRoom, saveFamilyProfile,
   setActiveFamilyId, setActiveRoomIdCache,
-  setCurrentMember, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, getActiveMembership,
-  FamilyMembership, FamilyRoom,
+  setCurrentMember, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal,
+  mergeCloudAnnouncementsIntoLocal, mergeCloudBriefingsIntoLocal, syncPendingBriefings, mergeCloudMedicationsIntoLocal,
+  getActiveMembership, FamilyMembership, FamilyRoom,
 } from '@/lib/storage';
 import {
   cloudGetMyRooms, cloudGetRoomDetail, setCloudSyncState,
   cloudGetCheckIns, cloudGetDiaries, cloudGetAnnouncements, cloudGetBriefings, cloudGetMedications,
 } from '@/lib/cloud-sync';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_BASE = getApiBaseUrl();
 
@@ -199,6 +199,8 @@ async function navigateAfterLogin(router: Router) {
       // 对每个 room 都拉取，确保所有家庭数据都能恢复
       const prefetchRoom = async (roomIdNum: number, roomIdStr: string) => {
         try {
+          // 简报可能在断网时已本地生成；先幂等重试，再读取服务器快照。
+          await syncPendingBriefings(roomIdStr).catch(() => {});
           const [checkInsData, diariesData, announcementsData, briefingsData, medsData] = await Promise.all([
             cloudGetCheckIns(roomIdNum, 60),
             cloudGetDiaries(roomIdNum, 100),
@@ -206,9 +208,6 @@ async function navigateAfterLogin(router: Router) {
             cloudGetBriefings(roomIdNum, 14),
             cloudGetMedications(roomIdNum),
           ]);
-
-          // Helper: room-scoped key
-          const rk = (base: string) => `${base}:${roomIdStr}`;
 
           // Write check-ins：统一按日期安全合并，保留小睡、睡眠分段、待同步记录和分页外历史。
           // 不能手工映射后整表覆盖，否则 App 次日登录恢复时会把 napMinutes 等字段删除。
@@ -222,58 +221,17 @@ async function navigateAfterLogin(router: Router) {
             await mergeCloudDiariesIntoLocal(diariesData, roomIdStr);
           }
 
-          // Write announcements
+          // Write announcements/briefings/medications through merge-only helpers.
+          // Network failure is null; a successful empty array is authoritative, while
+          // local pending writes and non-overlapping history are preserved as required.
           if (Array.isArray(announcementsData)) {
-            const localAnnouncements = announcementsData.map((a: any) => ({
-              id: String(a.id),
-              serverId: a.id,
-              content: a.content,
-              emoji: a.emoji,
-              type: a.type ?? 'daily',
-              date: a.date,
-              authorName: a.authorName,
-              authorEmoji: a.authorEmoji,
-              authorColor: a.authorColor,
-              reactions: a.reactions ?? {},
-              localTimeStr: a.localTimeStr ?? undefined,  // 保留发布者本地时间，避免 fallback 到 UTC createdAt
-              createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
-            }));
-            await AsyncStorage.setItem(rk('family_announcements_v1'), JSON.stringify(localAnnouncements));
+            await mergeCloudAnnouncementsIntoLocal(announcementsData, roomIdStr);
           }
-
-          // Write briefings
           if (Array.isArray(briefingsData)) {
-            const localBriefings = briefingsData.map((b: any) => ({
-              id: String(b.id),
-              date: b.date,
-              careScore: b.careScore,
-              summary: b.summary,
-              encouragement: b.encouragement,
-              highlights: b.highlights ?? [],
-              attention: b.attention,
-              shareText: b.shareText,
-              generatedAt: b.generatedAt,
-              checkInDate: b.checkInDate,
-            }));
-            await AsyncStorage.setItem(rk('care_briefings_v1'), JSON.stringify(localBriefings));
+            await mergeCloudBriefingsIntoLocal(briefingsData, roomIdStr);
           }
-
-          // Write medications
           if (Array.isArray(medsData)) {
-            const localMeds = medsData.map((m: any) => ({
-              id: String(m.id),
-              serverMedId: m.id,
-              name: m.name,
-              dosage: m.dosage,
-              frequency: m.frequency,
-              times: m.times ?? [],
-              notes: m.notes,
-              icon: m.icon ?? '💊',
-              active: m.active ?? true,
-              reminderEnabled: m.reminderEnabled ?? true,
-              color: m.color,
-            }));
-            await AsyncStorage.setItem(rk('medications'), JSON.stringify(localMeds));
+            await mergeCloudMedicationsIntoLocal(medsData, roomIdStr);
           }
 
           console.log('[navigateAfterLogin] Pre-fetched data for room', roomIdStr,

@@ -287,7 +287,8 @@ describe('Idempotent notifications and server-side room isolation', () => {
   const storage = read('lib/storage.ts');
 
   it('does not notify again when an already-published diary is retried', () => {
-    expect(router).toContain('const newlyPublished = input.conversationFinished === true && existingEntry.conversationFinished !== true');
+    expect(router).toContain('if (existingEntry.conversationFinished === true)');
+    expect(router).toContain('const newlyPublished = input.conversationFinished === true');
     expect(router).toContain('if (newlyPublished && shouldSendDiaryNotification');
   });
 
@@ -321,7 +322,7 @@ describe('Final family-profile and cache contract safeguards', () => {
 
   it('binds family profile and briefing cloud updates to the captured family id', () => {
     expect(storage).toContain('cloudUpdateElderProfile(merged as any, rid ? Number(rid) : undefined)');
-    expect(storage).toContain('cloudSaveBriefing(briefing, rid ? Number(rid) : undefined)');
+    expect(storage).toContain('cloudSaveBriefing(briefing, Number(rid))');
   });
 
   it('distinguishes briefing and announcement network failure from confirmed empty data', () => {
@@ -472,7 +473,8 @@ describe('Final interaction and medication race-condition safeguards', () => {
     expect(router).toContain('clientId: z.string().min(1).max(100).optional()');
     expect(familyDb).toContain('eq(medications.clientId, values.clientId)');
     expect(cloud).toContain("clientId: String(med.id || '').replace(/^cloud_/, '') || undefined");
-    expect(medication).toContain('remoteClientId ? local.find');
+    expect(storage).toContain('remoteClientId ? local.find');
+    expect(medication).toContain('mergeCloudMedicationsIntoLocal(cloudMeds, requestedFamilyId)');
   });
 
   it('serializes medication writes and waits before deletion so stale requests cannot recreate deleted medicine', () => {
@@ -680,5 +682,71 @@ describe('Cross-day nap persistence and cloud cache safety', () => {
   it('does not directly overwrite room check-in caches from pages or login restore', () => {
     const combined = [authProviders, home, checkin, family, joinerHome].join('\n');
     expect(combined).not.toMatch(/setItem\(`daily_checkins_v2:\$\{/);
+  });
+});
+
+
+describe('Final end-to-end audit safeguards', () => {
+  const storage = read('lib/storage.ts');
+  const cloud = read('lib/cloud-sync.ts');
+  const familyContext = read('lib/family-context.tsx');
+  const family = read('app/(tabs)/family.tsx');
+  const medication = read('app/(tabs)/medication.tsx');
+  const checkin = read('app/(tabs)/checkin.tsx');
+  const share = read('app/share.tsx');
+  const schema = read('drizzle/schema.ts');
+  const db = read('server/db.ts');
+  const router = read('server/family-router.ts');
+
+  it('keeps family membership local until leave or dissolve is confirmed by the server', () => {
+    expect(familyContext).toContain("if (!result?.success) throw new Error('暂时无法退出家庭");
+    expect(familyContext).toContain("if (!result?.success) throw new Error('暂时无法解散家庭");
+    expect(familyContext).toContain('switchFamily bg-refresh returned no detail; keeping cached room');
+    expect(familyContext).toContain('const refreshGeneration = ++refreshGenerationRef.current');
+  });
+
+  it('makes announcement posting room-scoped, retryable, and idempotent', () => {
+    expect(storage).toContain('export async function syncPendingAnnouncements(roomId: string)');
+    expect(storage).toContain('export async function mergeCloudAnnouncementsIntoLocal');
+    expect(cloud).toContain('clientId: params.clientId');
+    expect(schema).toContain('uniqueIndex("uq_announcements_room_client")');
+    expect(db).toContain('uq_announcements_room_client (roomId, clientId)');
+    expect(router).toContain('getAnnouncementByClientId(input.roomId, input.clientId)');
+    expect(family).toContain("ann.syncPending ? ' · 待同步' : ''");
+  });
+
+  it('keeps published diaries immutable and restores a missing authenticated user id safely', () => {
+    const diaryEdit = read('app/diary-edit.tsx');
+    expect(router).toContain('if (existingEntry.conversationFinished === true)');
+    expect(router).toContain('return { success: true, diaryId: input.serverDiaryId }');
+    expect(diaryEdit).toContain('const authenticatedUser = await getUserInfo()');
+    expect(diaryEdit).toContain('await setCloudSyncState({ userId: authenticatedUser.id })');
+    expect(diaryEdit).toContain('entry.authorUserId && (!currentUserId || entry.authorUserId !== currentUserId)');
+  });
+
+  it('never allows a successful stale medication read to replace an unsynced local edit', () => {
+    expect(storage).toContain('export async function mergeCloudMedicationsIntoLocal');
+    expect(storage).toContain('if (existing?.syncPending)');
+    expect(medication).toContain('mergeCloudMedicationsIntoLocal(cloudMeds, requestedFamilyId)');
+    expect(medication).toContain('if (savingMedication) return');
+    expect(medication).toContain('disabled={savingMedication}');
+  });
+
+  it('binds check-in history and briefing writes to the initiating family', () => {
+    expect(checkin).toContain('getAllCheckIns(familyId)');
+    expect(checkin).toContain("Alert.alert('打卡没有保存成功'");
+    expect(share).toContain('activeFamilyRef.current !== requestedFamilyId');
+    expect(share).toContain('date: recordDate');
+    expect(share).toContain('syncPendingBriefings(requestedFamilyId)');
+    expect(storage).toContain('export async function syncPendingBriefings(roomId: string)');
+    expect(storage).toContain('if (existing?.syncPending) continue');
+    expect(schema).toContain('uniqueIndex("uq_briefings_room_date")');
+    expect(db).toContain('uq_briefings_room_date (roomId, date)');
+  });
+
+  it('uses the shared cross-timezone range and never treats cloud read failure as an empty family dataset', () => {
+    expect(share).toContain('resolveSharedDataAnchorDate(cloudCIsForWeekly)');
+    expect(share).toContain('Array.isArray(cloudResult) ? cloudResult : []');
+    expect(family).not.toMatch(/cloudGet(?:CheckIns|Diaries)[^\n]*\.catch\(\(\) => \[\]\)/);
   });
 });

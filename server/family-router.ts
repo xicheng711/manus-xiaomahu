@@ -14,7 +14,7 @@ import {
   createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
   getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
   deleteDiaryCommentByAuthor, getDiaryInteractionSummaries,
-  createAnnouncement, getAnnouncementsByRoom,
+  createAnnouncement, getAnnouncementByClientId, getAnnouncementsByRoom,
   deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
   upsertMedication, getMedicationsByRoom, deleteMedication,
@@ -456,6 +456,11 @@ export const familyRouter = router({
         const existingEntry = await getDiaryEntryForInteraction(input.roomId, input.serverDiaryId);
         if (!existingEntry) throw new Error("日记不存在或已删除");
         if (existingEntry.authorUserId !== userId) throw new Error("只能修改自己发布的日记");
+        // Published diaries are immutable. A response-lost retry may resend the same payload;
+        // acknowledge it idempotently without changing the published content or conversation.
+        if (existingEntry.conversationFinished === true) {
+          return { success: true, diaryId: input.serverDiaryId };
+        }
         await updateDiaryEntry(input.serverDiaryId, {
           content: input.content,
           moodEmoji: input.moodEmoji ?? null,
@@ -472,7 +477,7 @@ export const familyRouter = router({
           localTimeStr: input.localTimeStr ?? null,
         });
         // 只有服务器状态首次从未发布变为已发布时通知；断网重试和后续幂等更新不重复提醒。
-        const newlyPublished = input.conversationFinished === true && existingEntry.conversationFinished !== true;
+        const newlyPublished = input.conversationFinished === true;
         if (newlyPublished && shouldSendDiaryNotification(input.serverDiaryId)) {
           const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
           const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
@@ -654,6 +659,7 @@ export const familyRouter = router({
   postAnnouncement: protectedProcedure
     .input(z.object({
       roomId: z.number(),
+      clientId: z.string().min(1).max(100).optional(),
       content: z.string(),
       emoji: z.string().optional(),
       type: z.enum(["news", "visit", "medical", "daily", "reminder"]).default("daily"),
@@ -664,8 +670,12 @@ export const familyRouter = router({
       const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
 
+      const existingAnnouncement = input.clientId
+        ? await getAnnouncementByClientId(input.roomId, input.clientId)
+        : null;
       const announcement = await createAnnouncement({
         roomId: input.roomId,
+        clientId: input.clientId ?? null,
         authorUserId: userId,
         authorName: member.name,
         authorEmoji: member.emoji,
@@ -677,16 +687,18 @@ export const familyRouter = router({
         localTimeStr: input.localTimeStr ?? null,
       });
 
-      // Notify all other family members about the new announcement
-      const announcementPreview = input.content.length > 50 ? input.content.slice(0, 50) + '...' : input.content;
-      await notifyRoomMembers(
-        input.roomId,
-        userId,
-        `${member.emoji} ${member.name} 有新消息要告诉你`,
-        announcementPreview,
-        { type: 'announcement', screen: 'family', roomId: input.roomId },
-        'postAnnouncement',
-      );
+      // Idempotent retries reuse the same announcement and must not send another push.
+      if (!existingAnnouncement) {
+        const announcementPreview = input.content.length > 50 ? input.content.slice(0, 50) + '...' : input.content;
+        await notifyRoomMembers(
+          input.roomId,
+          userId,
+          `${member.emoji} ${member.name} 有新消息要告诉你`,
+          announcementPreview,
+          { type: 'announcement', screen: 'family', roomId: input.roomId },
+          'postAnnouncement',
+        );
+      }
 
       return { success: true, announcement };
     }),
@@ -697,7 +709,15 @@ export const familyRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
-      return getAnnouncementsByRoom(input.roomId, input.limit);
+      const [rows, members] = await Promise.all([
+        getAnnouncementsByRoom(input.roomId, input.limit),
+        getRoomMembers(input.roomId),
+      ]);
+      const memberIdByUserId = new Map(members.map(member => [member.userId, String(member.id)]));
+      return rows.map(row => ({
+        ...row,
+        authorId: memberIdByUserId.get(row.authorUserId) ?? String(row.authorUserId),
+      }));
     }),
 
   // ─── Briefings ─────────────────────────────────────────────────────────

@@ -453,6 +453,7 @@ export async function cloudGetDiaryInteractionSummaries(diaryIds: number[], room
 
 /** Post a family announcement */
 export async function cloudPostAnnouncement(params: {
+  clientId?: string;
   content: string;
   emoji?: string;
   type?: 'news' | 'visit' | 'medical' | 'daily' | 'reminder';
@@ -466,6 +467,7 @@ export async function cloudPostAnnouncement(params: {
     const client = getClient();
     return await client.family.postAnnouncement.mutate({
       roomId,
+      clientId: params.clientId,
       content: params.content,
       emoji: params.emoji,
       type: params.type ?? 'daily',

@@ -15,7 +15,8 @@ import {
   getProfile, getAllCheckIns, getDiaryEntries, getFamilyAnnouncements,
   saveFamilyAnnouncement,
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember, mergeCloudDiariesIntoLocal,
-  mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap,
+  mergeCloudCheckInsIntoLocal, mergeCloudAnnouncementsIntoLocal, syncPendingAnnouncements,
+  getNapMinutes, hasRecordedNap,
 } from '@/lib/storage';
 import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements, cloudGetRoomDetail, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { TrendChart } from '@/components/trend-chart';
@@ -265,11 +266,12 @@ const ANNOUNCE_TYPES = [
   { key: 'daily',    label: '🌿 日常', emoji: '🌿' },
 ] as const;
 
-function PostAnnouncementModal({ visible, onClose, onPosted, member }: {
+function PostAnnouncementModal({ visible, onClose, onPosted, member, roomId }: {
   visible: boolean;
   onClose: () => void;
   onPosted: () => void;
   member: FamilyMember | null;
+  roomId: string;
 }) {
   const [content, setContent] = useState('');
   const [type, setType] = useState<typeof ANNOUNCE_TYPES[number]['key']>('news');
@@ -288,7 +290,7 @@ function PostAnnouncementModal({ visible, onClose, onPosted, member }: {
         content: content.trim(),
         emoji: ANNOUNCE_TYPES.find(t => t.key === type)?.emoji,
         type,
-      });
+      }, roomId);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setDone(true);
     } catch (error: any) {
@@ -526,36 +528,14 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       return true;
     });
     setAllDiaries(cleanDiaries);
-    // 公告也从云端拉取，确保看到所有家庭成员发的公告
-    // 关键修复：云端 localTimeStr 为空时，从本地缓存补充（防止数据库迁移未完成或竞态导致时间显示错误）
-    let announcements: FamilyAnnouncement[] = [];
+    // 公告也从云端拉取；先重试当前家庭待同步公告，再仅在服务器明确返回数组时安全合并。
+    let announcements: FamilyAnnouncement[] = await getFamilyAnnouncements(30, requestedFamilyId);
     try {
       const roomIdNum2 = parseInt(requestedFamilyId);
+      await syncPendingAnnouncements(requestedFamilyId);
       const cloudAnns = await cloudGetAnnouncements(roomIdNum2, 30);
       if (Array.isArray(cloudAnns)) {
-        // 拉取本地缓存，用于补充云端缺失的 localTimeStr
-        const localAnns = await getFamilyAnnouncements(30, requestedFamilyId);
-        // 本地 id 是 generateId() 随机字符串，云端 id 是数据库自增整数，两者永远不匹配
-        // 必须用 content+date+authorName 三元组匹配
-        const localAnnsMap = new Map(localAnns.map((la: FamilyAnnouncement) => [
-          `${la.content}|${la.date}|${la.authorName}`, la
-        ]));
-        announcements = (cloudAnns as any[]).map((c: any) => {
-          const cloudId = String(c.id);
-          const contentKey = `${c.content ?? ''}|${c.date ?? ''}|${c.authorName ?? ''}`;
-          const localMatch = localAnnsMap.get(contentKey);
-          return {
-            ...c,
-            id: cloudId,
-            localTimeStr: c.localTimeStr ?? localMatch?.localTimeStr ?? undefined,
-            createdAt: c.createdAt instanceof Date
-              ? c.createdAt.toISOString()
-              : (typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString()),
-          } as FamilyAnnouncement;
-        });
-        await AsyncStorage.setItem(`family_announcements_v1:${requestedFamilyId}`, JSON.stringify(announcements));
-      } else {
-        announcements = await getFamilyAnnouncements(30, requestedFamilyId);
+        announcements = await mergeCloudAnnouncementsIntoLocal(cloudAnns, requestedFamilyId);
       }
     } catch {
       announcements = await getFamilyAnnouncements(30, requestedFamilyId);

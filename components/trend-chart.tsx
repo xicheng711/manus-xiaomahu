@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
 import { DailyCheckIn, DiaryEntry, getNapMinutes, hasRecordedNap } from '@/lib/storage';
 import { AppColors } from '@/lib/design-tokens';
+import { resolveSharedDataAnchorDate } from '@/lib/shared-date-range';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_W = SCREEN_WIDTH - 80;
@@ -24,11 +25,10 @@ interface TrendChartProps {
   caregiverName?: string;
 }
 
-function getWeekRange(offset: number): { start: Date; end: Date; label: string } {
-  // 以今天为终点（最右边），往前推6天，今天始终在最右边
-  const now = new Date();
-  const endOfWeek = new Date(now);
-  endOfWeek.setDate(now.getDate() + (offset * 7));
+function getWeekRange(offset: number, anchorDate = new Date()): { start: Date; end: Date; label: string } {
+  // 当前周以查看者今天或最多领先一天的家庭最新记录为终点。
+  const endOfWeek = new Date(anchorDate);
+  endOfWeek.setDate(anchorDate.getDate() + (offset * 7));
   endOfWeek.setHours(23, 59, 59, 999);
   const startOfWeek = new Date(endOfWeek);
   startOfWeek.setDate(endOfWeek.getDate() - 6);
@@ -526,8 +526,9 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   const [offset, setOffset] = useState(0);
 
   const checkInMap = new Map(checkIns.map(c => [c.date, c]));
+  const anchorDate = resolveSharedDataAnchorDate(checkIns);
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = anchorDate.getFullYear();
   const yearLabel = `${currentYear}年`;
 
   const yearSleepData = Array.from({ length: 12 }, (_, m) => {
@@ -554,7 +555,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
     return { label, taken: total > 0 ? taken >= total / 2 : null };
   });
 
-  const range = getWeekRange(offset);
+  const range = getWeekRange(offset, anchorDate);
   const dateRange = buildDateRange(range.start, range.end);
   const periodLabel = offset === 0 ? '近7天' : `${Math.abs(offset) * 7}天前`;
 
@@ -652,7 +653,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   const avgCaregiverMood = cgMoodDates.length > 0
     ? cgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / cgMoodDates.length : 0;
 
-  const prevRange = getWeekRange(offset - 1);
+  const prevRange = getWeekRange(offset - 1, anchorDate);
   const prevDateRange = buildDateRange(prevRange.start, prevRange.end);
   const prevCgMoodDates = prevDateRange.filter(d => getMoodScore(d) > 0);
   const prevAvgCaregiverMood = prevCgMoodDates.length > 0

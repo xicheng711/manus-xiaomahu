@@ -9,7 +9,7 @@ import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, getNapMinutes, hasRecordedNap, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, syncPendingBriefings, getNapMinutes, hasRecordedNap, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
@@ -17,6 +17,7 @@ import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 import { useWeather } from '@/lib/weather-context';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetCheckIns, cloudGetBriefings, cloudGetRoomDetail } from '@/lib/cloud-sync';
+import { buildRecentDateKeys, localDateKey, parseDateKeyAtNoon, resolveSharedDataAnchorDate } from '@/lib/shared-date-range';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -33,34 +34,39 @@ const CACHE_KEY_PREFIX = 'share_briefing_cache_v1';
 type BriefingCacheEntry = { date: string; briefing: any; shareText: string; checkIn: any };
 const _briefingCacheMap: Map<string, BriefingCacheEntry> = new Map();
 function getTodayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return localDateKey(new Date());
+}
+function isCurrentFamilyRecordDate(date: string) {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return date === localDateKey(now) || date === localDateKey(tomorrow);
 }
 function getCacheKey(familyId?: string) { return familyId ? `${CACHE_KEY_PREFIX}:${familyId}` : CACHE_KEY_PREFIX; }
 function getCachedBriefing(familyId?: string) {
   const entry = _briefingCacheMap.get(getCacheKey(familyId));
-  if (entry && entry.date === getTodayKey()) {
+  if (entry && isCurrentFamilyRecordDate(entry.date)) {
     return { ...entry, checkIn: fixMoodScore(entry.checkIn) };
   }
   return null;
 }
 function setCachedBriefing(briefing: any, shareText: string, checkIn?: any, familyId?: string) {
   const key = getCacheKey(familyId);
-  const entry: BriefingCacheEntry = { date: getTodayKey(), briefing, shareText, checkIn: checkIn || null };
+  const entry: BriefingCacheEntry = { date: checkIn?.date || getTodayKey(), briefing, shareText, checkIn: checkIn || null };
   _briefingCacheMap.set(key, entry);
   AsyncStorage.setItem(key, JSON.stringify(entry)).catch(() => {});
 }
 async function loadPersistedBriefing(familyId?: string) {
   const key = getCacheKey(familyId);
   const memEntry = _briefingCacheMap.get(key);
-  if (memEntry && memEntry.date === getTodayKey()) {
+  if (memEntry && isCurrentFamilyRecordDate(memEntry.date)) {
     return { ...memEntry, checkIn: fixMoodScore(memEntry.checkIn) };
   }
   try {
     const raw = await AsyncStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.date === getTodayKey()) {
+      if (isCurrentFamilyRecordDate(parsed.date)) {
         _briefingCacheMap.set(key, parsed);
         return { ...parsed, checkIn: fixMoodScore(parsed.checkIn) };
       }
@@ -741,8 +747,10 @@ export default function ShareScreen() {
   const [briefing, setBriefing] = useState<any>(null);
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [backfillNotice, setBackfillNotice] = useState<string | null>(null);
-  const { activeMembership } = useFamilyContext();
+  const { activeMembership, memberships } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  const activeFamilyRef = useRef<string | undefined>(familyId);
+  activeFamilyRef.current = familyId;
   const [loading, setLoading] = useState(!getCachedBriefing(familyId));
   const loadingRef = useRef(false);
   const [generating, setGenerating] = useState(false);
@@ -787,6 +795,7 @@ export default function ShareScreen() {
       prevFamilyIdRef.current = familyId;
       loadedRef.current = false;
       // 清除旧家庭的内存缓存（新家庭的缓存由 loadAndGenerate 自行加载）
+      loadingRef.current = false;
       setBriefing(null);
       setShareText('');
       setError(null); errorRef.current = null;
@@ -824,14 +833,17 @@ export default function ShareScreen() {
   }, []));
 
   async function loadHistoryDate(dateStr: string) {
+    const requestedFamilyId = familyId;
+    if (!requestedFamilyId) return;
     setError(null); errorRef.current = null;
     setLoading(true);
     try {
       const [userProfile, familyProfile, legacyProfile] = await Promise.all([
         getUserProfile(),
-        getFamilyProfile(familyId),
-        getProfile(),
+        getFamilyProfile(requestedFamilyId),
+        memberships.length === 1 ? getProfile() : Promise.resolve(null),
       ]);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       let nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       // Joiner 应显示主照顾者名字，从 room members 找 isCreator 成员
       let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
@@ -839,8 +851,8 @@ export default function ShareScreen() {
       let elderPhotoUri = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
       // 从云端获取被照者昵称、主照顾者名字、被照者头像（解决 Joiner 本地无档案时显示「家人」的问题）
       try {
-        const roomIdH = familyId ? parseInt(familyId) : null;
-        if (roomIdH && !isNaN(roomIdH)) {
+        const roomIdH = parseInt(requestedFamilyId);
+        if (!isNaN(roomIdH)) {
           const detailH = await cloudGetRoomDetail(roomIdH);
           if (detailH?.room?.elderName) nickname = detailH.room.elderName;
           if (detailH?.room?.elderPhotoUri) elderPhotoUri = detailH.room.elderPhotoUri;
@@ -850,20 +862,23 @@ export default function ShareScreen() {
           }
         }
       } catch (e) { /* 网络不可用时降级到本地缓存 */ }
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
       setElderPhotoUri(elderPhotoUri);
 
-      let ci = await getCheckInByDate(dateStr, familyId);
+      let ci = await getCheckInByDate(dateStr, requestedFamilyId);
       // Joiner 本地可能没有历史打卡数据，从云端拉取
       let cloudCIsHistory: any[] = [];
       if (!ci || isJoiner) {
-        cloudCIsHistory = (await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30)) as any[];
+        const cloudResult = await cloudGetCheckIns(Number(requestedFamilyId), 30);
+        cloudCIsHistory = Array.isArray(cloudResult) ? cloudResult : [];
         if (!ci) {
           ci = cloudCIsHistory.find((c: any) => c.date === dateStr) ?? null;
         }
       }
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       if (!ci) {
         setError(`${dateStr} 无打卡记录`); errorRef.current = `${dateStr} 无打卡记录`;
         setLoading(false);
@@ -877,11 +892,8 @@ export default function ShareScreen() {
 
       // 加载周数据：Joiner 用云端打卡构建，主照顾者用本地数据
       if (isJoiner && cloudCIsHistory.length > 0) {
-        const today7 = new Date();
-        const joinerWeekly = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(today7);
-          d.setDate(d.getDate() - i);
-          const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const anchor = resolveSharedDataAnchorDate(cloudCIsHistory);
+        const joinerWeekly = buildRecentDateKeys(anchor).map(dStr => {
           const cItem = cloudCIsHistory.find((c: any) => c.date === dStr);
           return {
             date: dStr,
@@ -893,7 +905,7 @@ export default function ShareScreen() {
         });
         setWeeklyData(joinerWeekly);
       } else {
-        const weekly = await getWeeklySleepData(7, familyId);
+        const weekly = await getWeeklySleepData(7, requestedFamilyId);
         setWeeklyData(weekly.map(d => ({ date: d.date, sleepHours: d.sleepHours, awakeHours: d.awakeHours, nightWakings: d.nightWakings, napMinutes: d.napMinutes })));
       }
       setWeeklyLoading(false);
@@ -902,17 +914,24 @@ export default function ShareScreen() {
       setBriefing(fallback);
       setShareText(fallback.shareText);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败'); errorRef.current = e instanceof Error ? e.message : '加载失败';
-      setWeeklyLoading(false);
+      if (activeFamilyRef.current === requestedFamilyId) {
+        setError(e instanceof Error ? e.message : '加载失败'); errorRef.current = e instanceof Error ? e.message : '加载失败';
+        setWeeklyLoading(false);
+      }
     } finally {
-      setLoading(false);
-      loadingRef.current = false;
+      if (activeFamilyRef.current === requestedFamilyId) {
+        setLoading(false);
+        loadingRef.current = false;
+      }
     }
   }
   async function recheckBackfill() {
+    const requestedFamilyId = familyId;
+    if (!requestedFamilyId) return;
     try {
-      const today = await getTodayCheckIn(familyId);
-      const yesterday = await getYesterdayCheckIn(familyId);
+      const today = await getTodayCheckIn(requestedFamilyId);
+      const yesterday = await getYesterdayCheckIn(requestedFamilyId);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       setTodayCi(today);
       setYesterdayCi(yesterday);
     } catch {}
@@ -920,18 +939,20 @@ export default function ShareScreen() {
 
   // 静默刷新：不触发全屏 loading，只在打卡已完成时更新内容（防止闪烁）
   async function loadAndGenerateSilent() {
-    if (loadingRef.current) return;
+    const requestedFamilyId = familyId;
+    if (!requestedFamilyId || loadingRef.current) return;
     try {
-      let checkIn = await getTodayCheckIn(familyId);
+      let checkIn = await getTodayCheckIn(requestedFamilyId);
       if (!checkIn && isJoiner) {
         // 跨时区设计：始终用最新打卡（cloudCIs[0]），不受 Joiner 本地日期影响
-        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        checkIn = (cloudCIs as any[])?.[0] ?? null;
+        const cloudCIs = await cloudGetCheckIns(Number(requestedFamilyId));
+        checkIn = Array.isArray(cloudCIs) ? cloudCIs[0] ?? null : null;
       }
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       // 如果打卡已完成，则强制刷新内容
       if (checkIn?.morningDone && checkIn?.eveningDone) {
-        _briefingCacheMap.delete(getCacheKey(familyId));
-        AsyncStorage.removeItem(getCacheKey(familyId)).catch(() => {});
+        _briefingCacheMap.delete(getCacheKey(requestedFamilyId));
+        AsyncStorage.removeItem(getCacheKey(requestedFamilyId)).catch(() => {});
         loadAndGenerate(true);
       }
       // 否则不做任何事，保持当前错误提示不闪烁
@@ -939,21 +960,25 @@ export default function ShareScreen() {
   }
 
   async function loadAndGenerate(forceRefresh = false) {
-    if (loadingRef.current) return;
+    const requestedFamilyId = familyId;
+    if (!requestedFamilyId || loadingRef.current) return;
     loadingRef.current = true;
+    await syncPendingBriefings(requestedFamilyId).catch(() => {});
+    if (activeFamilyRef.current !== requestedFamilyId) return;
     setError(null); errorRef.current = null;
     // 立即显示 loading，防止前置检查期间 UI 短暂显示旧 error 或空白（闪屏来源）
     setLoading(true);
     // ── 最前置 early return：未完成打卡不走任何生成/缓存流程 ──
     // Joiner 本地没有打卡数据，需要从云端拉取
     try {
-      let earlyCheckIn = await getTodayCheckIn(familyId);
+      let earlyCheckIn = await getTodayCheckIn(requestedFamilyId);
       if (!earlyCheckIn && isJoiner) {
         // Joiner: 从云端拉取打卡，始终用最新一条（cloudCIs[0]），不受 Joiner 本地日期影响
         // 跨时区设计：主照顾者的打卡 date 是主照顾者的本地日期，Joiner 只关心"最新的"
-        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined);
-        earlyCheckIn = (cloudCIs as any[])?.[0] ?? null;
+        const cloudCIs = await cloudGetCheckIns(Number(requestedFamilyId));
+        earlyCheckIn = Array.isArray(cloudCIs) ? cloudCIs[0] ?? null : null;
       }
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       if (!earlyCheckIn?.morningDone) {
         setLoading(false);
         setBriefing(null);
@@ -980,7 +1005,7 @@ export default function ShareScreen() {
       return;
     }
     if (!forceRefresh) {
-      const memCached = getCachedBriefing(familyId);
+      const memCached = getCachedBriefing(requestedFamilyId);
       if (memCached) {
         setBriefing(memCached.briefing);
         setMergedBriefing(memCached.briefing); // 保存今日简报
@@ -998,7 +1023,7 @@ export default function ShareScreen() {
     }
 
     if (!forceRefresh) {
-      const persisted = await loadPersistedBriefing(familyId);
+      const persisted = await loadPersistedBriefing(requestedFamilyId);
       if (persisted) {
         setBriefing(persisted.briefing);
         setMergedBriefing(persisted.briefing); // 保存今日简报
@@ -1019,9 +1044,10 @@ export default function ShareScreen() {
     try {
       const [userProfile, familyProfile, legacyProfile] = await Promise.all([
         getUserProfile(),
-        getFamilyProfile(familyId),
-        getProfile(),
+        getFamilyProfile(requestedFamilyId),
+        memberships.length === 1 ? getProfile() : Promise.resolve(null),
       ]);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       let nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
       // Joiner 应显示主照顾者名字，从 room members 找 isCreator 成员
       let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
@@ -1029,8 +1055,8 @@ export default function ShareScreen() {
       let elderPhotoUri2 = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
       // 合并两次 cloudGetRoomDetail 调用为一次，同时获取被照者昵称、主照顾者名字、被照者头像
       try {
-        const roomIdX = familyId ? parseInt(familyId) : null;
-        if (roomIdX && !isNaN(roomIdX)) {
+        const roomIdX = parseInt(requestedFamilyId);
+        if (!isNaN(roomIdX)) {
           const detailX = await cloudGetRoomDetail(roomIdX);
           // 被照者昵称：云端 room.elderName 优先（解决 joiner 本地无档案时显示「家人」的问题）
           if (detailX?.room?.elderName) nickname = detailX.room.elderName;
@@ -1043,24 +1069,26 @@ export default function ShareScreen() {
           if (detailX?.room?.elderPhotoUri) elderPhotoUri2 = detailX.room.elderPhotoUri;
         }
       } catch (e) { /* 网络不可用时降级到本地缓存 */ }
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
       setElderPhotoUri(elderPhotoUri2);
 
-      let today = await getTodayCheckIn(familyId || undefined);
-      let yesterday = await getYesterdayCheckIn(familyId || undefined);
+      let today = await getTodayCheckIn(requestedFamilyId);
+      let yesterday = await getYesterdayCheckIn(requestedFamilyId);
       // Joiner 直接从云端拉取打卡数据（不依赖本地缓存，避免 room 错误导致空白）
       if (isJoiner) {
         // 跨时区设计：Joiner 始终用最新打卡（cloudCIs[0]）作为"今天"的打卡
         // 主照顾者的打卡 date 是主照顾者的本地日期，Joiner 不按自己的本地日期过滤
         // 这样无论时区差多少，Joiner 都能看到最新的打卡内容
-        const cloudCIs = await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30);
-        const latestCI = (cloudCIs as any[])?.[0] ?? null;
-        const secondLatestCI = (cloudCIs as any[])?.[1] ?? null;
+        const cloudCIs = await cloudGetCheckIns(Number(requestedFamilyId), 30);
+        const latestCI = Array.isArray(cloudCIs) ? cloudCIs[0] ?? null : null;
+        const secondLatestCI = Array.isArray(cloudCIs) ? cloudCIs[1] ?? null : null;
         if (latestCI) today = latestCI;
         if (secondLatestCI) yesterday = secondLatestCI;
       }
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       setTodayCi(today);
       setYesterdayCi(yesterday);
 
@@ -1110,38 +1138,41 @@ export default function ShareScreen() {
       setMergedTodayCi(ci);
 
       setCheckIn(ci);
-      loadSupplementaryData();
+      loadSupplementaryData(requestedFamilyId);
       await doGenerate(nickname, caregiver, ci, null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败'); errorRef.current = e instanceof Error ? e.message : '加载失败';
+      if (activeFamilyRef.current === requestedFamilyId) {
+        setError(e instanceof Error ? e.message : '加载失败'); errorRef.current = e instanceof Error ? e.message : '加载失败';
+      }
     } finally {
-      setLoading(false);
-      loadingRef.current = false;
+      if (activeFamilyRef.current === requestedFamilyId) {
+        setLoading(false);
+        loadingRef.current = false;
+      }
     }
   }
 
-  async function loadSupplementaryData() {
+  async function loadSupplementaryData(familyIdSnapshot = familyId) {
+    if (!familyIdSnapshot) return;
     try {
       const [userProfile, familyProfile, legacyProfile, weekly] = await Promise.all([
         getUserProfile(),
-        getFamilyProfile(familyId),
-        getProfile(),
-        getWeeklySleepData(7, familyId),
+        getFamilyProfile(familyIdSnapshot),
+        memberships.length === 1 ? getProfile() : Promise.resolve(null),
+        getWeeklySleepData(7, familyIdSnapshot),
       ]);
-      let today = await getTodayCheckIn(familyId || undefined);
-      let yesterday = await getYesterdayCheckIn(familyId || undefined);
+      if (activeFamilyRef.current !== familyIdSnapshot) return;
+      let today = await getTodayCheckIn(familyIdSnapshot);
+      let yesterday = await getYesterdayCheckIn(familyIdSnapshot);
 
       // Joiner：从云端拉取近7天打卡数据，直接覆盖本地数据（避免本地 room 错误导致空白）
       let cloudCIsForWeekly: any[] = [];
       if (isJoiner) {
-        cloudCIsForWeekly = (await cloudGetCheckIns(familyId ? Number(familyId) : undefined, 30)) as any[];
-        const _nw = new Date();
-        const todayKey = `${_nw.getFullYear()}-${String(_nw.getMonth() + 1).padStart(2, '0')}-${String(_nw.getDate()).padStart(2, '0')}`;
-        const yd = new Date(_nw); yd.setDate(yd.getDate() - 1);
-        const yKey = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, '0')}-${String(yd.getDate()).padStart(2, '0')}`;
-        // Joiner 直接用云端数据（不依赖本地缓存）
-        today = cloudCIsForWeekly.find((ci: any) => ci.date === todayKey) ?? today;
-        yesterday = cloudCIsForWeekly.find((ci: any) => ci.date === yKey) ?? yesterday;
+        const cloudResult = await cloudGetCheckIns(Number(familyIdSnapshot), 30);
+        cloudCIsForWeekly = Array.isArray(cloudResult) ? cloudResult : [];
+        // Joiner 的“今天/昨天”按主照顾者最新两条记录定义，不按查看者本地日历过滤。
+        today = cloudCIsForWeekly[0] ?? today;
+        yesterday = cloudCIsForWeekly[1] ?? yesterday;
       }
 
       const nickname = familyProfile?.nickname || familyProfile?.name || legacyProfile?.nickname || legacyProfile?.name || '家人';
@@ -1149,8 +1180,8 @@ export default function ShareScreen() {
       let caregiver = userProfile?.caregiverName || legacyProfile?.caregiverName || '照顾者';
       if (isJoiner) {
         try {
-          const roomId0b = familyId ? parseInt(familyId) : null;
-          if (roomId0b && !isNaN(roomId0b)) {
+          const roomId0b = parseInt(familyIdSnapshot);
+          if (!isNaN(roomId0b)) {
             const detail0b = await cloudGetRoomDetail(roomId0b);
             const creatorMember = (detail0b?.members as any[])?.find((m: any) => m.isCreator);
             if (creatorMember?.name) caregiver = creatorMember.name;
@@ -1161,12 +1192,13 @@ export default function ShareScreen() {
       // 主动从云端拉取最新被照者头像
       let photoUri3 = familyProfile?.elderPhotoUri || activeMembership?.room?.elderPhotoUri || null;
       try {
-        const roomId3 = familyId ? parseInt(familyId) : null;
-        if (roomId3 && !isNaN(roomId3)) {
+        const roomId3 = parseInt(familyIdSnapshot);
+        if (!isNaN(roomId3)) {
           const detail3 = await cloudGetRoomDetail(roomId3);
           if (detail3?.room?.elderPhotoUri) photoUri3 = detail3.room.elderPhotoUri;
         }
       } catch (e) { /* 网络不可用时降级到本地缓存 */ }
+      if (activeFamilyRef.current !== familyIdSnapshot) return;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       setElderEmoji(emoji);
@@ -1174,12 +1206,8 @@ export default function ShareScreen() {
 
       // Joiner：用云端打卡数据构建近7天趋势（覆盖本地空数据）
       if (isJoiner && cloudCIsForWeekly.length > 0) {
-        const today7 = new Date();
-        const joinerWeekly = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(today7);
-          d.setDate(d.getDate() - i);
-          // 使用本地日期（避免 UTC 时区偏差导致 chart 数据不匹配）
-          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const anchor = resolveSharedDataAnchorDate(cloudCIsForWeekly);
+        const joinerWeekly = buildRecentDateKeys(anchor).map(dateStr => {
           const ci = cloudCIsForWeekly.find((c: any) => c.date === dateStr);
           return {
             date: dateStr,
@@ -1202,14 +1230,20 @@ export default function ShareScreen() {
       }
     } catch {}
     finally {
-      setWeeklyLoading(false); // 趋势图数据加载完成
+      if (activeFamilyRef.current === familyIdSnapshot) {
+        setWeeklyLoading(false); // 趋势图数据加载完成
+      }
     }
   }
   async function doGenerate(nickname: string, caregiver: string, ci: DailyCheckIn, _score: number | null) {
+    const requestedFamilyId = familyId;
+    if (!requestedFamilyId) return;
     setGenerating(true);
     setBriefing(null);
     try {
-      const dateStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+      const recordDate = ci.date || getTodayKey();
+      const recordDateValue = parseDateKeyAtNoon(recordDate) ?? new Date();
+      const dateStr = recordDateValue.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
       const aiPromise = generateBriefingMutation.mutateAsync({
         elderNickname: nickname,
         caregiverName: caregiver,
@@ -1230,34 +1264,40 @@ export default function ShareScreen() {
       });
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('智能助手超时')), 15000));
       const result = await Promise.race([aiPromise, timeout]) as any;
+      if (activeFamilyRef.current !== requestedFamilyId) return;
       if (result.success && result.briefing) {
         setBriefing(result.briefing);
         setMergedBriefing(result.briefing); // 保存今日简报
         setShareText(result.briefing.shareText ?? '');
-        setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci, familyId);
-        // 持久化简报历史
-        saveBriefing({ date: getTodayKey(), careScore: result.briefing.careScore ?? 80, summary: result.briefing.summary ?? '', encouragement: result.briefing.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
+        setCachedBriefing(result.briefing, result.briefing.shareText ?? '', ci, requestedFamilyId);
+        // 持久化简报历史：日期采用主照顾者打卡日期，而不是查看者本地日历。
+        saveBriefing({ date: recordDate, careScore: result.briefing.careScore ?? 80, summary: result.briefing.summary ?? '', encouragement: result.briefing.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: recordDate }, requestedFamilyId).catch(() => {});
       } else {
         const fallback = buildLocalBriefing(nickname, caregiver, ci);
         setBriefing(fallback);
         setMergedBriefing(fallback); // 保存今日简报
-        setCachedBriefing(fallback, fallback.shareText, ci, familyId);
-        saveBriefing({ date: getTodayKey(), careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
+        setCachedBriefing(fallback, fallback.shareText, ci, requestedFamilyId);
+        saveBriefing({ date: recordDate, careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: recordDate }, requestedFamilyId).catch(() => {});
       }
     } catch (e) {
+      if (activeFamilyRef.current !== requestedFamilyId) return;
+      const recordDate = ci.date || getTodayKey();
       const fallback = buildLocalBriefing(nickname, caregiver, ci);
       setBriefing(fallback);
       setMergedBriefing(fallback); // 保存今日简报
-      setCachedBriefing(fallback, fallback.shareText, ci, familyId);
-      saveBriefing({ date: getTodayKey(), careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: ci.date }).catch(() => {});
+      setCachedBriefing(fallback, fallback.shareText, ci, requestedFamilyId);
+      saveBriefing({ date: recordDate, careScore: fallback.careScore ?? 80, summary: fallback.summary ?? '', encouragement: fallback.encouragement ?? '', generatedAt: new Date().toISOString(), checkInDate: recordDate }, requestedFamilyId).catch(() => {});
     } finally {
-      setGenerating(false);
+      if (activeFamilyRef.current === requestedFamilyId) {
+        setGenerating(false);
+      }
     }
   }
 
   function buildLocalBriefing(nickname: string, caregiver: string, ci: DailyCheckIn) {
     const sleepLabel = ci.sleepQuality === 'good' ? '良好' : ci.sleepQuality === 'fair' ? '一般' : '较差';
-    const dateStr = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
+    const localRecordDate = parseDateKeyAtNoon(ci.date) ?? new Date();
+    const dateStr = localRecordDate.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
     const napMins = getNapMinutes(ci);
     const napStr = napMins > 0 ? (napMins >= 60 ? `${(napMins / 60).toFixed(1).replace('.0', '')}小时` : `${napMins}分钟`) : '';
     const encouragements = [

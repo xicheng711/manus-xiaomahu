@@ -20,8 +20,8 @@ import {
   waitForServerDiaryId, syncDiaryEntryNow, getNapMinutes, hasRecordedNap,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries, getCloudSyncState } from '@/lib/cloud-sync';
-import { getSessionToken } from '@/lib/_core/auth';
+import { cloudGetDiaries, getCloudSyncState, setCloudSyncState } from '@/lib/cloud-sync';
+import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
@@ -388,14 +388,24 @@ export default function DiaryEditScreen() {
 
   async function loadExistingEntry(id: string) {
     setLoadingEntry(true);
-    // 获取当前登录用户 ID，用于判断日记是否是自己写的
-    const { userId: currentUserId } = await getCloudSyncState();
+    // 获取当前登录用户 ID，用于判断日记是否是自己写的；同步状态缺失时从认证账号恢复。
+    const cloudState = await getCloudSyncState();
+    let currentUserId = cloudState.userId;
+    if (!currentUserId) {
+      try {
+        const authenticatedUser = await getUserInfo();
+        if (authenticatedUser?.id) {
+          currentUserId = authenticatedUser.id;
+          await setCloudSyncState({ userId: authenticatedUser.id });
+        }
+      } catch { /* 离线时继续使用服务端权限作为最终保护 */ }
+    }
     let entry: DiaryEntry | null = await getDiaryEntryById(id, familyId ?? undefined);
     // 只要有 serverDiaryId，就去云端校验最新的 conversationFinished
     // 对于他人写的日记（authorUserId 不等于当前用户），强制以云端状态为准
     // 这样即使本地缓存了 false，也能正确反映他人日记的对话是否已结束
     if (entry && entry.serverDiaryId) {
-      const isOthersPerson = entry.authorUserId && currentUserId && entry.authorUserId !== currentUserId;
+      const isOthersPerson = !!(entry.authorUserId && (!currentUserId || entry.authorUserId !== currentUserId));
       try {
         const cloudEntries = await cloudGetDiaries(familyId ? Number(familyId) : undefined);
         const cloudEntry = cloudEntries?.find((e: any) => e.id === entry!.serverDiaryId);
@@ -495,7 +505,7 @@ export default function DiaryEditScreen() {
       // 判断是否是他人写的日记
       // 他人写的日记：无论 conversationFinished 是什么，一律锁定对话框（不能继续对话）
       // 自己写的日记：以 conversationFinished 为准
-      const isOthersDiary = !!(entry.authorUserId && currentUserId && entry.authorUserId !== currentUserId);
+      const isOthersDiary = !!(entry.authorUserId && (!currentUserId || entry.authorUserId !== currentUserId));
       setRoleReadOnly(params.readOnly === '1' || isOthersDiary);
       setFinished(isOthersDiary ? true : (entry.conversationFinished ?? false));
       if (entry.conversation && entry.conversation.length > 0) {

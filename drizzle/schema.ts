@@ -185,6 +185,8 @@ export type InsertDiaryComment = typeof diaryComments.$inferInsert;
 export const announcements = mysqlTable("announcements", {
   id: int("id").autoincrement().primaryKey(),
   roomId: int("roomId").notNull(),
+  // 客户端生成且在同一家庭内唯一；断网或响应丢失重试时复用同一条公告。
+  clientId: varchar("clientId", { length: 100 }),
   authorUserId: int("authorUserId").notNull(),
   authorName: varchar("authorName", { length: 100 }).notNull(),
   authorEmoji: varchar("authorEmoji", { length: 20 }).notNull(),
@@ -196,7 +198,10 @@ export const announcements = mysqlTable("announcements", {
   localTimeStr: varchar("localTimeStr", { length: 5 }),  // HH:MM — 发布者本地时间
   reactions: json("reactions"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, table => [
+  uniqueIndex("uq_announcements_room_client").on(table.roomId, table.clientId),
+  index("idx_announcements_room_created").on(table.roomId, table.createdAt),
+]);
 
 export type Announcement = typeof announcements.$inferSelect;
 export type InsertAnnouncement = typeof announcements.$inferInsert;
@@ -216,7 +221,9 @@ export const briefings = mysqlTable("briefings", {
   generatedAt: varchar("generatedAt", { length: 30 }),
   checkInDate: varchar("checkInDate", { length: 10 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, table => [
+  uniqueIndex("uq_briefings_room_date").on(table.roomId, table.date),
+]);
 
 export type Briefing = typeof briefings.$inferSelect;
 export type InsertBriefing = typeof briefings.$inferInsert;

@@ -9,8 +9,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import {
-  getMedications, saveMedication, saveMedications, updateMedication, deleteMedication,
-  syncPendingMedications, Medication, MedicationChangeEvent, getMedicationChanges,
+  getMedications, saveMedication, updateMedication, deleteMedication,
+  syncPendingMedications, mergeCloudMedicationsIntoLocal, Medication, MedicationChangeEvent, getMedicationChanges,
   mergeCloudMedicationChanges, createMedicationChangeEvent, medicationSnapshot,
   getProfile, getFamilyProfile,
 } from '@/lib/storage';
@@ -119,6 +119,7 @@ function MedicationScreenContent() {
   const [pendingAction, setPendingAction] = useState<{ type: 'toggle' | 'delete'; med: Medication } | null>(null);
   const [pendingActionReason, setPendingActionReason] = useState('');
   const [actionSaving, setActionSaving] = useState(false);
+  const [savingMedication, setSavingMedication] = useState(false);
   const [icon, setIcon] = useState('💊');
   const [reminderEnabled, setReminderEnabled] = useState(false);
 
@@ -178,30 +179,7 @@ function MedicationScreenContent() {
     }
 
     if (Array.isArray(cloudMeds)) {
-      const mergedRemote: Medication[] = cloudMeds.map((remote: any) => {
-        const serverMedId = Number(remote.id);
-        const remoteClientId = typeof remote.clientId === 'string' ? remote.clientId : undefined;
-        const existing = local.find(item => item.serverMedId === serverMedId)
-          ?? (remoteClientId ? local.find(item => String(item.id).replace(/^cloud_/, '') === remoteClientId) : undefined)
-          ?? local.find(item => !item.serverMedId && item.name === remote.name);
-        return {
-          ...existing,
-          id: existing?.id ?? `cloud_${serverMedId}`,
-          serverMedId,
-          name: remote.name ?? '',
-          dosage: remote.dosage ?? '',
-          frequency: remote.frequency ?? '',
-          times: Array.isArray(remote.times) ? remote.times : [],
-          notes: remote.notes ?? '',
-          icon: remote.icon ?? '💊',
-          active: remote.active ?? true,
-          reminderEnabled: remote.reminderEnabled ?? true,
-          color: remote.color ?? undefined,
-        };
-      });
-      const localPending = local.filter(item => item.syncPending || !item.serverMedId);
-      const merged = [...mergedRemote, ...localPending.filter(item => !mergedRemote.some(remote => remote.id === item.id))];
-      await saveMedications(merged, requestedFamilyId);
+      const merged = await mergeCloudMedicationsIntoLocal(cloudMeds, requestedFamilyId);
       if (activeFamilyRef.current === requestedFamilyId) setMeds(merged);
     }
 
@@ -247,6 +225,7 @@ function MedicationScreenContent() {
   }
 
   async function handleSave() {
+    if (savingMedication) return;
     if (!isCreator) {
       Alert.alert('无权限', '只有主照顾者可以新增或修改用药计划');
       return;
@@ -269,6 +248,8 @@ function MedicationScreenContent() {
       return;
     }
 
+    setSavingMedication(true);
+    try {
     if (editingMed) {
       // ── Edit existing ── (updateMedication 自带云端同步)
       const patch = {
@@ -345,6 +326,11 @@ function MedicationScreenContent() {
 
     resetForm();
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error: any) {
+      Alert.alert('用药记录没有保存成功', error?.message || '请稍后重试，刚才输入的内容仍为你保留。');
+    } finally {
+      setSavingMedication(false);
+    }
   }
 
   function handleToggle(id: string) {
@@ -566,16 +552,17 @@ function MedicationScreenContent() {
             </TouchableOpacity>
 
             <View style={styles.formBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={resetForm} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={resetForm} activeOpacity={0.8} disabled={savingMedication}>
                 <Text style={styles.cancelBtnText}>取消</Text>
               </TouchableOpacity>
               <Animated.View style={{ flex: 2, transform: [{ scale: saveBtnScale }] }}>
                 <TouchableOpacity
-                  style={styles.saveBtn}
+                  style={[styles.saveBtn, savingMedication && { opacity: 0.55 }]}
                   onPress={() => pressAnimation(saveBtnScale, handleSave)}
                   activeOpacity={0.85}
+                  disabled={savingMedication}
                 >
-                  <Text style={styles.saveBtnText}>{editingMed ? '保存修改 ✓' : '保存药物 ✓'}</Text>
+                  <Text style={styles.saveBtnText}>{savingMedication ? '保存中…' : editingMed ? '保存修改 ✓' : '保存药物 ✓'}</Text>
                 </TouchableOpacity>
               </Animated.View>
             </View>

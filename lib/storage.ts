@@ -249,6 +249,8 @@ export interface CareBriefing {
   encouragement: string;
   generatedAt: string;
   checkInDate: string;
+  /** 本地已保存但云端尚未确认；下次登录或打开家庭页面时自动重试。 */
+  syncPending?: boolean;
 }
 
 // ─── Family Types ───────────────────────────────────────────────────────────
@@ -275,6 +277,10 @@ export interface AnnouncementReaction {
 
 export interface FamilyAnnouncement {
   id: string;
+  /** 云端公告主键；本地 id 保持稳定，避免同步后列表 key 跳变。 */
+  serverAnnouncementId?: number;
+  /** 仅本地使用：公告尚未成功同步到云端，进入家庭页后自动重试。 */
+  syncPending?: boolean;
   authorId: string;    // FamilyMember.id
   authorName: string;
   authorEmoji: string;
@@ -397,9 +403,10 @@ export async function getProfile(): Promise<ElderProfile | null> {
 export async function saveProfile(profile: Omit<ElderProfile, 'id'>): Promise<ElderProfile> {
   const existing = await getProfile();
   const saved: ElderProfile = { id: existing?.id ?? generateId(), ...profile };
+  // Legacy compatibility only. Family cloud profile writes must always go through
+  // saveFamilyProfile/cloudUpdateElderProfile with an explicit roomId; otherwise a
+  // global caregiver-field edit can overwrite another family's elder profile.
   await AsyncStorage.setItem(KEYS.PROFILE, JSON.stringify(saved));
-  // Cloud sync: update elder profile on server
-  cloudUpdateElderProfile(saved).catch(() => {});
   return saved;
 }
 
@@ -964,6 +971,44 @@ export async function saveMedications(meds: Medication[], roomId?: string): Prom
   await AsyncStorage.setItem(key, JSON.stringify(meds));
 }
 
+export async function mergeCloudMedicationsIntoLocal(cloudMeds: any[], roomId: string): Promise<Medication[]> {
+  const local = await getMedications(roomId);
+  const matchedLocalIds = new Set<string>();
+  const remote = (cloudMeds ?? []).map((item: any): Medication => {
+    const serverMedId = Number(item.id);
+    const remoteClientId = typeof item.clientId === 'string' ? item.clientId : '';
+    const existing = local.find(med => Number(med.serverMedId) === serverMedId)
+      ?? (remoteClientId ? local.find(med => String(med.id).replace(/^cloud_/, '') === remoteClientId) : undefined)
+      ?? local.find(med => !med.serverMedId && med.name === item.name);
+    if (existing) matchedLocalIds.add(existing.id);
+    if (existing?.syncPending) {
+      // A successful read can race a failed/slow write. Preserve every local field
+      // and pending history event; only attach the authoritative server id.
+      return { ...existing, serverMedId };
+    }
+    return {
+      ...(existing ?? {}),
+      id: existing?.id ?? (remoteClientId || `cloud_${serverMedId}`),
+      serverMedId,
+      name: item.name ?? '',
+      dosage: item.dosage ?? '',
+      frequency: item.frequency ?? '',
+      times: Array.isArray(item.times) ? item.times : [],
+      notes: item.notes ?? '',
+      icon: item.icon ?? '💊',
+      active: item.active ?? true,
+      reminderEnabled: item.reminderEnabled ?? true,
+      color: item.color ?? undefined,
+      syncPending: false,
+      pendingChanges: [],
+    } as Medication;
+  });
+  const localPending = local.filter(item => !matchedLocalIds.has(item.id) && (item.syncPending || !item.serverMedId));
+  const merged = [...remote, ...localPending];
+  await saveMedications(merged, roomId);
+  return merged;
+}
+
 export async function updateMedication(id: string, data: Partial<Medication>, roomId?: string, changeEvent?: MedicationChangeEvent): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.MEDICATIONS, rid);
@@ -1412,6 +1457,22 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
 
     let serverDiaryId = entry.serverDiaryId ?? null;
     if (!serverDiaryId) serverDiaryId = await waitForServerDiaryId(id);
+    if (!serverDiaryId) {
+      // The original create request may have reached the server while its response
+      // was lost. Reconcile before creating again so “结束并保存” cannot produce a
+      // second diary row in the same session.
+      const remoteEntries = await cloudGetDiaries(Number(roomId));
+      if (Array.isArray(remoteEntries)) {
+        const { userId } = await getCloudSyncState().catch(() => ({ userId: null }));
+        const matched = userId ? remoteEntries.find((remote: any) =>
+          remote.authorUserId === userId &&
+          remote.date === entry.date &&
+          (remote.content ?? '') === entry.content &&
+          (remote.localTimeStr ?? '') === (entry.localTimeStr ?? '')
+        ) : undefined;
+        if (matched?.id) serverDiaryId = Number(matched.id);
+      }
+    }
     const result = await cloudSyncDiary(entry, serverDiaryId ?? undefined, roomId);
     const resolvedServerId = result?.diaryId ?? result?.id ?? serverDiaryId;
     if (!result?.success || !resolvedServerId) return false;
@@ -1832,13 +1893,103 @@ export async function getTodayAnnouncements(roomId?: string): Promise<FamilyAnno
   return all.filter(a => a.date === todayStr());
 }
 
-export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id' | 'createdAt' | 'date'>, roomId?: string): Promise<FamilyAnnouncement> {
+function normalizeCloudAnnouncement(raw: any, local?: FamilyAnnouncement): FamilyAnnouncement {
+  const serverAnnouncementId = Number(raw.id);
+  const createdAt = raw.createdAt instanceof Date
+    ? raw.createdAt.toISOString()
+    : (typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString());
+  return {
+    id: local?.id ?? String(serverAnnouncementId),
+    serverAnnouncementId,
+    syncPending: false,
+    authorId: String(raw.authorId ?? raw.authorUserId ?? local?.authorId ?? ''),
+    authorName: raw.authorName ?? local?.authorName ?? '',
+    authorEmoji: raw.authorEmoji ?? local?.authorEmoji ?? '😊',
+    authorColor: raw.authorColor ?? local?.authorColor ?? '#888',
+    content: raw.content ?? local?.content ?? '',
+    emoji: raw.emoji ?? local?.emoji,
+    type: raw.type ?? local?.type ?? 'daily',
+    date: raw.date ?? local?.date ?? todayStr(),
+    localTimeStr: raw.localTimeStr ?? local?.localTimeStr,
+    createdAt,
+    reactions: Array.isArray(raw.reactions) ? raw.reactions : (local?.reactions ?? []),
+  };
+}
+
+export async function mergeCloudAnnouncementsIntoLocal(cloudAnnouncements: any[], roomId: string): Promise<FamilyAnnouncement[]> {
+  const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, roomId);
+  const raw = await AsyncStorage.getItem(key);
+  const local: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+  const matchedLocalIds = new Set<string>();
+  const remote = (cloudAnnouncements ?? []).map((item: any) => {
+    const serverId = Number(item.id);
+    const clientId = typeof item.clientId === 'string' ? item.clientId : '';
+    const match = local.find(entry =>
+      (entry.serverAnnouncementId != null && Number(entry.serverAnnouncementId) === serverId) ||
+      (clientId && entry.id === clientId) ||
+      (!entry.serverAnnouncementId &&
+        entry.content === (item.content ?? '') &&
+        entry.date === (item.date ?? '') &&
+        entry.authorName === (item.authorName ?? '') &&
+        (entry.localTimeStr ?? '') === (item.localTimeStr ?? ''))
+    );
+    if (match) matchedLocalIds.add(match.id);
+    return normalizeCloudAnnouncement(item, match);
+  });
+  const oldestRemoteTime = remote.length > 0
+    ? Math.min(...remote.map(entry => new Date(entry.createdAt).getTime()).filter(Number.isFinite))
+    : null;
+  const localOnly = local.filter(entry => {
+    if (matchedLocalIds.has(entry.id)) return false;
+    if (entry.syncPending) return true;
+    const created = new Date(entry.createdAt).getTime();
+    return oldestRemoteTime != null && Number.isFinite(created) && created < oldestRemoteTime;
+  });
+  const merged = [...remote, ...localOnly]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 200);
+  await AsyncStorage.setItem(key, JSON.stringify(merged));
+  return merged;
+}
+
+async function syncOneFamilyAnnouncement(announcement: FamilyAnnouncement, roomId: string): Promise<boolean> {
+  const result = await cloudPostAnnouncement({
+    clientId: announcement.id,
+    content: announcement.content,
+    emoji: announcement.emoji,
+    type: announcement.type,
+    date: announcement.date,
+    localTimeStr: announcement.localTimeStr,
+    roomId: Number(roomId),
+  });
+  const serverId = Number(result?.announcement?.id);
+  if (!result?.success || !Number.isFinite(serverId)) return false;
+  const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, roomId);
+  const raw = await AsyncStorage.getItem(key);
+  const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+  const idx = all.findIndex(item => item.id === announcement.id);
+  if (idx >= 0) {
+    all[idx] = { ...all[idx], serverAnnouncementId: serverId, syncPending: false };
+    await AsyncStorage.setItem(key, JSON.stringify(all));
+  }
+  return true;
+}
+
+export async function syncPendingAnnouncements(roomId: string): Promise<void> {
+  const raw = await AsyncStorage.getItem(roomKey(KEYS.FAMILY_ANNOUNCEMENTS, roomId));
+  const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+  for (const announcement of all.filter(item => item.syncPending)) {
+    await syncOneFamilyAnnouncement(announcement, roomId).catch(() => false);
+  }
+}
+
+export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id' | 'createdAt' | 'date' | 'serverAnnouncementId' | 'syncPending'>, roomId?: string): Promise<FamilyAnnouncement> {
   const rid = roomId ?? _activeRoomIdCache;
+  if (!rid) throw new Error('当前家庭信息尚未准备好');
   const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
   const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
   const now = new Date();
-  // 使用 getHours/getMinutes 生成本地时间字符串（避免 Hermes 引擎 toLocaleTimeString 格式问题）
   const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const announcement: FamilyAnnouncement = {
     id: generateId(),
@@ -1846,21 +1997,12 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
     date: todayStr(),
     createdAt: now.toISOString(),
     localTimeStr,
+    syncPending: true,
   };
   all.unshift(announcement);
-  // Keep only last 200 announcements
-  if (all.length > 200) all.splice(200);
-  await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: post announcement to server
-  cloudPostAnnouncement({
-    content: announcement.content,
-    emoji: announcement.emoji,
-    type: announcement.type,
-    date: announcement.date,
-    localTimeStr: announcement.localTimeStr,
-    roomId: rid ? Number(rid) : undefined,
-  }).catch(() => {});
-  return announcement;
+  await AsyncStorage.setItem(key, JSON.stringify(all.slice(0, 200)));
+  await syncOneFamilyAnnouncement(announcement, rid).catch(() => false);
+  return (await getFamilyAnnouncements(30, rid)).find(item => item.id === announcement.id) ?? announcement;
 }
 
 export async function deleteFamilyAnnouncement(id: string, roomId?: string): Promise<void> {
@@ -2008,13 +2150,74 @@ export async function saveBriefing(briefing: CareBriefing, roomId?: string): Pro
   const key = roomKey(KEYS.BRIEFINGS, rid);
   const raw = await AsyncStorage.getItem(key);
   const all: CareBriefing[] = raw ? JSON.parse(raw) : [];
+  const pending: CareBriefing = { ...briefing, syncPending: true };
   const idx = all.findIndex(b => b.date === briefing.date);
-  if (idx >= 0) all[idx] = briefing;
-  else all.unshift(briefing);
-  const trimmed = all.slice(0, 30);
-  await AsyncStorage.setItem(key, JSON.stringify(trimmed));
+  if (idx >= 0) all[idx] = pending;
+  else all.unshift(pending);
+  await AsyncStorage.setItem(key, JSON.stringify(all.slice(0, 30)));
+
   // Cloud sync: bind the write to the family captured by the caller, not a mutable global pointer.
-  cloudSaveBriefing(briefing, rid ? Number(rid) : undefined).catch(() => {});
+  if (!rid) return;
+  const result = await cloudSaveBriefing(briefing, Number(rid));
+  if (!result?.success) return;
+  const currentRaw = await AsyncStorage.getItem(key);
+  const current: CareBriefing[] = currentRaw ? JSON.parse(currentRaw) : [];
+  const synced = current.map(item =>
+    item.date === briefing.date && item.generatedAt === briefing.generatedAt
+      ? { ...item, syncPending: false }
+      : item
+  );
+  await AsyncStorage.setItem(key, JSON.stringify(synced));
+}
+
+export async function syncPendingBriefings(roomId: string): Promise<void> {
+  const key = roomKey(KEYS.BRIEFINGS, roomId);
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return;
+  const all: CareBriefing[] = JSON.parse(raw);
+  let changed = false;
+  const synced: CareBriefing[] = [];
+  for (const briefing of all) {
+    if (!briefing.syncPending) {
+      synced.push(briefing);
+      continue;
+    }
+    const result = await cloudSaveBriefing(briefing, Number(roomId));
+    if (result?.success) {
+      synced.push({ ...briefing, syncPending: false });
+      changed = true;
+    } else {
+      synced.push(briefing);
+    }
+  }
+  if (changed) await AsyncStorage.setItem(key, JSON.stringify(synced));
+}
+
+export async function mergeCloudBriefingsIntoLocal(cloudBriefings: any[], roomId: string): Promise<CareBriefing[]> {
+  const key = roomKey(KEYS.BRIEFINGS, roomId);
+  const raw = await AsyncStorage.getItem(key);
+  const local: CareBriefing[] = raw ? JSON.parse(raw) : [];
+  const byDate = new Map<string, CareBriefing>();
+  for (const item of local) byDate.set(item.date, item);
+  for (const item of cloudBriefings ?? []) {
+    if (!item?.date) continue;
+    const existing = byDate.get(item.date);
+    if (existing?.syncPending) continue;
+    byDate.set(item.date, {
+      date: item.date,
+      careScore: item.careScore ?? 0,
+      summary: item.summary ?? '',
+      encouragement: item.encouragement ?? '',
+      generatedAt: item.generatedAt ?? (item.createdAt instanceof Date ? item.createdAt.toISOString() : String(item.createdAt ?? '')),
+      checkInDate: item.checkInDate ?? item.date,
+      syncPending: false,
+    });
+  }
+  const merged = [...byDate.values()]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 30);
+  await AsyncStorage.setItem(key, JSON.stringify(merged));
+  return merged;
 }
 
 export async function getTodayBriefing(roomId?: string): Promise<CareBriefing | null> {
