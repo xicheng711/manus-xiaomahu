@@ -142,6 +142,8 @@ export interface DailyCheckIn {
   aiMessage: string;
   careScore: number;       // 1-100
   completedAt: string;
+  /** 云端 check_ins 主键，仅用于本地关联与调试。 */
+  serverCheckInId?: number;
   /** 仅本地使用：打卡尚未成功写入家庭云端。 */
   syncPending?: boolean;
 }
@@ -537,6 +539,79 @@ function normalizeCheckIn(c: DailyCheckIn): DailyCheckIn {
   if (!hasRecordedNap(normalized)) return normalized;
   const napMinutes = getNapMinutes(normalized);
   return { ...normalized, napMinutes, daytimeNap: napMinutes > 0 };
+}
+
+/**
+ * 将服务器打卡安全合并到当前家庭缓存。
+ *
+ * 不能直接用云端数组覆盖本地缓存：旧服务端记录或分页响应可能缺少小睡、
+ * 睡眠分段等字段；刚保存但仍在重试的记录也必须以本地完整版本为准。
+ */
+export async function mergeCloudCheckInsIntoLocal(
+  cloudEntries: any[],
+  roomId: string,
+): Promise<DailyCheckIn[]> {
+  const key = roomKey(KEYS.CHECK_INS, roomId);
+  const localRaw = await AsyncStorage.getItem(key);
+  const localEntries: DailyCheckIn[] = localRaw
+    ? (JSON.parse(localRaw) as DailyCheckIn[]).map(normalizeCheckIn)
+    : [];
+  const localByDate = new Map(localEntries.map(entry => [entry.date, entry]));
+
+  const historyFields: Array<keyof DailyCheckIn> = [
+    'sleepInput', 'sleepScore', 'sleepProblems', 'sleepType', 'sleepSegments',
+    'awakeHours', 'nightWakings', 'sleepRange', 'nightAwakenings', 'nightAwakeTime',
+    'daytimeNap', 'napMinutes', 'napDuration', 'morningNotes', 'morningDone',
+    'moodEmoji', 'moodScore', 'medicationTaken', 'medicationNotes',
+    'mealNotes', 'mealOption', 'eveningNotes', 'eveningDone',
+    'aiMessage', 'careScore', 'completedAt',
+  ];
+
+  const mergedCloud = cloudEntries.map((raw: any) => {
+    const cloud = normalizeCheckIn({
+      ...raw,
+      id: String(raw.id),
+      serverCheckInId: Number(raw.id),
+      syncPending: false,
+    } as DailyCheckIn);
+    const local = localByDate.get(cloud.date);
+    if (!local) return cloud;
+
+    // 本地仍在等待上传时，不能让较旧的服务器快照覆盖刚保存的小睡或晚间记录。
+    if (local.syncPending) {
+      return normalizeCheckIn({
+        ...cloud,
+        ...local,
+        id: local.id,
+        serverCheckInId: cloud.serverCheckInId,
+        syncPending: true,
+      });
+    }
+
+    const merged: DailyCheckIn = {
+      ...local,
+      ...cloud,
+      id: local.id || cloud.id,
+      serverCheckInId: cloud.serverCheckInId,
+      syncPending: false,
+    };
+
+    // 如果服务器旧记录没有某字段，保留设备上已有的完整历史；显式 0/false 不会被覆盖。
+    for (const field of historyFields) {
+      if (raw[field] == null && local[field] != null) {
+        (merged as any)[field] = local[field];
+      }
+    }
+    return normalizeCheckIn(merged);
+  });
+
+  const cloudDates = new Set(mergedCloud.map(entry => entry.date));
+  // cloudGetCheckIns 有分页限制，超出本次响应范围的老记录不能被删除。
+  const localOnly = localEntries.filter(entry => !cloudDates.has(entry.date));
+  const result = [...mergedCloud, ...localOnly]
+    .sort((a, b) => b.date.localeCompare(a.date));
+  await AsyncStorage.setItem(key, JSON.stringify(result));
+  return result;
 }
 
 export async function getAllCheckIns(roomId?: string): Promise<DailyCheckIn[]> {

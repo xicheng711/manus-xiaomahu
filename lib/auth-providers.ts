@@ -6,7 +6,7 @@ import {
   getProfile, getFamilyProfile,
   addOrUpdateMembership, saveFamilyRoom, saveFamilyProfile,
   setActiveFamilyId, setActiveRoomIdCache,
-  setCurrentMember, mergeCloudDiariesIntoLocal, getActiveMembership,
+  setCurrentMember, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, getActiveMembership,
   FamilyMembership, FamilyRoom,
 } from '@/lib/storage';
 import {
@@ -210,33 +210,10 @@ async function navigateAfterLogin(router: Router) {
           // Helper: room-scoped key
           const rk = (base: string) => `${base}:${roomIdStr}`;
 
-          // Write check-ins
+          // Write check-ins：统一按日期安全合并，保留小睡、睡眠分段、待同步记录和分页外历史。
+          // 不能手工映射后整表覆盖，否则 App 次日登录恢复时会把 napMinutes 等字段删除。
           if (Array.isArray(checkInsData)) {
-            const localCheckIns = checkInsData.map((c: any) => ({
-              id: String(c.id),
-              date: c.date,
-              sleepHours: c.sleepHours ?? 7,
-              sleepQuality: c.sleepQuality ?? 'fair',
-              sleepInput: c.sleepInput,
-              sleepScore: c.sleepScore,
-              sleepProblems: c.sleepProblems,
-              sleepType: c.sleepType,
-              morningNotes: c.morningNotes ?? '',
-              morningDone: c.morningDone ?? false,
-              moodEmoji: c.moodEmoji ?? '😌',
-              moodScore: c.moodScore ?? 5,
-              medicationTaken: c.medicationTaken ?? true,
-              medicationNotes: c.medicationNotes ?? '',
-              mealNotes: c.mealNotes ?? '',
-              mealOption: c.mealOption,
-              eveningNotes: c.eveningNotes ?? '',
-              eveningDone: c.eveningDone ?? false,
-              aiMessage: c.aiMessage ?? '',
-              careScore: c.careScore ?? 50,
-              completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
-              serverCheckInId: c.id,
-            }));
-            await AsyncStorage.setItem(rk('daily_checkins_v2'), JSON.stringify(localCheckIns));
+            await mergeCloudCheckInsIntoLocal(checkInsData, roomIdStr);
           }
 
           // Write diaries: null 表示网络失败，保留旧缓存；数组（包括空数组）表示服务端成功返回。

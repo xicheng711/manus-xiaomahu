@@ -571,9 +571,10 @@ describe('Daytime nap compatibility and homepage announcement date', () => {
   });
 
   it('does not overwrite a missing cloud nap value with zero before legacy normalization', () => {
-    expect(index).toContain('daytimeNap: c.daytimeNap,');
-    expect(index).toContain('napMinutes: c.napMinutes,');
-    expect(index).not.toContain('napMinutes: c.napMinutes ?? 0,');
+    expect(storage).toContain("if (raw[field] == null && local[field] != null)");
+    expect(storage).toContain("'daytimeNap', 'napMinutes', 'napDuration'");
+    expect(storage).not.toContain('raw.napMinutes ?? 0');
+    expect(index).toContain('mergeCloudCheckInsIntoLocal(cloudCheckIns, fid)');
   });
 
   it('uses the same normalized nap value in check-in details, Joiner home, summaries, and shared briefings', () => {
@@ -649,5 +650,35 @@ describe('Homepage card shadow integrity', () => {
     expect(smartCardStyles).not.toContain("overflow: 'hidden'");
     expect(quickCardStyles).not.toContain("overflow: 'hidden'");
     expect(announcementStyles).not.toContain("overflow: 'hidden'");
+  });
+});
+
+
+describe('Cross-day nap persistence and cloud cache safety', () => {
+  const storage = read('lib/storage.ts');
+  const authProviders = read('lib/auth-providers.ts');
+  const home = read('app/(tabs)/index.tsx');
+  const checkin = read('app/(tabs)/checkin.tsx');
+  const family = read('app/(tabs)/family.tsx');
+  const joinerHome = read('components/joiner-home.tsx');
+
+  it('uses one canonical cloud-to-local check-in merge that preserves nap and pending data', () => {
+    expect(storage).toContain('export async function mergeCloudCheckInsIntoLocal');
+    expect(storage).toContain("'daytimeNap', 'napMinutes', 'napDuration'");
+    expect(storage).toContain('if (local.syncPending)');
+    expect(storage).toContain('const localOnly = localEntries.filter');
+  });
+
+  it('routes login restore and every home/check-in refresh through the canonical merge', () => {
+    expect(authProviders).toContain('await mergeCloudCheckInsIntoLocal(checkInsData, roomIdStr)');
+    expect(home).toContain('await mergeCloudCheckInsIntoLocal(cloudCheckIns, fid)');
+    expect(checkin).toContain('mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId)');
+    expect(family).toContain('mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId)');
+    expect(joinerHome).toContain('mergeCloudCheckInsIntoLocal(cloudCheckIns, requestedFamilyId)');
+  });
+
+  it('does not directly overwrite room check-in caches from pages or login restore', () => {
+    const combined = [authProviders, home, checkin, family, joinerHome].join('\n');
+    expect(combined).not.toMatch(/setItem\(`daily_checkins_v2:\$\{/);
   });
 });

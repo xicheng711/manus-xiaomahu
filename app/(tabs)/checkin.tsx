@@ -10,7 +10,7 @@ import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, getNapMinutes, hasRecordedNap } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap } from '@/lib/storage';
 import { getSessionToken } from '@/lib/_core/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
@@ -2534,10 +2534,10 @@ function JoinerCheckinView() {
       const cloudCIs = await cloudGetCheckIns(Number(requestedFamilyId), 30);
       if (activeFamilyRef.current !== requestedFamilyId) return;
       if (Array.isArray(cloudCIs)) {
-        const cloudSorted = [...cloudCIs].sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
-        setCheckIn((cloudSorted[0] as DailyCheckIn | undefined) ?? null);
-        setAllCheckIns(cloudSorted as DailyCheckIn[]);
-        await AsyncStorage.setItem(`daily_checkins_v2:${requestedFamilyId}`, JSON.stringify(cloudCIs));
+        const merged = await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId);
+        if (activeFamilyRef.current !== requestedFamilyId) return;
+        setCheckIn(merged[0] ?? null);
+        setAllCheckIns(merged);
       }
     } catch {
       // 网络不可用时保持已展示的本地缓存

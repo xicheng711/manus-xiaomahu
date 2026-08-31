@@ -12,7 +12,7 @@ import {
   getFamilyRoom, getFamilyAnnouncements, saveFamilyRoom, cloudGetRoomDetail, saveFamilyAnnouncement,
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
   joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
-  getAllCheckIns, getDiaryEntries, mergeCloudDiariesIntoLocal,
+  getAllCheckIns, getDiaryEntries, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal,
   getProfile, getFamilyProfile, getUserProfile,
   FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
@@ -655,7 +655,9 @@ export default function FamilyScreen() {
         cloudGetDiaries(Number(requestedFamilyId)).catch(() => []),
         cloudGetElderProfile(Number(requestedFamilyId)).catch(() => null),
       ]);
-      allCheckIns = (cloudCIs as any[]) ?? [];
+      allCheckIns = Array.isArray(cloudCIs)
+        ? await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId)
+        : await getAllCheckIns(requestedFamilyId);
       const todayDate = todayStr();
       todayCheckIn = allCheckIns.find((ci: any) => ci.date === todayDate) ?? null;
       diaryEntries = Array.isArray(cloudDiaries)
@@ -682,36 +684,10 @@ export default function FamilyScreen() {
             cloudGetCheckIns(Number(familyId), 60).catch(() => []),
             cloudGetDiaries(Number(familyId), 100).catch(() => []),
           ]);
-          if (Array.isArray(cloudCIs) && cloudCIs.length > 0) {
-            const localCheckIns = (cloudCIs as any[]).map((c: any) => ({
-              id: String(c.id),
-              date: c.date,
-              sleepHours: c.sleepHours ?? 7,
-              sleepQuality: c.sleepQuality ?? 'fair',
-              sleepInput: c.sleepInput,
-              sleepScore: c.sleepScore,
-              sleepProblems: c.sleepProblems,
-              sleepType: c.sleepType,
-              morningNotes: c.morningNotes ?? '',
-              morningDone: c.morningDone ?? false,
-              moodEmoji: c.moodEmoji ?? '😌',
-              moodScore: c.moodScore ?? 5,
-              medicationTaken: c.medicationTaken ?? true,
-              medicationNotes: c.medicationNotes ?? '',
-              mealNotes: c.mealNotes ?? '',
-              mealOption: c.mealOption,
-              eveningNotes: c.eveningNotes ?? '',
-              eveningDone: c.eveningDone ?? false,
-              aiMessage: c.aiMessage ?? '',
-              careScore: c.careScore ?? 50,
-              completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
-              serverCheckInId: c.id,
-            }));
-            const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-            await AsyncStorage.setItem(`daily_checkins_v2:${familyId}`, JSON.stringify(localCheckIns));
-            allCheckIns = localCheckIns as any[];
+          if (Array.isArray(cloudCIs)) {
+            allCheckIns = await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId);
             const todayDate = todayStr();
-            todayCheckIn = localCheckIns.find((c: any) => c.date === todayDate) ?? null;
+            todayCheckIn = allCheckIns.find((c: any) => c.date === todayDate) ?? null;
           }
           if (Array.isArray(cloudDiaries)) {
             diaryEntries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);

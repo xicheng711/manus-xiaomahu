@@ -9,7 +9,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, todayStr, syncPendingCheckIns } from '@/lib/storage';
+import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, todayStr, syncPendingCheckIns } from '@/lib/storage';
 import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiacFromDate } from '@/lib/zodiac';
@@ -622,81 +622,9 @@ function CreatorHomeScreen() {
           cloudGetDiaries(fidNum, 100),
         ]).then(async ([cloudCheckIns, cloudDiaries]) => {
           if (!isCurrentFamily()) return;
-          // 将云端打卡数据写入本地缓存（合并策略：本地 morningDone/eveningDone=true 优先，防止竞态覆盖）
-          if (Array.isArray(cloudCheckIns) && cloudCheckIns.length > 0) {
-            // 先读取当前本地缓存，用于合并
-            const existingRaw = await AsyncStorage.getItem(`daily_checkins_v2:${fid}`);
-            const existingMap = new Map<string, any>();
-            if (existingRaw) {
-              try {
-                const existing: any[] = JSON.parse(existingRaw);
-                existing.forEach(e => existingMap.set(e.date, e));
-              } catch { /* 解析失败则忽略 */ }
-            }
-            const localCheckIns = cloudCheckIns.map((c: any) => {
-              const fromCloud = {
-                id: String(c.id),
-                date: c.date,
-                sleepHours: c.sleepHours ?? 7,
-                sleepQuality: c.sleepQuality ?? 'fair',
-                sleepInput: c.sleepInput,
-                sleepScore: c.sleepScore,
-                sleepProblems: c.sleepProblems,
-                sleepType: c.sleepType,
-                sleepRange: c.sleepRange,
-                sleepSegments: c.sleepSegments,
-                awakeHours: c.awakeHours ?? 0,
-                nightWakings: c.nightWakings ?? 0,
-                nightAwakenings: c.nightAwakenings,
-                nightAwakeTime: c.nightAwakeTime,
-                daytimeNap: c.daytimeNap,
-                napMinutes: c.napMinutes,
-                napDuration: c.napDuration,
-                morningNotes: c.morningNotes ?? '',
-                morningDone: c.morningDone ?? false,
-                moodEmoji: c.moodEmoji ?? '😌',
-                moodScore: c.moodScore ?? 5,
-                medicationTaken: c.medicationTaken ?? true,
-                medicationNotes: c.medicationNotes ?? '',
-                mealNotes: c.mealNotes ?? '',
-                mealOption: c.mealOption,
-                eveningNotes: c.eveningNotes ?? '',
-                eveningDone: c.eveningDone ?? false,
-                aiMessage: c.aiMessage ?? '',
-                careScore: c.careScore ?? 50,
-                completedAt: c.completedAt ?? c.createdAt ?? new Date().toISOString(),
-                serverCheckInId: c.id,
-              };
-              // 合并：若本地有同一天的记录且本地的 morningDone/eveningDone 为 true，则保留本地的值
-              // 防止云端数据尚未更新时覆盖掉刚刚保存的本地打卡
-              const local = existingMap.get(c.date);
-              if (local) {
-                if (local.morningDone) fromCloud.morningDone = true;
-                if (local.eveningDone) {
-                  fromCloud.eveningDone = true;
-                  // 晚间字段也保留本地的（云端可能还没同步到）
-                  if (!c.eveningDone) {
-                    fromCloud.moodEmoji = local.moodEmoji ?? fromCloud.moodEmoji;
-                    fromCloud.moodScore = local.moodScore ?? fromCloud.moodScore;
-                    fromCloud.medicationTaken = local.medicationTaken ?? fromCloud.medicationTaken;
-                    fromCloud.medicationNotes = local.medicationNotes ?? fromCloud.medicationNotes;
-                    fromCloud.mealNotes = local.mealNotes ?? fromCloud.mealNotes;
-                    fromCloud.mealOption = local.mealOption ?? fromCloud.mealOption;
-                    fromCloud.eveningNotes = local.eveningNotes ?? fromCloud.eveningNotes;
-                    fromCloud.napMinutes = local.napMinutes ?? fromCloud.napMinutes;
-                    fromCloud.daytimeNap = local.daytimeNap ?? fromCloud.daytimeNap;
-                  }
-                }
-                if (local.morningDone && !c.morningDone) {
-                  fromCloud.sleepHours = local.sleepHours ?? fromCloud.sleepHours;
-                  fromCloud.morningNotes = local.morningNotes ?? fromCloud.morningNotes;
-                  fromCloud.sleepInput = local.sleepInput ?? fromCloud.sleepInput;
-                  fromCloud.sleepScore = local.sleepScore ?? fromCloud.sleepScore;
-                }
-              }
-              return fromCloud;
-            });
-            await AsyncStorage.setItem(`daily_checkins_v2:${fid}`, JSON.stringify(localCheckIns));
+          // 所有入口共用同一套按日期安全合并：保留小睡、睡眠分段、待同步记录和分页外历史。
+          if (Array.isArray(cloudCheckIns)) {
+            await mergeCloudCheckInsIntoLocal(cloudCheckIns, fid);
           }
           // 云端日记合并到当前家庭缓存，而不是直接覆盖。
           // 这样网络慢时，本地更完整的对话和尚未拿到 serverDiaryId 的草稿也不会丢失。

@@ -15,7 +15,7 @@ import {
   getProfile, getAllCheckIns, getDiaryEntries, getFamilyAnnouncements,
   saveFamilyAnnouncement,
   DailyCheckIn, DiaryEntry, FamilyAnnouncement, FamilyMember, mergeCloudDiariesIntoLocal,
-  getNapMinutes, hasRecordedNap,
+  mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap,
 } from '@/lib/storage';
 import { cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile, cloudGetAnnouncements, cloudGetRoomDetail, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { TrendChart } from '@/components/trend-chart';
@@ -484,8 +484,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
         ]);
         if (!isCurrentFamily()) return;
         if (Array.isArray(cloudCheckIns)) {
-          checkIns = cloudCheckIns as DailyCheckIn[];
-          await AsyncStorage.setItem(`daily_checkins_v2:${requestedFamilyId}`, JSON.stringify(checkIns));
+          checkIns = await mergeCloudCheckInsIntoLocal(cloudCheckIns, requestedFamilyId);
         }
         if (Array.isArray(cloudDiaries)) {
           diaries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);
