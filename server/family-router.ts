@@ -387,11 +387,50 @@ export const familyRouter = router({
       const member = await requireRoomMember(userId, input.roomId);
       if (!member.isCreator) throw new Error("只有主照顾者可以新增或修改打卡记录");
       const previous = await getCheckInByDate(input.roomId, input.date);
-      const result = await upsertCheckIn({ ...input, authorUserId: userId });
+      // completedAt is generated on every local save. A delayed morning request must not
+      // arrive after a completed evening save and replace the newer full-day snapshot.
+      if (previous?.completedAt && input.completedAt && input.completedAt < previous.completedAt) {
+        return { success: true, checkIn: previous, staleIgnored: true };
+      }
+      const safeInput = { ...input };
+      // Completion is monotonic. Older clients may send defaults for the other phase;
+      // preserve an already completed phase unless this snapshot also completed it.
+      if (previous?.morningDone === true && input.morningDone !== true) {
+        Object.assign(safeInput, {
+          sleepHours: previous.sleepHours ?? undefined,
+          sleepQuality: previous.sleepQuality ?? undefined,
+          sleepInput: previous.sleepInput ?? undefined,
+          sleepScore: previous.sleepScore ?? undefined,
+          sleepProblems: previous.sleepProblems ?? undefined,
+          sleepType: previous.sleepType ?? undefined,
+          sleepSegments: previous.sleepSegments ?? undefined,
+          awakeHours: previous.awakeHours ?? undefined,
+          nightWakings: previous.nightWakings ?? undefined,
+          morningNotes: previous.morningNotes ?? undefined,
+          morningDone: true,
+        });
+      }
+      if (previous?.eveningDone === true && input.eveningDone !== true) {
+        Object.assign(safeInput, {
+          daytimeNap: previous.daytimeNap ?? undefined,
+          napMinutes: previous.napMinutes ?? undefined,
+          moodEmoji: previous.moodEmoji ?? undefined,
+          moodScore: previous.moodScore ?? undefined,
+          medicationTaken: previous.medicationTaken ?? undefined,
+          medicationNotes: previous.medicationNotes ?? undefined,
+          mealNotes: previous.mealNotes ?? undefined,
+          mealOption: previous.mealOption ?? undefined,
+          eveningNotes: previous.eveningNotes ?? undefined,
+          eveningDone: true,
+          aiMessage: previous.aiMessage ?? undefined,
+          careScore: previous.careScore ?? undefined,
+        });
+      }
+      const result = await upsertCheckIn({ ...safeInput, authorUserId: userId });
 
       // 只在完成状态首次 false→true 时通知。断网重试或资料补写不会重复打扰家人。
-      const newlyFinishedEvening = input.eveningDone === true && previous?.eveningDone !== true;
-      const newlyFinishedMorning = input.morningDone === true && previous?.morningDone !== true;
+      const newlyFinishedEvening = safeInput.eveningDone === true && previous?.eveningDone !== true;
+      const newlyFinishedMorning = safeInput.morningDone === true && previous?.morningDone !== true;
       if (newlyFinishedEvening || newlyFinishedMorning) {
         const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
         const period = newlyFinishedEvening ? '晚间' : '早间';
@@ -399,7 +438,7 @@ export const familyRouter = router({
           input.roomId,
           userId,
           `${actorMember?.name || '照顾者'}完成了${period}打卡 ✅`,
-          (newlyFinishedEvening ? input.eveningNotes : input.morningNotes) || '点击查看今日照护记录，辛苦了！💕',
+          (newlyFinishedEvening ? safeInput.eveningNotes : safeInput.morningNotes) || '点击查看今日照护记录，辛苦了！💕',
           { type: 'checkin', screen: 'home', roomId: input.roomId },
           'syncCheckIn',
         );

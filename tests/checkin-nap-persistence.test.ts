@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const memoryStorage = vi.hoisted(() => new Map<string, string>());
+const cloudSyncCheckInMock = vi.hoisted(() => vi.fn<
+  (checkIn: any, explicitRoomId?: string | number | null) => Promise<any>
+>(async () => ({ success: true })));
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
@@ -18,7 +21,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 vi.mock('../lib/cloud-sync', () => ({
-  cloudSyncCheckIn: vi.fn(async () => ({ success: true })),
+  cloudSyncCheckIn: cloudSyncCheckInMock,
   cloudSyncDiary: vi.fn(),
   cloudGetDiaries: vi.fn(),
   cloudDeleteDiary: vi.fn(),
@@ -39,6 +42,7 @@ vi.mock('../lib/cloud-sync', () => ({
 import {
   getAllCheckIns,
   mergeCloudCheckInsIntoLocal,
+  upsertCheckIn,
   type DailyCheckIn,
 } from '../lib/storage';
 
@@ -70,7 +74,11 @@ function checkIn(overrides: Partial<DailyCheckIn> = {}): DailyCheckIn {
 }
 
 describe('跨日小睡持久化', () => {
-  beforeEach(() => memoryStorage.clear());
+  beforeEach(() => {
+    memoryStorage.clear();
+    cloudSyncCheckInMock.mockReset();
+    cloudSyncCheckInMock.mockResolvedValue({ success: true, checkIn: { id: 1 } });
+  });
 
   it('登录恢复遇到缺少小睡字段的旧云端行时保留本地小睡', async () => {
     memoryStorage.set(CACHE_KEY, JSON.stringify([checkIn()]));
@@ -143,5 +151,108 @@ describe('跨日小睡持久化', () => {
 
     expect(merged.map(item => item.date)).toContain('2026-08-20');
     expect(merged.find(item => item.date === '2026-08-20')?.napMinutes).toBe(30);
+  });
+});
+
+
+describe('晚间打卡并发与重复行保护', () => {
+  beforeEach(() => {
+    memoryStorage.clear();
+    cloudSyncCheckInMock.mockReset();
+  });
+
+  it('早间请求未结束时不会并发发送晚间请求，晚间失败仍保留完整本地待同步记录', async () => {
+    let resolveMorning!: (value: any) => void;
+    let resolveEvening!: (value: any) => void;
+    const morningRequest = new Promise<any>(resolve => { resolveMorning = resolve; });
+    const eveningRequest = new Promise<any>(resolve => { resolveEvening = resolve; });
+    cloudSyncCheckInMock
+      .mockImplementationOnce(() => morningRequest)
+      .mockImplementationOnce(() => eveningRequest);
+
+    await upsertCheckIn({
+      date: '2026-08-30',
+      sleepHours: 8,
+      sleepQuality: 'good',
+      morningNotes: '早间已记录',
+      morningDone: true,
+    }, 'queue-room');
+    await vi.waitFor(() => expect(cloudSyncCheckInMock).toHaveBeenCalledTimes(1));
+
+    await upsertCheckIn({
+      date: '2026-08-30',
+      moodEmoji: '😊',
+      moodScore: 9,
+      medicationTaken: true,
+      mealOption: '正常进食',
+      mealNotes: '正常进食',
+      daytimeNap: true,
+      napMinutes: 60,
+      eveningNotes: '晚间状态稳定',
+      eveningDone: true,
+    }, 'queue-room');
+    expect(cloudSyncCheckInMock).toHaveBeenCalledTimes(1);
+
+    resolveMorning({ success: true, checkIn: { id: 11 } });
+    await vi.waitFor(() => expect(cloudSyncCheckInMock).toHaveBeenCalledTimes(2));
+    expect(cloudSyncCheckInMock.mock.calls[1][0]).toMatchObject({
+      morningDone: true,
+      eveningDone: true,
+      napMinutes: 60,
+      mealNotes: '正常进食',
+    });
+
+    resolveEvening(null);
+    await vi.waitFor(async () => {
+      const [saved] = await getAllCheckIns('queue-room');
+      expect(saved).toMatchObject({
+        morningDone: true,
+        eveningDone: true,
+        napMinutes: 60,
+        mealNotes: '正常进食',
+        eveningNotes: '晚间状态稳定',
+        syncPending: true,
+      });
+    });
+  });
+
+  it('把旧服务器同家庭同日期的早间行和晚间行合并为一条完整记录', async () => {
+    const merged = await mergeCloudCheckInsIntoLocal([
+      {
+        id: 21,
+        date: '2026-08-29',
+        sleepHours: 7.5,
+        sleepQuality: 'good',
+        morningNotes: '早间完整',
+        morningDone: true,
+        eveningDone: false,
+        completedAt: '2026-08-29T08:00:00.000Z',
+      },
+      {
+        id: 22,
+        date: '2026-08-29',
+        daytimeNap: true,
+        napMinutes: 90,
+        moodEmoji: '😌',
+        moodScore: 8,
+        medicationTaken: true,
+        mealNotes: '晚饭正常',
+        eveningNotes: '晚间完整',
+        morningDone: false,
+        eveningDone: true,
+        completedAt: '2026-08-29T22:00:00.000Z',
+      },
+    ], ROOM_ID);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      morningDone: true,
+      eveningDone: true,
+      sleepHours: 7.5,
+      morningNotes: '早间完整',
+      napMinutes: 90,
+      mealNotes: '晚饭正常',
+      eveningNotes: '晚间完整',
+    });
   });
 });

@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { checkIns, InsertUser, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -42,6 +42,74 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     } catch (e: any) {
       console.warn(`[Database] Migration warning (${table}.${column}):`, e?.message ?? e);
     }
+  }
+
+  // 打卡必须按家庭 + 日期唯一。旧版本并发插入可能留下同日两行：
+  // 先把最新的早间完成行和晚间完成行合并到最新主键，再删除重复行并建立唯一索引。
+  try {
+    const indexRows: any[] = await (db as any).execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'check_ins'
+         AND INDEX_NAME = 'uq_check_ins_room_date'
+       LIMIT 1`
+    );
+    const indexExists = Array.isArray(indexRows[0]) ? indexRows[0].length > 0 : indexRows.length > 0;
+    if (!indexExists) {
+      const duplicateResult: any[] = await (db as any).execute(
+        'SELECT roomId, date FROM check_ins GROUP BY roomId, date HAVING COUNT(*) > 1'
+      );
+      const duplicateGroups: Array<{ roomId: number; date: string }> = Array.isArray(duplicateResult[0])
+        ? duplicateResult[0]
+        : duplicateResult;
+      for (const group of duplicateGroups) {
+        const rows = await db.select().from(checkIns)
+          .where(and(eq(checkIns.roomId, group.roomId), eq(checkIns.date, group.date)))
+          .orderBy(desc(checkIns.id));
+        const canonical = rows[0];
+        if (!canonical) continue;
+        const morning = rows.find(row => row.morningDone === true);
+        const evening = rows.find(row => row.eveningDone === true);
+        await db.update(checkIns).set({
+          authorUserId: evening?.authorUserId ?? morning?.authorUserId ?? canonical.authorUserId,
+          sleepHours: morning?.sleepHours ?? canonical.sleepHours,
+          sleepQuality: morning?.sleepQuality ?? canonical.sleepQuality,
+          sleepInput: morning?.sleepInput ?? canonical.sleepInput,
+          sleepScore: morning?.sleepScore ?? canonical.sleepScore,
+          sleepProblems: morning?.sleepProblems ?? canonical.sleepProblems,
+          sleepType: morning?.sleepType ?? canonical.sleepType,
+          sleepSegments: morning?.sleepSegments ?? canonical.sleepSegments,
+          awakeHours: morning?.awakeHours ?? canonical.awakeHours,
+          nightWakings: morning?.nightWakings ?? canonical.nightWakings,
+          morningNotes: morning?.morningNotes ?? canonical.morningNotes,
+          morningDone: rows.some(row => row.morningDone === true),
+          daytimeNap: evening?.daytimeNap ?? canonical.daytimeNap,
+          napMinutes: evening?.napMinutes ?? canonical.napMinutes,
+          moodEmoji: evening?.moodEmoji ?? canonical.moodEmoji,
+          moodScore: evening?.moodScore ?? canonical.moodScore,
+          medicationTaken: evening?.medicationTaken ?? canonical.medicationTaken,
+          medicationNotes: evening?.medicationNotes ?? canonical.medicationNotes,
+          mealNotes: evening?.mealNotes ?? canonical.mealNotes,
+          mealOption: evening?.mealOption ?? canonical.mealOption,
+          eveningNotes: evening?.eveningNotes ?? canonical.eveningNotes,
+          eveningDone: rows.some(row => row.eveningDone === true),
+          aiMessage: evening?.aiMessage ?? canonical.aiMessage,
+          careScore: evening?.careScore ?? canonical.careScore,
+          completedAt: evening?.completedAt ?? morning?.completedAt ?? canonical.completedAt,
+        }).where(eq(checkIns.id, canonical.id));
+        await db.delete(checkIns).where(and(
+          eq(checkIns.roomId, group.roomId),
+          eq(checkIns.date, group.date),
+          ne(checkIns.id, canonical.id),
+        ));
+      }
+      await (db as any).execute(
+        'ALTER TABLE check_ins ADD UNIQUE KEY uq_check_ins_room_date (roomId, date)'
+      );
+      console.log('[Database] Migration: merged duplicate check-ins and added room/date unique index');
+    }
+  } catch (e: any) {
+    console.warn('[Database] Migration warning (uq_check_ins_room_date):', e?.message ?? e);
   }
 
   // 用药幂等索引：现有记录 clientId 均为空，不影响历史数据；新客户端按 roomId + clientId 去重。

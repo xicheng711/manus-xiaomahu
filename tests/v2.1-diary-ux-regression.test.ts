@@ -201,7 +201,8 @@ describe('Check-in resilience, permissions, and cross-timezone viewing', () => {
   it('enforces creator-only writes and derives the screen role from activeMembership', () => {
     expect(router).toContain('只有主照顾者可以新增或修改打卡记录');
     expect(checkin).toContain("activeMembership.role !== 'creator'");
-    expect(storage).toContain('cloudSyncCheckIn(checkIn, rid)');
+    expect(storage).toContain('cloudSyncCheckIn(checkIn, roomId)');
+    expect(storage).toContain('enqueueCheckInSync(rid, checkIn.date');
   });
 
   it('shows Joiners the caregiver latest record rather than filtering by viewer timezone', () => {
@@ -799,5 +800,56 @@ describe('Monthly sleep and nap line-chart polish', () => {
     expect(trend).toContain('hasData: recorded.length > 0');
     expect(trend).toContain('function getDateKeyYearMonth');
     expect(trend).toContain('getDateKeyYearMonth(c.date)?.year === currentYear');
+  });
+});
+
+
+describe('Evening check-in durability and instant family-tab loading', () => {
+  const storage = read('lib/storage.ts');
+  const family = read('app/(tabs)/family.tsx');
+  const familyRouter = read('server/family-router.ts');
+  const familyDb = read('server/family-db.ts');
+  const schema = read('drizzle/schema.ts');
+  const db = read('server/db.ts');
+
+  it('serializes same-day check-in sync and only acknowledges the exact latest local version', () => {
+    expect(storage).toContain('const checkInSyncQueue = new Map<string, Promise<void>>()');
+    expect(storage).toContain('enqueueCheckInSync(rid, checkIn.date');
+    expect(storage).toContain('const syncVersion = generateId()');
+    expect(storage).toContain('if (latestVersion !== sentVersion) return');
+    expect(storage).toContain('await enqueueCheckInSync(roomId, entry.date');
+  });
+
+  it('deduplicates existing same-day cloud rows and preserves both completed phases', () => {
+    expect(storage).toContain('function mergeDuplicateCloudCheckIns');
+    expect(storage).toContain('merged.morningDone = existing?.morningDone === true || entry?.morningDone === true');
+    expect(storage).toContain('merged.eveningDone = existing?.eveningDone === true || entry?.eveningDone === true');
+    expect(storage).toContain('mergeDuplicateCloudCheckIns(cloudEntries).map');
+  });
+
+  it('enforces one server check-in per family/date and ignores stale phase snapshots', () => {
+    expect(schema).toContain('uniqueIndex("uq_check_ins_room_date").on(table.roomId, table.date)');
+    expect(db).toContain("INDEX_NAME = 'uq_check_ins_room_date'");
+    expect(db).toContain('merged duplicate check-ins and added room/date unique index');
+    expect(familyDb).toContain('onDuplicateKeyUpdate({ set: data })');
+    expect(familyRouter).toContain('input.completedAt < previous.completedAt');
+    expect(familyRouter).toContain('if (previous?.eveningDone === true && input.eveningDone !== true)');
+  });
+
+  it('renders room-scoped local family content before starting cloud work', () => {
+    const loadData = family.slice(family.indexOf('async function loadData'));
+    expect(loadData).toContain('第一阶段只读取当前家庭的 AsyncStorage');
+    expect(loadData).toContain('setRoom(rLocal)');
+    expect(loadData).toContain('setAnnouncements(localAnns)');
+    expect(loadData).toContain('setBriefingHistory(cachedHistory)');
+    expect(loadData.indexOf('setLoading(false)')).toBeLessThan(loadData.indexOf('syncPendingAnnouncements(requestedFamilyId)'));
+  });
+
+  it('refreshes in the background with a short focus throttle while preserving forced refresh paths', () => {
+    expect(family).toContain('const FAMILY_CLOUD_REFRESH_TTL_MS = 30_000');
+    expect(family).toContain('Date.now() - lastCloudRefreshAt < FAMILY_CLOUD_REFRESH_TTL_MS');
+    expect(family).toContain('try {\n      await loadData(true)');
+    expect(family).toContain('if (params.refresh) {\n      void loadData(true)');
+    expect(family).toContain('allowLegacyProfileFallback = memberships.length === 1');
   });
 });

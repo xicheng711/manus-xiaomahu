@@ -146,6 +146,8 @@ export interface DailyCheckIn {
   serverCheckInId?: number;
   /** 仅本地使用：打卡尚未成功写入家庭云端。 */
   syncPending?: boolean;
+  /** 仅本地使用：每次保存的唯一版本，用于阻止旧云端响应确认新版本。 */
+  syncVersion?: string;
 }
 
 export type MedicationChangeType = 'added' | 'updated' | 'paused' | 'resumed' | 'deleted';
@@ -548,6 +550,49 @@ function normalizeCheckIn(c: DailyCheckIn): DailyCheckIn {
   return { ...normalized, napMinutes, daytimeNap: napMinutes > 0 };
 }
 
+function mergeDuplicateCloudCheckIns(entries: any[]): any[] {
+  const byDate = new Map<string, any>();
+  const morningFields = [
+    'sleepHours', 'sleepQuality', 'sleepInput', 'sleepScore', 'sleepProblems',
+    'sleepType', 'sleepSegments', 'awakeHours', 'nightWakings', 'sleepRange',
+    'nightAwakenings', 'nightAwakeTime', 'napDuration', 'morningNotes', 'morningDone',
+  ];
+  const eveningFields = [
+    'daytimeNap', 'napMinutes', 'moodEmoji', 'moodScore', 'medicationTaken',
+    'medicationNotes', 'mealNotes', 'mealOption', 'eveningNotes', 'eveningDone',
+    'aiMessage', 'careScore',
+  ];
+  const timestamp = (entry: any) => String(entry?.completedAt ?? entry?.updatedAt ?? entry?.createdAt ?? '');
+
+  for (const entry of entries) {
+    const date = String(entry?.date ?? '');
+    if (!date || !byDate.has(date)) {
+      if (date) byDate.set(date, entry);
+      continue;
+    }
+    const existing = byDate.get(date);
+    const newer = timestamp(entry) >= timestamp(existing) ? entry : existing;
+    const older = newer === entry ? existing : entry;
+    const merged = { ...older, ...newer };
+    const morningSource = [existing, entry]
+      .filter(item => item?.morningDone === true)
+      .sort((left, right) => timestamp(right).localeCompare(timestamp(left)))[0];
+    const eveningSource = [existing, entry]
+      .filter(item => item?.eveningDone === true)
+      .sort((left, right) => timestamp(right).localeCompare(timestamp(left)))[0];
+    if (morningSource) {
+      for (const field of morningFields) merged[field] = morningSource[field];
+    }
+    if (eveningSource) {
+      for (const field of eveningFields) merged[field] = eveningSource[field];
+    }
+    merged.morningDone = existing?.morningDone === true || entry?.morningDone === true;
+    merged.eveningDone = existing?.eveningDone === true || entry?.eveningDone === true;
+    byDate.set(date, merged);
+  }
+  return [...byDate.values()];
+}
+
 /**
  * 将服务器打卡安全合并到当前家庭缓存。
  *
@@ -574,7 +619,9 @@ export async function mergeCloudCheckInsIntoLocal(
     'aiMessage', 'careScore', 'completedAt',
   ];
 
-  const mergedCloud = cloudEntries.map((raw: any) => {
+  // 旧服务器可能因并发首次写入存在同家庭同日多行；先按日期合并完成阶段，
+  // 再与本地缓存合并，避免查询顺序不确定时随机显示为“晚间未打卡”。
+  const mergedCloud = mergeDuplicateCloudCheckIns(cloudEntries).map((raw: any) => {
     const cloud = normalizeCheckIn({
       ...raw,
       id: String(raw.id),
@@ -663,6 +710,48 @@ export async function getYesterdayCheckIn(roomId?: string): Promise<DailyCheckIn
   return all.find(c => c.date === yStr) ?? null;
 }
 
+// 同一家庭同一天的云端打卡必须严格按本地保存顺序发送。
+// 否则较慢返回的早间请求可能在晚间请求之后覆盖服务器完整记录。
+const checkInSyncQueue = new Map<string, Promise<void>>();
+
+function checkInQueueKey(roomId: string | null | undefined, date: string): string {
+  return `${roomId || 'default'}:${date}`;
+}
+
+function enqueueCheckInSync(roomId: string | null | undefined, date: string, task: () => Promise<void>): Promise<void> {
+  const queueKey = checkInQueueKey(roomId, date);
+  const previous = checkInSyncQueue.get(queueKey) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(task)
+    .catch(error => console.warn('[xiaomahu] 打卡云端同步失败，已保留本地待同步状态', error));
+  checkInSyncQueue.set(queueKey, next);
+  next.finally(() => {
+    if (checkInSyncQueue.get(queueKey) === next) checkInSyncQueue.delete(queueKey);
+  });
+  return next;
+}
+
+async function syncCheckInSnapshot(checkIn: DailyCheckIn, roomId: string | null | undefined, key: string): Promise<void> {
+  const result = await cloudSyncCheckIn(checkIn, roomId);
+  if (!result?.success) return;
+  const latestRaw = await AsyncStorage.getItem(key);
+  const latest: DailyCheckIn[] = latestRaw ? JSON.parse(latestRaw) : [];
+  const latestIdx = latest.findIndex(item => item.date === checkIn.date);
+  if (latestIdx < 0) return;
+  // completedAt changes on every local save. An older request must never mark a newer
+  // morning/evening snapshot as synced when that newer request may still fail.
+  const latestVersion = latest[latestIdx].syncVersion ?? latest[latestIdx].completedAt;
+  const sentVersion = checkIn.syncVersion ?? checkIn.completedAt;
+  if (latestVersion !== sentVersion) return;
+  latest[latestIdx] = {
+    ...latest[latestIdx],
+    serverCheckInId: Number(result.checkIn?.id) || latest[latestIdx].serverCheckInId,
+    syncPending: false,
+  };
+  await AsyncStorage.setItem(key, JSON.stringify(latest));
+}
+
 export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string }, roomId?: string): Promise<DailyCheckIn> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.CHECK_INS, rid);
@@ -686,23 +775,16 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     careScore: 50,
     completedAt: new Date().toISOString(),
   };
+  const syncVersion = generateId();
   const checkIn: DailyCheckIn = idx >= 0
-    ? { ...all[idx], ...data, completedAt: new Date().toISOString(), syncPending: true }
-    : { ...defaults, ...data, syncPending: true };
+    ? { ...all[idx], ...data, completedAt: new Date().toISOString(), syncPending: true, syncVersion }
+    : { ...defaults, ...data, syncPending: true, syncVersion };
   if (idx >= 0) all[idx] = checkIn;
   else all.unshift(checkIn);
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // Cloud sync: 失败时保留 syncPending，后续进入首页/打卡页会自动重试。
-  cloudSyncCheckIn(checkIn, rid).then(async result => {
-    if (!result?.success) return;
-    const latestRaw = await AsyncStorage.getItem(key);
-    const latest: DailyCheckIn[] = latestRaw ? JSON.parse(latestRaw) : [];
-    const latestIdx = latest.findIndex(item => item.date === checkIn.date);
-    if (latestIdx >= 0) {
-      latest[latestIdx] = { ...latest[latestIdx], syncPending: false };
-      await AsyncStorage.setItem(key, JSON.stringify(latest));
-    }
-  }).catch((e) => console.warn('[xiaomahu] 打卡云端同步失败，已保存到本地', e));
+  // 本地写入完成即返回；云端按 room/date 串行同步。失败时保留 syncPending，
+  // 后续进入首页或打卡页自动重试，且旧请求不能清除新版本的待同步状态。
+  void enqueueCheckInSync(rid, checkIn.date, () => syncCheckInSnapshot(checkIn, rid, key));
   return checkIn;
 }
 
@@ -711,15 +793,7 @@ export async function syncPendingCheckIns(roomId: string): Promise<void> {
   const key = roomKey(KEYS.CHECK_INS, roomId);
   const entries = await getAllCheckIns(roomId);
   for (const entry of entries.filter(item => item.syncPending)) {
-    const result = await cloudSyncCheckIn(entry, roomId);
-    if (!result?.success) continue;
-    const latestRaw = await AsyncStorage.getItem(key);
-    const latest: DailyCheckIn[] = latestRaw ? JSON.parse(latestRaw) : [];
-    const idx = latest.findIndex(item => item.date === entry.date);
-    if (idx >= 0) {
-      latest[idx] = { ...latest[idx], syncPending: false };
-      await AsyncStorage.setItem(key, JSON.stringify(latest));
-    }
+    await enqueueCheckInSync(roomId, entry.date, () => syncCheckInSnapshot(entry, roomId, key));
   }
 }
 

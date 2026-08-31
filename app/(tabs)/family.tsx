@@ -405,6 +405,63 @@ function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; 
 
 // ─── Main Family Screen ────────────────────────────────────────────────────────
 
+type BriefingHistoryItem = {
+  date: string;
+  label: string;
+  checkIn: DailyCheckIn | null;
+  diary: any;
+  announcements: FamilyAnnouncement[];
+};
+
+const FAMILY_CLOUD_REFRESH_TTL_MS = 30_000;
+
+function buildFamilyBriefingHistory(
+  allCheckIns: DailyCheckIn[],
+  diaryEntries: any[],
+  announcements: FamilyAnnouncement[],
+): BriefingHistoryItem[] {
+  const checkInMap = new Map<string, DailyCheckIn>();
+  for (const checkIn of allCheckIns) checkInMap.set(checkIn.date, checkIn);
+
+  const viewerTodayKey = todayStr();
+  const viewerTomorrow = new Date();
+  viewerTomorrow.setDate(viewerTomorrow.getDate() + 1);
+  const viewerTomorrowKey = `${viewerTomorrow.getFullYear()}-${String(viewerTomorrow.getMonth() + 1).padStart(2, '0')}-${String(viewerTomorrow.getDate()).padStart(2, '0')}`;
+  const latestRecordedDate = allCheckIns
+    .map(checkIn => checkIn.date)
+    .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .sort((left, right) => right.localeCompare(left))[0];
+  const anchorDateKey = latestRecordedDate && latestRecordedDate > viewerTodayKey && latestRecordedDate <= viewerTomorrowKey
+    ? latestRecordedDate
+    : viewerTodayKey;
+  const [anchorYear, anchorMonth, anchorDay] = anchorDateKey.split('-').map(Number);
+  const anchorDate = new Date(anchorYear, anchorMonth - 1, anchorDay, 12);
+
+  const viewerYesterday = new Date();
+  viewerYesterday.setDate(viewerYesterday.getDate() - 1);
+  const viewerYesterdayKey = `${viewerYesterday.getFullYear()}-${String(viewerYesterday.getMonth() + 1).padStart(2, '0')}-${String(viewerYesterday.getDate()).padStart(2, '0')}`;
+
+  const history: BriefingHistoryItem[] = [];
+  for (let index = 0; index < 3; index += 1) {
+    const date = new Date(anchorDate);
+    date.setDate(anchorDate.getDate() - index);
+    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const label = dateKey === viewerTodayKey
+      ? '今日'
+      : dateKey === viewerYesterdayKey
+        ? '昨日'
+        : date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    history.push({
+      date: dateKey,
+      label,
+      checkIn: checkInMap.get(dateKey) ?? null,
+      diary: diaryEntries.find(entry => entry.date === dateKey),
+      announcements: announcements.filter(announcement => announcement.date === dateKey),
+    });
+  }
+  return history;
+}
+
 export default function FamilyScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ openCompose?: string; joinCode?: string; refresh?: string }>();
@@ -424,7 +481,7 @@ export default function FamilyScreen() {
   // Briefing state
   const [briefingData, setBriefingData] = useState<any>(null);
   const [selectedBriefingDate, setSelectedBriefingDate] = useState<string>(todayStr());
-  const [briefingHistory, setBriefingHistory] = useState<{ date: string; label: string; checkIn: DailyCheckIn | null; diary: any; announcements: any[] }[]>([]);
+  const [briefingHistory, setBriefingHistory] = useState<BriefingHistoryItem[]>([]);
   const [elderNickname, setElderNickname] = useState('家人');
   const [elderEmoji, setElderEmoji] = useState('🐯');
 
@@ -438,9 +495,10 @@ export default function FamilyScreen() {
   const [isCreator, setIsCreator] = useState(true);
   const [codeCopied, setCodeCopied] = useState(false);
 
-  const { activeMembership, refresh } = useFamilyContext();
+  const { memberships, activeMembership, refresh } = useFamilyContext();
   const familyId = activeMembership?.familyId;
   const activeFamilyRef = useRef<string | undefined>(familyId);
+  const lastCloudRefreshAtRef = useRef(new Map<string, number>());
   activeFamilyRef.current = familyId;
 
   useEffect(() => {
@@ -450,18 +508,30 @@ export default function FamilyScreen() {
     setAnnouncements([]);
     setBriefingData(null);
     setBriefingHistory([]);
-    setElderNickname(activeMembership?.room.elderName || '家人');
-  }, [familyId]);
+    setElderNickname('家人');
+    setLoading(true);
+    fadeAnim.setValue(0);
+  }, [familyId, fadeAnim]);
 
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await loadData(); } finally { setRefreshing(false); }
+    try {
+      await loadData(true);
+    } catch (error) {
+      console.warn('[Family] refresh failed', error);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyId]);
 
   const loadDataCallback = useCallback(() => {
-    loadData();
+    void loadData(false).catch(error => {
+      console.warn('[Family] cached load failed', error);
+      setLoading(false);
+    });
     if (params.openCompose === '1') {
       setTimeout(() => {
         setShowCompose(true);
@@ -475,7 +545,12 @@ export default function FamilyScreen() {
 
   // 点击通知时强制刷新
   useEffect(() => {
-    if (params.refresh) loadData();
+    if (params.refresh) {
+      void loadData(true).catch(error => {
+        console.warn('[Family] notification refresh failed', error);
+        setLoading(false);
+      });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.refresh]);
 
@@ -488,7 +563,7 @@ export default function FamilyScreen() {
     ).start();
   }, []);
 
-  async function loadData() {
+  async function loadData(forceCloudRefresh = false) {
     const requestedMembership = activeMembership;
     const requestedFamilyId = requestedMembership?.familyId;
     if (!requestedMembership || !requestedFamilyId) {
@@ -501,18 +576,58 @@ export default function FamilyScreen() {
       return;
     }
     const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
-    setLoading(true);
     const rLocal = requestedMembership.room;
     const m = rLocal.members.find(member => member.id === requestedMembership.myMemberId) ?? null;
     const creatorFlag = requestedMembership.role === 'creator' || m?.isCreator === true;
+
+    // 第一阶段只读取当前家庭的 AsyncStorage：不等待网络，立即显示成员、公告和简报缓存。
+    const [localAnns, cachedCheckIns, cachedDiaries, cachedFamilyProfile, cachedLegacyProfile] = await Promise.all([
+      getFamilyAnnouncements(30, requestedFamilyId),
+      getAllCheckIns(requestedFamilyId),
+      getDiaryEntries(requestedFamilyId),
+      getFamilyProfile(requestedFamilyId),
+      getProfile(),
+    ]);
+    if (!isCurrentFamily()) return;
+    const allowLegacyProfileFallback = memberships.length === 1;
+    const cachedProfile = cachedFamilyProfile
+      ? {
+          ...(allowLegacyProfileFallback ? cachedLegacyProfile : null),
+          ...cachedFamilyProfile,
+          name: cachedFamilyProfile.name || (allowLegacyProfileFallback ? cachedLegacyProfile?.name : undefined),
+          nickname: cachedFamilyProfile.nickname || (allowLegacyProfileFallback ? cachedLegacyProfile?.nickname : undefined),
+        }
+      : allowLegacyProfileFallback ? cachedLegacyProfile : null;
+    const cachedToday = cachedCheckIns.find(checkIn => checkIn.date === todayStr()) ?? null;
+    const cachedHistory = buildFamilyBriefingHistory(cachedCheckIns, cachedDiaries, localAnns);
+    setRoom(rLocal);
+    setCurrentMemberState(m);
+    setIsCreator(creatorFlag);
+    setAnnouncements(localAnns);
+    setBriefingData({
+      checkIn: cachedToday,
+      profile: cachedProfile,
+      todayAnnouncements: localAnns.filter(announcement => announcement.date === todayStr()),
+    });
+    setBriefingHistory(cachedHistory);
+    const cachedLatestWithData = cachedHistory.find(item => item.checkIn) ?? cachedHistory[0];
+    if (cachedLatestWithData) setSelectedBriefingDate(cachedLatestWithData.date);
+    setElderNickname(cachedProfile?.nickname || cachedProfile?.name || rLocal.elderName || '家人');
+    setElderEmoji(cachedProfile?.zodiacEmoji || '🐯');
+    fadeAnim.setValue(1);
+    setLoading(false);
+
+    // 频繁切换 Tab 时直接复用刚刷新的内容；下拉刷新和通知进入会强制拉取。
+    const lastCloudRefreshAt = lastCloudRefreshAtRef.current.get(requestedFamilyId) ?? 0;
+    if (!forceCloudRefresh && Date.now() - lastCloudRefreshAt < FAMILY_CLOUD_REFRESH_TTL_MS) return;
+    lastCloudRefreshAtRef.current.set(requestedFamilyId, Date.now());
+
+    // 第二阶段在后台重试待同步内容并拉取服务器最新数据，不再用骨架屏阻塞页面。
     await Promise.all([
       syncPendingAnnouncements(requestedFamilyId).catch(() => {}),
       syncPendingBriefings(requestedFamilyId).catch(() => {}),
     ]);
-    const [localAnns, cloudAnns] = await Promise.all([
-      getFamilyAnnouncements(30, requestedFamilyId),
-      cloudGetAnnouncements(Number(requestedFamilyId), 50),
-    ]);
+    const cloudAnns = await cloudGetAnnouncements(Number(requestedFamilyId), 50);
     if (!isCurrentFamily()) return;
     // myMemberId is the authoritative member row id for the requested family.
     const myMemberId = requestedMembership.myMemberId;
@@ -668,8 +783,15 @@ export default function FamilyScreen() {
           console.warn('[Family] cloud fallback failed:', e);
         }
       }
-      // Prefer FamilyProfile (family-scoped) for elder data
-      profile = localFp ? { ...localProfile, ...localFp, name: localFp.name || localProfile?.name, nickname: localFp.nickname || localProfile?.nickname } as any : localProfile;
+      // Prefer FamilyProfile (family-scoped) for elder data; global legacy profile is safe only for a single-family account.
+      profile = localFp
+        ? {
+            ...(allowLegacyProfileFallback ? localProfile : null),
+            ...localFp,
+            name: localFp.name || (allowLegacyProfileFallback ? localProfile?.name : undefined),
+            nickname: localFp.nickname || (allowLegacyProfileFallback ? localProfile?.nickname : undefined),
+          } as any
+        : allowLegacyProfileFallback ? localProfile : null;
     }
     if (!isCurrentFamily()) return;
     const today = todayStr();
@@ -677,48 +799,8 @@ export default function FamilyScreen() {
     setElderNickname(profile?.nickname || profile?.name || r?.elderName || '家人');
     setElderEmoji(profile?.zodiacEmoji || '🐯');
 
-    // Build briefing history: always show the latest 3 calendar days.
-    // DailyCheckIn.date is the caregiver device's local calendar date. When a Joiner is
-    // in another timezone, the caregiver's newest date can be one day ahead, so use the
-    // newest of the viewer's local date and the latest recorded check-in date as the anchor.
-    const checkInMap = new Map<string, DailyCheckIn>();
-    for (const ci of allCheckIns) { checkInMap.set(ci.date, ci); }
-
-    const viewerTodayKey = todayStr();
-    const viewerTomorrow = new Date();
-    viewerTomorrow.setDate(viewerTomorrow.getDate() + 1);
-    const viewerTomorrowKey = `${viewerTomorrow.getFullYear()}-${String(viewerTomorrow.getMonth() + 1).padStart(2, '0')}-${String(viewerTomorrow.getDate()).padStart(2, '0')}`;
-    const latestRecordedDate = allCheckIns
-      .map(ci => ci.date)
-      .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
-      .sort((left, right) => right.localeCompare(left))[0];
-    // A real timezone difference can move the caregiver's date ahead by at most one day.
-    // Ignore dates further in the future so one malformed record cannot hide recent history.
-    const anchorDateKey = latestRecordedDate && latestRecordedDate > viewerTodayKey && latestRecordedDate <= viewerTomorrowKey
-      ? latestRecordedDate
-      : viewerTodayKey;
-    const [anchorYear, anchorMonth, anchorDay] = anchorDateKey.split('-').map(Number);
-    const anchorDate = new Date(anchorYear, anchorMonth - 1, anchorDay, 12);
-
-    const viewerYesterday = new Date();
-    viewerYesterday.setDate(viewerYesterday.getDate() - 1);
-    const viewerYesterdayKey = `${viewerYesterday.getFullYear()}-${String(viewerYesterday.getMonth() + 1).padStart(2, '0')}-${String(viewerYesterday.getDate()).padStart(2, '0')}`;
-
-    const history: { date: string; label: string; checkIn: DailyCheckIn | null; diary: any; announcements: any[] }[] = [];
-    for (let i = 0; i < 3; i++) {
-      const d = new Date(anchorDate);
-      d.setDate(anchorDate.getDate() - i);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const label = dateKey === viewerTodayKey
-        ? '今日'
-        : dateKey === viewerYesterdayKey
-          ? '昨日'
-          : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-      const dayCheckIn = checkInMap.get(dateKey) || null;
-      const dayDiary = diaryEntries.find(e => e.date === dateKey);
-      const dayAnnouncements = a.filter(ann => ann.date === dateKey);
-      history.push({ date: dateKey, label, checkIn: dayCheckIn, diary: dayDiary, announcements: dayAnnouncements });
-    }
+    // 用与缓存首屏相同的纯函数重建最近三天，保持跨时区日期规则完全一致。
+    const history = buildFamilyBriefingHistory(allCheckIns, diaryEntries, a);
     if (!isCurrentFamily()) return;
     setBriefingHistory(history);
 

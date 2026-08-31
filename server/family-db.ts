@@ -132,15 +132,14 @@ export async function getElderProfile(roomId: number) {
 export async function upsertCheckIn(data: InsertCheckIn) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const existing = await db.select().from(checkIns)
+  // uq_check_ins_room_date guarantees one row per family/day. The atomic upsert
+  // also removes the select-then-insert race when morning/evening sync overlap.
+  await db.insert(checkIns).values(data).onDuplicateKeyUpdate({ set: data });
+  const rows = await db.select().from(checkIns)
     .where(and(eq(checkIns.roomId, data.roomId!), eq(checkIns.date, data.date!)))
     .limit(1);
-  if (existing.length > 0) {
-    await db.update(checkIns).set(data).where(eq(checkIns.id, existing[0].id));
-    return { ...existing[0], ...data };
-  }
-  const result = await db.insert(checkIns).values(data);
-  return { id: result[0].insertId, ...data };
+  if (!rows[0]) throw new Error("Check-in upsert failed");
+  return rows[0];
 }
 
 export async function getCheckInsByRoom(roomId: number, limit = 30) {

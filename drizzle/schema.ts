@@ -114,7 +114,9 @@ export const checkIns = mysqlTable("check_ins", {
   completedAt: varchar("completedAt", { length: 30 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, table => [
+  uniqueIndex("uq_check_ins_room_date").on(table.roomId, table.date),
+]);
 
 export type CheckIn = typeof checkIns.$inferSelect;
 export type InsertCheckIn = typeof checkIns.$inferInsert;
