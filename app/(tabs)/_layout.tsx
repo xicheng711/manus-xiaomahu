@@ -35,7 +35,8 @@ function TabIcon({
   };
 
   const accessible = !isJoiner || JOINER_TABS.has(route);
-  const showActive = focused || (isJoiner && JOINER_TABS.has(route));
+  // 只有当前页面使用高亮色；其他可访问页面保持清晰但不过度抢眼。
+  const showActive = focused;
 
   return (
     <View style={[styles.tabItem, !accessible && styles.tabItemFaded]}>
@@ -55,7 +56,7 @@ function TabIcon({
       )}
       <Text style={[
         styles.tabLabel,
-        showActive && { color: cfg.gradient[0], fontWeight: "600" as const },
+        showActive && { color: cfg.gradient[1], fontWeight: "700" as const },
         !accessible && styles.tabLabelFaded,
       ]} numberOfLines={1}>
         {cfg.label}
@@ -152,15 +153,16 @@ export default function TabLayout() {
             paddingTop: 4,
             paddingBottom: safeBottom,
             paddingHorizontal: 4,
-            backgroundColor: AppColors.surface.whiteStrong,
-            borderTopWidth: 0,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            shadowColor: '#8B7E74',
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.06,
-            shadowRadius: 20,
-            elevation: 16,
+            backgroundColor: 'rgba(255,253,251,0.96)',
+            borderTopWidth: 0.5,
+            borderTopColor: 'rgba(129,111,101,0.12)',
+            borderTopLeftRadius: 26,
+            borderTopRightRadius: 26,
+            shadowColor: '#7D6D64',
+            shadowOffset: { width: 0, height: -5 },
+            shadowOpacity: 0.12,
+            shadowRadius: 22,
+            elevation: 18,
             overflow: Platform.OS === "android" ? "hidden" : undefined,
           },
           tabBarItemStyle: {
@@ -197,7 +199,7 @@ const styles = StyleSheet.create({
     minWidth: 56,
   },
   tabItemFaded: {
-    opacity: 0.45,
+    opacity: 0.62,
   },
   iconCircle: {
     width: CIRCLE,
@@ -207,7 +209,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inactiveCircle: {
-    backgroundColor: '#F5F0ED',
+    backgroundColor: '#F3EEEB',
   },
   activeEmoji: {
     fontSize: 22,
@@ -216,12 +218,12 @@ const styles = StyleSheet.create({
   inactiveEmoji: {
     fontSize: 20,
     lineHeight: 24,
-    opacity: 0.55,
+    opacity: 0.78,
   },
   tabLabel: {
     fontSize: 11,
-    fontWeight: "400",
-    color: AppColors.text.tertiary,
+    fontWeight: "500",
+    color: AppColors.nav.inactive,
     letterSpacing: 0,
   },
   tabLabelFaded: {
@@ -232,7 +234,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 58,
-    opacity: 0.5,
+    opacity: 0.82,
   },
   // Toast 样式
   toast: {

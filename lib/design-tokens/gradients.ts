@@ -1,7 +1,7 @@
 export const Gradients = {
-  appBg: ['#F5F0F2', '#F2ECEE', '#F4EFEB'] as const,
+  appBg: ['#FAF7F4', '#F8F3F0', '#F7F2ED'] as const,
 
-  heroGlow: ['rgba(255,255,255,0.65)', 'rgba(240,220,230,0.22)', 'rgba(230,225,248,0.18)'] as const,
+  heroGlow: ['rgba(255,255,255,0.72)', 'rgba(244,232,225,0.18)', 'rgba(235,231,246,0.12)'] as const,
 
   green: ['#98C1A3', '#7AA68A'] as const,
   greenSoft: ['#EAF2EC', '#D8ECDD'] as const,
@@ -16,8 +16,8 @@ export const Gradients = {
 
   navActive: ['#EDA098', '#E08498'] as const,
 
-  warmCard: ['#FFFFFF', '#FBF6F3'] as const,
+  warmCard: ['#FFFDFC', '#FBF7F3'] as const,
 
-  glass: ['rgba(255,255,255,0.55)', 'rgba(255,252,250,0.30)'] as const,
+  glass: ['rgba(255,255,255,0.72)', 'rgba(255,253,251,0.48)'] as const,
   glassHighlight: ['rgba(255,255,255,0.65)', 'rgba(255,255,255,0)'] as const,
 };

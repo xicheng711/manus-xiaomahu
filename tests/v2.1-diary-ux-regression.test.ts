@@ -595,3 +595,42 @@ describe('Daytime nap compatibility and homepage announcement date', () => {
     expect(db).toContain("table: 'check_ins',      column: 'napMinutes'");
   });
 });
+
+
+describe('Warm ivory homepage visual system', () => {
+  const colors = read('lib/design-tokens/colors.ts');
+  const gradients = read('lib/design-tokens/gradients.ts');
+  const creatorHome = read('app/(tabs)/index.tsx');
+  const joinerHome = read('components/joiner-home.tsx');
+  const tabLayout = read('app/(tabs)/_layout.tsx');
+  const trend = read('components/trend-chart.tsx');
+
+  it('uses a restrained warm ivory background and stronger secondary text contrast', () => {
+    expect(colors).toContain("primary: '#FAF7F4'");
+    expect(colors).toContain("tertiary: '#858087'");
+    expect(gradients).toContain("appBg: ['#FAF7F4', '#F8F3F0', '#F7F2ED']");
+  });
+
+  it('keeps homepage cards border-free with soft elevation and readable unrecorded states', () => {
+    expect(joinerHome).toContain("color: latestCheckIn?.morningDone ? AppColors.purple.strong : AppColors.text.secondary");
+    expect(joinerHome).toContain("color: latestCheckIn?.eveningDone ? AppColors.peach.primary : AppColors.text.secondary");
+    expect(joinerHome).toContain('emptyFeedIconWrap');
+    expect(joinerHome).toContain('shadowOpacity: 0.08, shadowRadius: 18, elevation: 3');
+    expect(creatorHome).toContain('paddingBottom: 112');
+  });
+
+  it('visually separates the tab bar and keeps inactive destinations clearly visible', () => {
+    expect(tabLayout).toContain("backgroundColor: 'rgba(255,253,251,0.96)'");
+    expect(tabLayout).toContain('const showActive = focused');
+    expect(tabLayout).toContain('opacity: 0.78');
+    expect(tabLayout).toContain('color: AppColors.nav.inactive');
+  });
+
+  it('uses equal-width columns for sleep, nap, and medication trend alignment', () => {
+    expect((trend.match(/barCol: \{ flex: 1, minWidth: 0/g) ?? []).length).toBe(2);
+    expect(trend).toContain("valueLabel: { width: '100%'");
+    expect(trend).toContain("dayLabel: { width: '100%'");
+    expect(trend).toContain('dotCol: { flex: 1, minWidth: 0');
+    expect(trend).toContain('<View style={styles.sectionCard}>');
+  });
+});

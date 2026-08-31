@@ -870,8 +870,9 @@ function CreatorHomeScreen() {
                 style={{
                   flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6,
                   backgroundColor: AppColors.surface.glass,
-                  borderWidth: 1, borderColor: AppColors.border.glass,
                   borderRadius: 14, paddingHorizontal: 9, paddingVertical: 4,
+                  shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 1, shadowRadius: 8, elevation: 1,
                   alignSelf: 'flex-start',
                 }}
               >
@@ -1045,7 +1046,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safeArea: { flex: 1 },
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { paddingHorizontal: 22, paddingBottom: 8 },
+  content: { paddingHorizontal: 22, paddingBottom: 112 },
 
   bgDecorLayer: { position: 'absolute', top: 0, left: 0, right: 0, height: 220, overflow: 'hidden' },
 
@@ -1060,7 +1061,8 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.surface.glass,
     paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: 16,
-    borderWidth: 1, borderColor: AppColors.border.glass,
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1, shadowRadius: 10, elevation: 1,
   },
   weatherIcon: { fontSize: 17 },
   weatherTemp: { fontSize: 13, fontWeight: '700', color: AppColors.text.primary, lineHeight: 16 },
@@ -1089,9 +1091,8 @@ const styles = StyleSheet.create({
   checkinDone: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: AppColors.surface.card,
-    borderWidth: 1, borderColor: AppColors.border.glass,
-    borderRadius: 24, padding: 16, marginBottom: 16,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2,
+    borderRadius: 24, padding: 17, marginBottom: 18,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
   },
   chevronCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' },
   chevronCircleDone: { width: 30, height: 30, borderRadius: 15, backgroundColor: AppColors.green.primary + '25', alignItems: 'center', justifyContent: 'center' },
@@ -1099,10 +1100,9 @@ const styles = StyleSheet.create({
 
   // 智能卡片
   smartCard: {
-    marginBottom: 18, backgroundColor: 'transparent', borderRadius: 22,
-    padding: 16, borderWidth: 1, borderColor: AppColors.border.glass,
-    overflow: 'hidden',
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2,
+    marginBottom: 20, backgroundColor: 'transparent', borderRadius: 22,
+    padding: 17, overflow: 'hidden',
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
   },
   aiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   aiIconBox: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
@@ -1124,13 +1124,12 @@ const styles = StyleSheet.create({
 
   // 快捷入口网格
   quickGrid: { marginTop: 0 },
-  quickRow: { flexDirection: 'row', gap: 14, marginBottom: 14 },
+  quickRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   quickItem: { flex: 1 },
   quickCard: {
     borderRadius: 24, padding: 16, paddingBottom: 14, height: 112,
     flexDirection: 'column', alignItems: 'flex-start', overflow: 'hidden',
-    borderWidth: 1, borderColor: AppColors.border.glass,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 15, elevation: 3,
   },
   quickIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   quickEmoji: { fontSize: 20, lineHeight: 24 },
@@ -1138,9 +1137,8 @@ const styles = StyleSheet.create({
 
   // 数据摘要卡片
   summaryCard: {
-    backgroundColor: AppColors.surface.card, borderRadius: 24, padding: 18, marginBottom: 16,
-    borderWidth: 1, borderColor: AppColors.border.glass,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2,
+    backgroundColor: AppColors.surface.card, borderRadius: 24, padding: 18, marginBottom: 18,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
   },
   summaryCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   summaryCardTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary },
@@ -1155,10 +1153,9 @@ const styles = StyleSheet.create({
   warmFooter: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     backgroundColor: AppColors.surface.card, borderRadius: 20,
-    paddingHorizontal: 18, paddingVertical: 14,
+    paddingHorizontal: 18, paddingVertical: 15,
     marginTop: 10, marginBottom: 0,
-    borderWidth: 1, borderColor: AppColors.border.glass,
-    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 1,
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 12, elevation: 1,
   },
   warmFooterIcon: {
     width: 36, height: 36, borderRadius: 18,

@@ -380,9 +380,9 @@ const sleepStyles = StyleSheet.create({
   root: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
   yAxis: { width: 26, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 4, paddingTop: 16 },
   yLabel: { fontSize: 9, color: AppColors.text.tertiary },
-  barsArea: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
-  barCol: { alignItems: 'center', gap: 4 },
-  valueLabel: { fontSize: 10, fontWeight: '600', marginBottom: 2, minHeight: 14 },
+  barsArea: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
+  barCol: { flex: 1, minWidth: 0, alignItems: 'center', gap: 4 },
+  valueLabel: { width: '100%', fontSize: 10, fontWeight: '600', marginBottom: 2, minHeight: 14, textAlign: 'center' },
   track: {
     backgroundColor: AppColors.border.soft,
     borderRadius: 8,
@@ -392,10 +392,10 @@ const sleepStyles = StyleSheet.create({
   fill: {
     borderRadius: 8,
   },
-  dayLabel: { fontSize: 10, color: AppColors.text.tertiary, marginTop: 4 },
-  dayLabelToday: { color: AppColors.green.primary, fontWeight: '700' },
-  wakeRow: { alignItems: 'center', marginTop: 2, minHeight: 14 },
-  wakeLabel: { fontSize: 9, color: AppColors.purple.strong, fontWeight: '600' },
+  dayLabel: { width: '100%', fontSize: 10, color: AppColors.text.tertiary, marginTop: 4, textAlign: 'center' },
+  dayLabelToday: { color: AppColors.green.strong, fontWeight: '700' },
+  wakeRow: { width: '100%', alignItems: 'center', marginTop: 2, minHeight: 14 },
+  wakeLabel: { width: '100%', fontSize: 9, color: AppColors.purple.strong, fontWeight: '600', textAlign: 'center' },
   wakeEmpty: { fontSize: 9, color: AppColors.border.soft },
 });
 
@@ -447,9 +447,9 @@ const napStyles = StyleSheet.create({
   root: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
   yAxis: { width: 26, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 4, paddingTop: 16 },
   yLabel: { fontSize: 9, color: AppColors.text.tertiary },
-  barsArea: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
-  barCol: { alignItems: 'center', gap: 4 },
-  valueLabel: { fontSize: 10, fontWeight: '600', marginBottom: 2, minHeight: 14 },
+  barsArea: { flex: 1, flexDirection: 'row', alignItems: 'flex-start' },
+  barCol: { flex: 1, minWidth: 0, alignItems: 'center', gap: 4 },
+  valueLabel: { width: '100%', fontSize: 10, fontWeight: '600', marginBottom: 2, minHeight: 14, textAlign: 'center' },
   track: {
     backgroundColor: AppColors.border.soft,
     borderRadius: 8,
@@ -457,8 +457,8 @@ const napStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: { borderRadius: 8 },
-  dayLabel: { fontSize: 10, color: AppColors.text.tertiary, marginTop: 4 },
-  dayLabelToday: { color: '#F59E0B', fontWeight: '700' },
+  dayLabel: { width: '100%', fontSize: 10, color: AppColors.text.tertiary, marginTop: 4, textAlign: 'center' },
+  dayLabelToday: { color: '#D97706', fontWeight: '700' },
 });
 
 function MedicationChart({ data }: { data: { label: string; taken: boolean | null }[] }) {
@@ -497,8 +497,8 @@ function MedicationChart({ data }: { data: { label: string; taken: boolean | nul
 }
 
 const medStyles = StyleSheet.create({
-  dotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 12 },
-  dotCol: { alignItems: 'center', minWidth: 30 },
+  dotGrid: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  dotCol: { flex: 1, minWidth: 0, alignItems: 'center' },
   dot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   dotEmpty: { backgroundColor: AppColors.border.soft },
   dotGreen: { backgroundColor: AppColors.green.soft },
@@ -711,7 +711,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       </View>
 
       {/* 白天小睡 card */}
-      <View style={[styles.sectionCard, { borderColor: '#FDE68A' }]}>
+      <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={[styles.sectionIconWrap, { backgroundColor: '#FEF3C7' }]}>
             <Text style={styles.sectionIcon}>☀️</Text>
@@ -790,10 +790,9 @@ const styles = StyleSheet.create({
   arrowText: { fontSize: 22, fontWeight: '600', color: AppColors.text.primary, lineHeight: 26 },
   arrowTextDisabled: { color: AppColors.text.tertiary },
   sectionCard: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: AppColors.border.soft,
-    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 22, padding: 18, marginBottom: 16,
+    shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
   sectionIconWrap: {
@@ -806,8 +805,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary },
   sectionSubtitle: { fontSize: 12, color: AppColors.text.tertiary, marginTop: 2 },
   emptyHint: {
-    paddingVertical: 20, alignItems: 'center',
-    backgroundColor: AppColors.bg.secondary, borderRadius: 14,
+    paddingVertical: 22, paddingHorizontal: 14, alignItems: 'center',
+    backgroundColor: AppColors.bg.soft, borderRadius: 16,
   },
   emptyHintText: { fontSize: 13, color: AppColors.text.tertiary, textAlign: 'center' },
 });

@@ -1,9 +1,9 @@
 export const AppColors = {
   bg: {
-    primary: '#F5F0F2',
-    secondary: '#F0EAEC',
-    soft: '#F5EFEB',
-    warmCream: '#FBF7F4',
+    primary: '#FAF7F4',
+    secondary: '#F4EFEC',
+    soft: '#F8F3EF',
+    warmCream: '#FCF9F6',
   },
 
   green: {
@@ -31,21 +31,21 @@ export const AppColors = {
 
   text: {
     primary: '#2A2528',
-    secondary: '#6E6873',
-    tertiary: '#9C96A0',
+    secondary: '#655F68',
+    tertiary: '#858087',
   },
 
   border: {
-    soft: '#E4DAE1',
-    light: '#F0F0F0',
-    glass: 'rgba(255,255,255,0.55)',
+    soft: '#E8E0DD',
+    light: '#F2ECE8',
+    glass: 'rgba(255,255,255,0.62)',
   },
 
   surface: {
-    white: 'rgba(255,252,250,0.82)',
-    whiteStrong: '#FDFAF8',
-    card: 'rgba(255,252,250,0.72)',
-    glass: 'rgba(255,255,255,0.45)',
+    white: 'rgba(255,255,255,0.88)',
+    whiteStrong: '#FFFDFC',
+    card: 'rgba(255,255,255,0.84)',
+    glass: 'rgba(255,255,255,0.58)',
   },
 
   shadow: {
@@ -62,6 +62,6 @@ export const AppColors = {
   },
 
   nav: {
-    inactive: '#8D8792',
+    inactive: '#77717C',
   },
 };

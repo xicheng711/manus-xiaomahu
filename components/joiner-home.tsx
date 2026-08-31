@@ -786,13 +786,15 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
                   emoji: '😴',
                   label: '睡眠',
                   val: latestCheckIn?.morningDone && latestCheckIn.sleepHours != null ? `${latestCheckIn.sleepHours}h` : '未记录',
-                  color: AppColors.purple.strong, bg: AppColors.purple.soft
+                  color: latestCheckIn?.morningDone ? AppColors.purple.strong : AppColors.text.secondary,
+                  bg: AppColors.purple.soft
                 },
                 {
                   emoji: latestCheckIn?.eveningDone ? (latestCheckIn.moodEmoji || '😊') : '😊',
                   label: '心情',
                   val: latestCheckIn?.eveningDone ? '已记录' : '未记录',
-                  color: AppColors.peach.primary, bg: AppColors.peach.soft
+                  color: latestCheckIn?.eveningDone ? AppColors.peach.primary : AppColors.text.secondary,
+                  bg: AppColors.peach.soft
                 },
                 {
                   emoji: '💊',
@@ -835,7 +837,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
             {allDiaries.length > 0 && (
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: AppColors.border.soft }}>
                 <Text style={{ fontSize: 16, marginRight: 6 }}>📔</Text>
-                <Text style={{ fontSize: 13, color: AppColors.text.secondary, flex: 1 }} numberOfLines={2}>
+                <Text style={{ fontSize: 13, color: AppColors.text.secondary, flex: 1, lineHeight: 20 }} numberOfLines={2}>
                   {allDiaries[0].moodEmoji} {allDiaries[0].content || '无详细内容'}
                 </Text>
               </View>
@@ -909,7 +911,10 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
             />
           )) : (
             <View style={styles.emptyFeed}>
-              <Text style={styles.emptyFeedEmoji}>📋</Text>
+              <View style={styles.emptyFeedIconWrap}>
+                <Text style={styles.emptyFeedEmoji}>🐴</Text>
+                <Text style={styles.emptyFeedSleep}>💤</Text>
+              </View>
               <Text style={styles.emptyFeedTitle}>今天暂无活动记录</Text>
               <Text style={styles.emptyFeedSub}>当天的打卡、日记和公告会显示在这里</Text>
             </View>
@@ -985,7 +990,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 124 },
 
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 20, paddingBottom: 18 },
   greetingBlock: { flex: 1, minWidth: 0, paddingRight: 12 },
@@ -998,7 +1003,7 @@ const styles = StyleSheet.create({
   familyPill: {
     flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10,
     backgroundColor: AppColors.green.soft,
-    borderWidth: 1.5, borderColor: AppColors.green.primary,
+    borderWidth: 1, borderColor: AppColors.green.primary + '70',
     borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
     alignSelf: 'flex-start',
   },
@@ -1018,7 +1023,9 @@ const styles = StyleSheet.create({
   tipBannerInner: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
-    borderWidth: 1, borderColor: AppColors.green.primary + '80',
+    backgroundColor: 'rgba(255,255,255,0.48)',
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1, shadowRadius: 12, elevation: 1,
   },
   tipIcon: { fontSize: 20 },
   tipText: { fontSize: 13, color: AppColors.green.strong, fontWeight: '600', flex: 1, lineHeight: 19 },
@@ -1038,10 +1045,11 @@ const styles = StyleSheet.create({
   briefingBtnDisabledText: { fontSize: 13, color: AppColors.text.tertiary, fontWeight: '500' },
 
   elderCardNew: {
-    borderRadius: 20, marginBottom: 16, overflow: 'hidden',
-    ...SHADOWS.md, borderWidth: 1.5, borderColor: AppColors.peach.primary + '60',
+    borderRadius: 22, marginBottom: 20,
+    ...SHADOWS.md,
+    shadowOpacity: 0.08, shadowRadius: 18, elevation: 3,
   },
-  elderCardBody: { borderRadius: 20, padding: 18 },
+  elderCardBody: { borderRadius: 22, padding: 20 },
   elderHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   elderAvatarNew: { position: 'relative' },
   elderAvatarGrad: {
@@ -1063,26 +1071,26 @@ const styles = StyleSheet.create({
   },
   scoreNumberNew: { fontSize: 26, fontWeight: '900', color: AppColors.coral.primary, lineHeight: 28 },
   scoreLabelNew: { fontSize: 10, color: AppColors.text.tertiary, fontWeight: '600', marginTop: 1 },
-  metricsRowNew: { flexDirection: 'row', gap: 10 },
+  metricsRowNew: { flexDirection: 'row', gap: 12 },
   metricItemNew: {
-    flex: 1, alignItems: 'center', gap: 4,
-    paddingVertical: 12, borderRadius: 14,
+    flex: 1, alignItems: 'center', gap: 5,
+    paddingVertical: 12, paddingHorizontal: 2, borderRadius: 15,
   },
-  metricLabelNew: { fontSize: 11, color: AppColors.text.secondary, fontWeight: '500' },
+  metricLabelNew: { fontSize: 11, color: AppColors.text.secondary, fontWeight: '600' },
   metricValNew: { fontSize: 14, fontWeight: '800' },
 
   announceCard: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 18, marginBottom: 16,
-    borderWidth: 1.5, borderColor: AppColors.purple.primary,
-    ...SHADOWS.md, overflow: 'hidden',
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, marginBottom: 20,
+    ...SHADOWS.md, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
+    overflow: 'hidden',
   },
   announceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
   announceHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   announceHeaderIcon: { fontSize: 14 },
   announceHeaderTitle: { fontSize: 12, fontWeight: '700', color: AppColors.purple.strong, letterSpacing: 0.3 },
   announceArrow: { fontSize: 22, color: AppColors.purple.primary, fontWeight: '300', opacity: 0.7 },
-  announceContent: { backgroundColor: AppColors.purple.soft, marginHorizontal: 12, borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: AppColors.purple.primary + '40' },
-  announceText: { fontSize: 14, fontWeight: '600', color: AppColors.text.primary, lineHeight: 20 },
+  announceContent: { backgroundColor: AppColors.purple.soft, marginHorizontal: 14, borderRadius: 14, padding: 14, marginBottom: 14 },
+  announceText: { fontSize: 14, fontWeight: '600', color: AppColors.text.primary, lineHeight: 22 },
   announceFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   announceAuthorEmoji: { fontSize: 13, marginRight: 4 },
   announceAuthorName: { fontSize: 12, color: AppColors.purple.strong, fontWeight: '600' },
@@ -1096,14 +1104,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     backgroundColor: AppColors.peach.soft,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: AppColors.peach.primary + '30',
   },
   composeHintIcon: { fontSize: 16, marginRight: 8 },
   composeHintText: { flex: 1, fontSize: 13, color: AppColors.text.secondary, fontWeight: '500' },
   composeHintArrow: { fontSize: 18, color: AppColors.peach.primary, fontWeight: '300', opacity: 0.7 },
 
-  feedSection: { marginBottom: 16 },
+  feedSection: { marginBottom: 22 },
   feedLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   feedLabelIcon: { fontSize: 14 },
   feedSectionLabel: { fontSize: 13, fontWeight: '700', color: AppColors.text.primary, letterSpacing: 0.3 },
@@ -1122,14 +1128,22 @@ const styles = StyleSheet.create({
   feedTitle: { fontSize: 13, fontWeight: '700', color: AppColors.text.primary, marginBottom: 2 },
   feedDetail: { fontSize: 12, color: AppColors.text.secondary, lineHeight: 17 },
 
-  emptyFeed: { alignItems: 'center', paddingVertical: 28, marginBottom: 16 },
-  emptyFeedEmoji: { fontSize: 36, marginBottom: 8 },
-  emptyFeedTitle: { fontSize: 15, fontWeight: '700', color: AppColors.text.tertiary, marginBottom: 4 },
+  emptyFeed: {
+    alignItems: 'center', paddingVertical: 28, marginBottom: 18,
+    backgroundColor: 'rgba(255,255,255,0.42)', borderRadius: 20,
+  },
+  emptyFeedIconWrap: {
+    width: 64, height: 64, borderRadius: 22, marginBottom: 10,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: AppColors.peach.soft,
+  },
+  emptyFeedEmoji: { fontSize: 34 },
+  emptyFeedSleep: { position: 'absolute', top: 6, right: 6, fontSize: 13 },
+  emptyFeedTitle: { fontSize: 15, fontWeight: '700', color: AppColors.text.secondary, marginBottom: 4 },
   emptyFeedSub: { fontSize: 13, color: AppColors.text.tertiary, textAlign: 'center', lineHeight: 20 },
 
   upgradeCard: {
-    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 20, padding: 20, marginBottom: 12,
-    ...SHADOWS.md, borderWidth: 1.5, borderColor: AppColors.purple.primary + '60',
+    backgroundColor: AppColors.surface.whiteStrong, borderRadius: 22, padding: 20, marginBottom: 14,
+    ...SHADOWS.md, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
   },
   upgradeSectionLabel: { fontSize: 12, fontWeight: '700', color: AppColors.purple.strong, letterSpacing: 0.5, marginBottom: 16 },
   upgradeIconRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 },
@@ -1189,7 +1203,9 @@ const styles = StyleSheet.create({
   switchToCreatorBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: '#FEF0F4', borderRadius: 18, padding: 16,
-    marginBottom: 16, borderWidth: 1.5, borderColor: '#EDAABB',
+    marginBottom: 18,
+    shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1, shadowRadius: 12, elevation: 1,
   },
   switchToCreatorIcon: { fontSize: 24 },
   switchToCreatorTitle: { fontSize: 14, fontWeight: '700', color: '#B8426A', marginBottom: 2 },
