@@ -277,6 +277,20 @@ export interface AnnouncementReaction {
   members: { memberId: string; memberName: string; memberEmoji: string }[];
 }
 
+export interface AnnouncementComment {
+  id: number;
+  announcementId: number;
+  clientId: string;
+  authorUserId: number;
+  authorName: string;
+  authorEmoji: string;
+  content: string;
+  date: string;          // YYYY-MM-DD — 评论者本地日期
+  localTimeStr: string;  // HH:MM — 评论者本地时间
+  createdAt: string | Date;
+  canDelete?: boolean;
+}
+
 export interface FamilyAnnouncement {
   id: string;
   /** 云端公告主键；本地 id 保持稳定，避免同步后列表 key 跳变。 */
@@ -364,6 +378,7 @@ const KEYS = {
   DIARY: 'diary_entries',
   DIARY_DRAFT: 'diary_draft_v1',
   FAMILY_ANNOUNCEMENTS: 'family_announcements_v1',
+  ANNOUNCEMENT_COMMENTS: 'announcement_comments_v1',
   BRIEFINGS: 'care_briefings_v1',
 } as const;
 
@@ -2088,6 +2103,64 @@ export async function deleteFamilyAnnouncement(id: string, roomId?: string): Pro
   await AsyncStorage.setItem(key, JSON.stringify(filtered));
 }
 
+type AnnouncementCommentCache = Record<string, { comments: AnnouncementComment[]; cachedAt: string }>;
+
+export async function getCachedAnnouncementComments(
+  roomId: string,
+  announcementId: number,
+): Promise<AnnouncementComment[]> {
+  const key = roomKey(KEYS.ANNOUNCEMENT_COMMENTS, roomId);
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return [];
+  try {
+    const cache: AnnouncementCommentCache = JSON.parse(raw);
+    return Array.isArray(cache[String(announcementId)]?.comments)
+      ? cache[String(announcementId)].comments
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function cacheAnnouncementComments(
+  roomId: string,
+  announcementId: number,
+  comments: AnnouncementComment[],
+): Promise<void> {
+  const key = roomKey(KEYS.ANNOUNCEMENT_COMMENTS, roomId);
+  const raw = await AsyncStorage.getItem(key);
+  let cache: AnnouncementCommentCache = {};
+  if (raw) {
+    try { cache = JSON.parse(raw); } catch { cache = {}; }
+  }
+  cache[String(announcementId)] = {
+    comments: comments.map(comment => ({
+      ...comment,
+      createdAt: comment.createdAt instanceof Date
+        ? comment.createdAt.toISOString()
+        : String(comment.createdAt),
+    })),
+    cachedAt: new Date().toISOString(),
+  };
+  await AsyncStorage.setItem(key, JSON.stringify(cache));
+}
+
+export async function removeCachedAnnouncementComments(
+  roomId: string,
+  announcementId: number,
+): Promise<void> {
+  const key = roomKey(KEYS.ANNOUNCEMENT_COMMENTS, roomId);
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return;
+  try {
+    const cache: AnnouncementCommentCache = JSON.parse(raw);
+    delete cache[String(announcementId)];
+    await AsyncStorage.setItem(key, JSON.stringify(cache));
+  } catch {
+    await AsyncStorage.removeItem(key);
+  }
+}
+
 export async function toggleAnnouncementReaction(
   announcementId: string,
   emoji: string,
@@ -2202,6 +2275,7 @@ export async function clearScopedFamilyData(roomId: string): Promise<void> {
     roomKey(KEYS.DIARY, roomId),
     roomKey(KEYS.DIARY_DRAFT, roomId),
     roomKey(KEYS.FAMILY_ANNOUNCEMENTS, roomId),
+    roomKey(KEYS.ANNOUNCEMENT_COMMENTS, roomId),
     roomKey(KEYS.BRIEFINGS, roomId),
   ];
   await AsyncStorage.multiRemove(keys);

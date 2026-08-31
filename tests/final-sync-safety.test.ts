@@ -34,9 +34,12 @@ vi.mock('../lib/cloud-sync', () => ({
 }));
 
 import {
+  cacheAnnouncementComments,
+  getCachedAnnouncementComments,
   mergeCloudAnnouncementsIntoLocal,
   mergeCloudBriefingsIntoLocal,
   mergeCloudMedicationsIntoLocal,
+  removeCachedAnnouncementComments,
 } from '../lib/storage';
 
 const ROOM_ID = '321';
@@ -103,6 +106,46 @@ describe('final family-scoped cache safety', () => {
     expect(merged[0].serverAnnouncementId).toBe(44);
     expect(merged[0].syncPending).toBe(false);
     expect(merged[0].authorId).toBe('8');
+  });
+
+  it('isolates cached announcement comments by both family and announcement while preserving author-local time', async () => {
+    await cacheAnnouncementComments(ROOM_ID, 44, [{
+      id: 501,
+      announcementId: 44,
+      clientId: 'comment-a',
+      authorUserId: 99,
+      authorName: '纽约家人',
+      authorEmoji: '👩',
+      content: '明天我来陪诊',
+      date: '2026-08-31',
+      localTimeStr: '21:18',
+      createdAt: new Date('2026-09-01T01:18:00.000Z'),
+      canDelete: true,
+    }]);
+    await cacheAnnouncementComments(ROOM_ID, 45, [{
+      id: 502,
+      announcementId: 45,
+      clientId: 'comment-b',
+      authorUserId: 100,
+      authorName: '北京家人',
+      authorEmoji: '👨',
+      content: '已经取药',
+      date: '2026-09-01',
+      localTimeStr: '09:20',
+      createdAt: '2026-09-01T01:20:00.000Z',
+    }]);
+
+    const firstAnnouncement = await getCachedAnnouncementComments(ROOM_ID, 44);
+    expect(firstAnnouncement).toHaveLength(1);
+    expect(firstAnnouncement[0].content).toBe('明天我来陪诊');
+    expect(firstAnnouncement[0].date).toBe('2026-08-31');
+    expect(firstAnnouncement[0].localTimeStr).toBe('21:18');
+    expect(firstAnnouncement[0].createdAt).toBe('2026-09-01T01:18:00.000Z');
+    expect(await getCachedAnnouncementComments('999', 44)).toEqual([]);
+
+    await removeCachedAnnouncementComments(ROOM_ID, 44);
+    expect(await getCachedAnnouncementComments(ROOM_ID, 44)).toEqual([]);
+    expect(await getCachedAnnouncementComments(ROOM_ID, 45)).toHaveLength(1);
   });
 
   it('does not let a stale medication read overwrite a pending local dose change', async () => {

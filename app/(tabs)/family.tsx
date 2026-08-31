@@ -17,7 +17,7 @@ import {
   getProfile, getFamilyProfile, getUserProfile,
   FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
-  getActiveRoomIdCache, getActiveMembership,
+  getActiveRoomIdCache, getActiveMembership, removeCachedAnnouncementComments,
 } from '@/lib/storage';
 import { cloudDeleteAnnouncement, cloudToggleReaction, cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
@@ -27,6 +27,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '@/lib/animations';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
+import { AnnouncementComments } from '@/components/announcement-comments';
 import { ScreenContainer } from '@/components/screen-container';
 import { sendFamilyAnnouncementNotification, registerPushToken } from '@/lib/notifications';
 import { captureRef } from 'react-native-view-shot';
@@ -464,7 +465,13 @@ function buildFamilyBriefingHistory(
 
 export default function FamilyScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ openCompose?: string; joinCode?: string; refresh?: string }>();
+  const params = useLocalSearchParams<{
+    openCompose?: string;
+    joinCode?: string;
+    refresh?: string;
+    announcementId?: string;
+    openComments?: string;
+  }>();
   const [room, setRoom] = useState<FamilyRoom | null>(null);
   const [currentMember, setCurrentMemberState] = useState<FamilyMember | null>(null);
   const [announcements, setAnnouncements] = useState<FamilyAnnouncement[]>([]);
@@ -488,6 +495,7 @@ export default function FamilyScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const fabBreath = useRef(new Animated.Value(1)).current;
   const scrollRef = useRef<any>(null);
+  const handledAnnouncementTargetRef = useRef<string | null>(null);
   const [newAnnouncementId, setNewAnnouncementId] = useState<string | null>(null);
   const briefingCardRef = useRef<View>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
@@ -538,8 +546,11 @@ export default function FamilyScreen() {
         setActiveSection('broadcast');
       }, 300);
     }
+    if (params.openComments === '1' && params.announcementId) {
+      setActiveSection('broadcast');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.openCompose, familyId]);
+  }, [params.openCompose, params.openComments, params.announcementId, familyId]);
 
   useFocusEffect(loadDataCallback);
 
@@ -870,6 +881,9 @@ export default function FamilyScreen() {
     }
     // Server succeeded, or this was a never-synced local announcement.
     await deleteFamilyAnnouncement(id, roomId);
+    if (roomId && numericAnnId) {
+      await removeCachedAnnouncementComments(roomId, numericAnnId).catch(() => {});
+    }
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await loadData();
   }
@@ -950,8 +964,46 @@ export default function FamilyScreen() {
 
   const todayAnnouncements = announcements.filter(a => a.date === todayStr());
   const olderAnnouncements = announcements.filter(a => a.date !== todayStr());
+  const targetAnnouncementId = params.openComments === '1' && params.announcementId
+    ? Number(params.announcementId)
+    : null;
+  const visibleOlderAnnouncements = (() => {
+    const visible = olderAnnouncements.slice(0, 10);
+    if (!targetAnnouncementId) return visible;
+    const target = olderAnnouncements.find(announcement =>
+      Number(announcement.serverAnnouncementId ?? announcement.id) === targetAnnouncementId
+    );
+    return target && !visible.some(announcement => announcement.id === target.id)
+      ? [...visible, target]
+      : visible;
+  })();
+  const handleAnnouncementLayout = (announcement: FamilyAnnouncement, y: number) => {
+    const serverId = Number(announcement.serverAnnouncementId ?? announcement.id);
+    if (!Number.isFinite(serverId)) return;
+    const targetKey = `${familyId ?? ''}:${serverId}:${params.refresh ?? ''}`;
+    if (
+      params.openComments === '1'
+      && serverId === targetAnnouncementId
+      && handledAnnouncementTargetRef.current !== targetKey
+    ) {
+      handledAnnouncementTargetRef.current = targetKey;
+      setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }), 380);
+    }
+  };
+  const revealCommentInput = (nativeHandle: number | null) => {
+    if (nativeHandle && scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard) {
+      scrollRef.current.scrollResponderScrollNativeHandleToKeyboard(nativeHandle, 120, true);
+      return;
+    }
+    scrollRef.current?.scrollToEnd({ animated: true });
+  };
 
   return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
 
       {/* ── Header (与用药记录/日记保持一致风格) ── */}
@@ -1024,7 +1076,15 @@ export default function FamilyScreen() {
       </View>
 
       {/* Content */}
-      <ScrollView ref={scrollRef} style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#B07858" colors={['#B07858']} />}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: Math.max(120, insets.bottom + 110) }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#B07858" colors={['#B07858']} />}
+      >
 
         {/* ── BROADCAST SECTION ── */}
         {activeSection === 'broadcast' && (
@@ -1051,6 +1111,10 @@ export default function FamilyScreen() {
                   onDelete={() => handleDeleteAnnouncement(ann.id)}
                   isNew={ann.id === newAnnouncementId}
                   currentMember={currentMember}
+                  roomId={familyId ? Number(familyId) : null}
+                  forceOpenComments={targetAnnouncementId === Number(ann.serverAnnouncementId ?? ann.id)}
+                  onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
+                  onCommentInputFocus={revealCommentInput}
                   onReactionToggle={async (emoji) => {
                     if (!currentMember) return;
                     // Server-first: toggle reaction on server, then refresh from cloud
@@ -1065,8 +1129,8 @@ export default function FamilyScreen() {
                       Alert.alert('操作失败', '无法同步表情，请稍后重试');
                       return;
                     }
-                    // Reload from cloud so both creator and joiner see updated reactions
-                    await loadData();
+                    // User-triggered mutation must bypass the short tab-focus refresh throttle.
+                    await loadData(true);
                   }}
                 />
               ))
@@ -1078,7 +1142,7 @@ export default function FamilyScreen() {
                 <View style={[styles.sectionHeader, { marginTop: 20 }]}>
                   <Text style={styles.sectionTitle}>历史公告</Text>
                 </View>
-                {olderAnnouncements.slice(0, 10).map(ann => (
+                {visibleOlderAnnouncements.map(ann => (
                   <AnnouncementCard
                     key={ann.id}
                     ann={ann}
@@ -1086,10 +1150,14 @@ export default function FamilyScreen() {
                     isOwn={ann.authorId === currentMember.id}
                     onDelete={() => handleDeleteAnnouncement(ann.id)}
                     currentMember={currentMember}
+                    roomId={familyId ? Number(familyId) : null}
+                    forceOpenComments={targetAnnouncementId === Number(ann.serverAnnouncementId ?? ann.id)}
+                    onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
+                    onCommentInputFocus={revealCommentInput}
                     onReactionToggle={async (emoji) => {
                       if (!currentMember) return;
                       // Server-first: toggle reaction on server, then refresh from cloud
-                      const numericAnnId = parseInt(String(ann.id));
+                      const numericAnnId = ann.serverAnnouncementId ?? parseInt(String(ann.id));
                       const numericRoomId = familyId ? parseInt(familyId) : undefined;
                       if (!isNaN(numericAnnId)) {
                         const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
@@ -1512,6 +1580,7 @@ export default function FamilyScreen() {
         </TouchableOpacity>
       </Modal>
     </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1520,7 +1589,8 @@ export default function FamilyScreen() {
 const REACTION_EMOJIS = ['👍', '❤️', '👏', '🙏', '😢', '✨'];
 
 function AnnouncementCard({
-  ann, typeInfo, isOwn, onDelete, isNew, currentMember, onReactionToggle,
+  ann, typeInfo, isOwn, onDelete, isNew, currentMember, roomId,
+  forceOpenComments, onLayoutY, onCommentInputFocus, onReactionToggle,
 }: {
   ann: FamilyAnnouncement;
   typeInfo: typeof ANNOUNCEMENT_TYPES[0];
@@ -1528,12 +1598,31 @@ function AnnouncementCard({
   onDelete: () => void;
   isNew?: boolean;
   currentMember?: FamilyMember;
+  roomId: number | null;
+  forceOpenComments?: boolean;
+  onLayoutY?: (y: number) => void;
+  onCommentInputFocus?: (nativeHandle: number | null) => void;
   onReactionToggle?: (emoji: string) => Promise<void>;
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const [showReactorsFor, setShowReactorsFor] = useState<string | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const deleteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const announcementId = ann.serverAnnouncementId
+    ?? (/^\d+$/.test(String(ann.id)) ? Number(ann.id) : null);
+
+  useEffect(() => {
+    if (forceOpenComments && roomId && announcementId) {
+      setCommentsOpen(true);
+      setShowPicker(false);
+      setShowReactorsFor(null);
+    }
+  }, [announcementId, forceOpenComments, roomId]);
+
+  useEffect(() => () => {
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+  }, []);
 
   function handleDeletePress() {
     if (deleteConfirm) {
@@ -1578,7 +1667,10 @@ function AnnouncementCard({
   }
 
   return (
-    <View style={[card.container, isNew && card.containerNew]}>
+    <View
+      style={[card.container, isNew && card.containerNew]}
+      onLayout={event => onLayoutY?.(event.nativeEvent.layout.y)}
+    >
       <View style={[card.colorStrip, { backgroundColor: typeInfo.color }]} />
       <View style={card.cardInner}>
         <View style={[card.typeBadge, { backgroundColor: typeInfo.color + '22' }]}>
@@ -1619,6 +1711,23 @@ function AnnouncementCard({
             >
               <Text style={card.addReactionText}>{showPicker ? '✕' : '＋'}</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[card.commentToggleBtn, commentsOpen && card.commentToggleBtnActive]}
+              onPress={() => {
+                if (!roomId || !announcementId) {
+                  Alert.alert('公告正在同步', '公告同步完成后就可以写评论了。');
+                  return;
+                }
+                setCommentsOpen(open => !open);
+                setShowPicker(false);
+                setShowReactorsFor(null);
+              }}
+              activeOpacity={0.75}
+            >
+              <Text style={[card.commentToggleText, commentsOpen && card.commentToggleTextActive]}>
+                💬 {commentsOpen ? '收起' : '评论'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── Emoji picker ── */}
@@ -1657,6 +1766,15 @@ function AnnouncementCard({
               </View>
             );
           })()}
+
+          {commentsOpen && roomId && announcementId ? (
+            <AnnouncementComments
+              announcementId={announcementId}
+              roomId={roomId}
+              announcementAuthorName={ann.authorName}
+              onInputFocus={onCommentInputFocus}
+            />
+          ) : null}
         </View>
         {isOwn && (
           <TouchableOpacity
@@ -1889,6 +2007,15 @@ const card = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   addReactionText: { fontSize: 14, color: AppColors.text.tertiary, fontWeight: '600' },
+  commentToggleBtn: {
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20,
+    backgroundColor: AppColors.bg.secondary,
+    borderWidth: 1, borderColor: AppColors.border.soft,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  commentToggleBtnActive: { backgroundColor: '#FEF0F4', borderColor: '#EDAABB' },
+  commentToggleText: { fontSize: 11, color: AppColors.text.secondary, fontWeight: '700' },
+  commentToggleTextActive: { color: '#B8426A' },
   pickerRow: {
     flexDirection: 'row', gap: 6, marginTop: 8,
     backgroundColor: AppColors.surface.whiteStrong,

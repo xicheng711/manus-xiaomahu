@@ -200,6 +200,21 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
       KEY idx_diary_comments_room_diary (roomId, diaryId),
       KEY idx_diary_comments_created (createdAt)
     )`,
+    `CREATE TABLE IF NOT EXISTS announcement_comments (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      roomId INT NOT NULL,
+      announcementId INT NOT NULL,
+      clientId VARCHAR(100) NOT NULL,
+      authorUserId INT NOT NULL,
+      authorName VARCHAR(100) NOT NULL,
+      authorEmoji VARCHAR(20) NOT NULL,
+      content TEXT NOT NULL,
+      date VARCHAR(10) NOT NULL,
+      localTimeStr VARCHAR(10) NOT NULL,
+      createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_announcement_comment_client (roomId, announcementId, clientId),
+      KEY idx_announcement_comments_room_announcement_created (roomId, announcementId, createdAt)
+    )`,
     `CREATE TABLE IF NOT EXISTS medication_changes (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       roomId INT NOT NULL,

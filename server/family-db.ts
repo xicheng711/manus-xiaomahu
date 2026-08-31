@@ -14,6 +14,7 @@ import {
   diaryReads, InsertDiaryRead,
   diaryComments, InsertDiaryComment,
   announcements, InsertAnnouncement,
+  announcementComments, InsertAnnouncementComment,
   briefings, InsertBriefing,
   medications, InsertMedication,
   medicationChanges, InsertMedicationChange,
@@ -362,6 +363,94 @@ export async function getAnnouncementsByRoom(roomId: number, limit = 50) {
     .limit(limit);
 }
 
+export async function getAnnouncementById(roomId: number, announcementId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(announcements)
+    .where(and(eq(announcements.roomId, roomId), eq(announcements.id, announcementId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getAnnouncementComments(roomId: number, announcementId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(announcementComments)
+    .where(and(
+      eq(announcementComments.roomId, roomId),
+      eq(announcementComments.announcementId, announcementId),
+    ))
+    .orderBy(asc(announcementComments.createdAt), asc(announcementComments.id));
+}
+
+export async function addAnnouncementComment(data: InsertAnnouncementComment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db.select().from(announcementComments)
+    .where(and(
+      eq(announcementComments.roomId, data.roomId),
+      eq(announcementComments.announcementId, data.announcementId),
+      eq(announcementComments.clientId, data.clientId),
+    ))
+    .limit(1);
+  if (existing[0]) {
+    if (existing[0].authorUserId !== data.authorUserId) {
+      throw new Error("Announcement comment clientId belongs to another user");
+    }
+    await db.update(announcementComments).set({
+      content: data.content,
+      date: data.date,
+      localTimeStr: data.localTimeStr,
+      authorName: data.authorName,
+      authorEmoji: data.authorEmoji,
+    }).where(and(
+      eq(announcementComments.id, existing[0].id),
+      eq(announcementComments.roomId, data.roomId),
+      eq(announcementComments.announcementId, data.announcementId),
+      eq(announcementComments.authorUserId, data.authorUserId),
+    ));
+    const retried = await db.select().from(announcementComments)
+      .where(eq(announcementComments.id, existing[0].id))
+      .limit(1);
+    return { comment: retried[0] ?? existing[0], created: false };
+  }
+
+  await db.insert(announcementComments).values(data).onDuplicateKeyUpdate({
+    set: { clientId: data.clientId },
+  });
+  const rows = await db.select().from(announcementComments)
+    .where(and(
+      eq(announcementComments.roomId, data.roomId),
+      eq(announcementComments.announcementId, data.announcementId),
+      eq(announcementComments.clientId, data.clientId),
+    ))
+    .limit(1);
+  if (!rows[0]) throw new Error("Announcement comment upsert failed");
+  return { comment: rows[0], created: true };
+}
+
+export async function deleteAnnouncementCommentByAuthor(
+  roomId: number,
+  announcementId: number,
+  commentId: number,
+  authorUserId: number,
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const scope = and(
+    eq(announcementComments.id, commentId),
+    eq(announcementComments.roomId, roomId),
+    eq(announcementComments.announcementId, announcementId),
+    eq(announcementComments.authorUserId, authorUserId),
+  );
+  const existing = await db.select({ id: announcementComments.id }).from(announcementComments)
+    .where(scope)
+    .limit(1);
+  if (!existing[0]) return false;
+  await db.delete(announcementComments).where(scope);
+  return true;
+}
+
 export async function addReaction(announcementId: number, reactions: any) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -492,6 +581,7 @@ export async function deleteFamilyRoom(roomId: number) {
   await db.delete(diaryReads).where(eq(diaryReads.roomId, roomId));
   await db.delete(diaryComments).where(eq(diaryComments.roomId, roomId));
   await db.delete(diaryEntries).where(eq(diaryEntries.roomId, roomId));
+  await db.delete(announcementComments).where(eq(announcementComments.roomId, roomId));
   await db.delete(announcements).where(eq(announcements.roomId, roomId));
   await db.delete(briefings).where(eq(briefings.roomId, roomId));
   await db.delete(medicationChanges).where(eq(medicationChanges.roomId, roomId));
@@ -499,11 +589,18 @@ export async function deleteFamilyRoom(roomId: number) {
   await db.delete(familyRooms).where(eq(familyRooms.id, roomId));
 }
 
-/** Delete a single announcement */
-export async function deleteAnnouncement(announcementId: number) {
+/** Delete a single announcement and its comments inside the same family scope. */
+export async function deleteAnnouncement(announcementId: number, roomId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(announcements).where(eq(announcements.id, announcementId));
+  await db.delete(announcementComments).where(and(
+    eq(announcementComments.roomId, roomId),
+    eq(announcementComments.announcementId, announcementId),
+  ));
+  await db.delete(announcements).where(and(
+    eq(announcements.id, announcementId),
+    eq(announcements.roomId, roomId),
+  ));
 }
 
 /** Toggle reaction on an announcement (add if not present, remove if present) */

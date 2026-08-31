@@ -14,7 +14,8 @@ import {
   createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
   getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
   deleteDiaryCommentByAuthor, getDiaryInteractionSummaries,
-  createAnnouncement, getAnnouncementByClientId, getAnnouncementsByRoom,
+  createAnnouncement, getAnnouncementByClientId, getAnnouncementsByRoom, getAnnouncementById,
+  getAnnouncementComments, addAnnouncementComment, deleteAnnouncementCommentByAuthor,
   deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
   upsertMedication, getMedicationsByRoom, deleteMedication,
@@ -759,6 +760,85 @@ export const familyRouter = router({
       }));
     }),
 
+  /** Load comments only after one announcement is expanded, so the family tab stays fast. */
+  getAnnouncementComments: protectedProcedure
+    .input(z.object({ roomId: z.number(), announcementId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      await requireRoomMember(userId, input.roomId);
+      const announcement = await getAnnouncementById(input.roomId, input.announcementId);
+      if (!announcement) throw new Error("公告不存在，或不属于当前家庭");
+      const comments = await getAnnouncementComments(input.roomId, input.announcementId);
+      return comments.map(comment => ({
+        ...comment,
+        canDelete: comment.authorUserId === userId,
+      }));
+    }),
+
+  /** Add a flat family comment under one announcement. */
+  addAnnouncementComment: protectedProcedure
+    .input(z.object({
+      roomId: z.number(),
+      announcementId: z.number(),
+      clientId: z.string().min(1).max(100),
+      content: z.string().trim().min(1),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      localTimeStr: z.string().regex(/^\d{2}:\d{2}$/),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const member = await requireRoomMember(userId, input.roomId);
+      const announcement = await getAnnouncementById(input.roomId, input.announcementId);
+      if (!announcement) throw new Error("公告不存在，或不属于当前家庭");
+      const result = await addAnnouncementComment({
+        roomId: input.roomId,
+        announcementId: input.announcementId,
+        clientId: input.clientId,
+        authorUserId: userId,
+        authorName: member.name,
+        authorEmoji: member.emoji,
+        content: input.content,
+        date: input.date,
+        localTimeStr: input.localTimeStr,
+      });
+      if (result.created) {
+        const preview = input.content.length > 80 ? `${input.content.slice(0, 80)}…` : input.content;
+        await notifyRoomMembers(
+          input.roomId,
+          userId,
+          `${member.name || '家人'} 回复了 ${announcement.authorName || '家人'} 的公告`,
+          preview,
+          {
+            type: 'announcement_comment',
+            screen: 'family',
+            roomId: input.roomId,
+            announcementId: input.announcementId,
+            openComments: '1',
+          },
+          'addAnnouncementComment',
+        );
+      }
+      return { success: true, comment: { ...result.comment, canDelete: true } };
+    }),
+
+  /** Delete an announcement comment; only its author can delete it. */
+  deleteAnnouncementComment: protectedProcedure
+    .input(z.object({ roomId: z.number(), announcementId: z.number(), commentId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      await requireRoomMember(userId, input.roomId);
+      const announcement = await getAnnouncementById(input.roomId, input.announcementId);
+      if (!announcement) throw new Error("公告不存在，或不属于当前家庭");
+      const deleted = await deleteAnnouncementCommentByAuthor(
+        input.roomId,
+        input.announcementId,
+        input.commentId,
+        userId,
+      );
+      if (!deleted) throw new Error("评论不存在，或你只能删除自己发布的评论");
+      return { success: true };
+    }),
+
   // ─── Briefings ─────────────────────────────────────────────────────────
 
   /** Save a generated briefing to the cloud */
@@ -1011,7 +1091,7 @@ export const familyRouter = router({
       if (!member.isCreator && target.authorUserId !== userId) {
         throw new Error("无权删除此公告");
       }
-      await deleteAnnouncement(input.announcementId);
+      await deleteAnnouncement(input.announcementId, input.roomId);
       return { success: true };
     }),
 

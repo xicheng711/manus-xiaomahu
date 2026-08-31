@@ -88,7 +88,14 @@ function NotificationNavigator() {
           break;
         case 'family':
         default:
-          router.push({ pathname: '/(tabs)/family', params: { refresh } } as any);
+          router.push({
+            pathname: '/(tabs)/family',
+            params: {
+              refresh,
+              announcementId: data?.announcementId ? String(data.announcementId) : undefined,
+              openComments: data?.type === 'announcement_comment' || data?.openComments === '1' ? '1' : undefined,
+            },
+          } as any);
           break;
       }
     })().catch(error => {

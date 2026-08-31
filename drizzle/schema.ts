@@ -208,6 +208,30 @@ export const announcements = mysqlTable("announcements", {
 export type Announcement = typeof announcements.$inferSelect;
 export type InsertAnnouncement = typeof announcements.$inferInsert;
 
+// ─── Announcement Comments ──────────────────────────────────────────────────
+
+export const announcementComments = mysqlTable("announcement_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  roomId: int("roomId").notNull(),
+  announcementId: int("announcementId").notNull(),
+  // 客户端生成；发送响应丢失后重试仍复用同一条评论。
+  clientId: varchar("clientId", { length: 100 }).notNull(),
+  authorUserId: int("authorUserId").notNull(),
+  authorName: varchar("authorName", { length: 100 }).notNull(),
+  authorEmoji: varchar("authorEmoji", { length: 20 }).notNull(),
+  content: text("content").notNull(),
+  // 评论者设备的本地日期和时间，跨时区查看时保持一致。
+  date: varchar("date", { length: 10 }).notNull(),
+  localTimeStr: varchar("localTimeStr", { length: 10 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("uq_announcement_comment_client").on(table.roomId, table.announcementId, table.clientId),
+  index("idx_announcement_comments_room_announcement_created").on(table.roomId, table.announcementId, table.createdAt),
+]);
+
+export type AnnouncementComment = typeof announcementComments.$inferSelect;
+export type InsertAnnouncementComment = typeof announcementComments.$inferInsert;
+
 // ─── Care Briefings ──────────────────────────────────────────────────────────
 
 export const briefings = mysqlTable("briefings", {

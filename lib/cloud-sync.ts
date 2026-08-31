@@ -494,6 +494,54 @@ export async function cloudGetAnnouncements(roomId?: number, limit = 50) {
   }
 }
 
+/** Load comments for one expanded announcement. Network failure is distinct from an empty list. */
+export async function cloudGetAnnouncementComments(announcementId: number, roomId: number) {
+  if (!roomId || !announcementId) return { comments: [], loadFailed: true };
+  try {
+    const client = getClient();
+    const comments = await client.family.getAnnouncementComments.query({ roomId, announcementId });
+    return { comments, loadFailed: false };
+  } catch (e) {
+    console.warn('[CloudSync] getAnnouncementComments failed:', e);
+    return { comments: [], loadFailed: true };
+  }
+}
+
+/** Add one flat comment under an announcement. */
+export async function cloudAddAnnouncementComment(params: {
+  roomId: number;
+  announcementId: number;
+  clientId: string;
+  content: string;
+  date: string;
+  localTimeStr: string;
+}) {
+  if (!params.roomId || !params.announcementId) return null;
+  try {
+    const client = getClient();
+    return await client.family.addAnnouncementComment.mutate(params);
+  } catch (e) {
+    console.warn('[CloudSync] addAnnouncementComment failed:', e);
+    return null;
+  }
+}
+
+/** Delete one of the current user's own announcement comments. */
+export async function cloudDeleteAnnouncementComment(
+  commentId: number,
+  announcementId: number,
+  roomId: number,
+) {
+  if (!roomId || !announcementId || !commentId) return null;
+  try {
+    const client = getClient();
+    return await client.family.deleteAnnouncementComment.mutate({ roomId, announcementId, commentId });
+  } catch (e) {
+    console.warn('[CloudSync] deleteAnnouncementComment failed:', e);
+    return null;
+  }
+}
+
 /** React to an announcement */
 export async function cloudReactToAnnouncement(announcementId: number, emoji: string, roomId?: number) {
   const rid = roomId ?? await getActiveRoomId();

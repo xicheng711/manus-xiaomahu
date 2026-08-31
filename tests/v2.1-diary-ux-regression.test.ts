@@ -853,3 +853,83 @@ describe('Evening check-in durability and instant family-tab loading', () => {
     expect(family).toContain('allowLegacyProfileFallback = memberships.length === 1');
   });
 });
+
+
+describe('Announcement comments remain family-scoped, fast, and keyboard-safe', () => {
+  const schema = read('drizzle/schema.ts');
+  const migrations = read('server/db.ts');
+  const familyDb = read('server/family-db.ts');
+  const familyRouter = read('server/family-router.ts');
+  const cloudSync = read('lib/cloud-sync.ts');
+  const storage = read('lib/storage.ts');
+  const familyPage = read('app/(tabs)/family.tsx');
+  const comments = read('components/announcement-comments.tsx');
+  const rootLayout = read('app/_layout.tsx');
+
+  it('stores comments in a dedicated cloud table with family, announcement, idempotency, and local date-time fields', () => {
+    expect(schema).toContain('export const announcementComments = mysqlTable("announcement_comments"');
+    expect(schema).toContain('uniqueIndex("uq_announcement_comment_client").on(table.roomId, table.announcementId, table.clientId)');
+    expect(schema).toContain('date: varchar("date", { length: 10 }).notNull()');
+    expect(schema).toContain('localTimeStr: varchar("localTimeStr", { length: 10 }).notNull()');
+    expect(migrations).toContain('CREATE TABLE IF NOT EXISTS announcement_comments');
+    expect(migrations).toContain('KEY idx_announcement_comments_room_announcement_created');
+  });
+
+  it('checks room membership and announcement ownership scope on every comment read, write, and delete', () => {
+    expect(familyRouter).toContain('getAnnouncementComments: protectedProcedure');
+    expect(familyRouter).toContain('addAnnouncementComment: protectedProcedure');
+    expect(familyRouter).toContain('deleteAnnouncementComment: protectedProcedure');
+    expect(familyRouter).toContain('const announcement = await getAnnouncementById(input.roomId, input.announcementId)');
+    expect(familyRouter).toContain('canDelete: comment.authorUserId === userId');
+    expect(familyDb).toContain('eq(announcementComments.roomId, roomId)');
+    expect(familyDb).toContain('eq(announcementComments.announcementId, announcementId)');
+    expect(familyDb).toContain('eq(announcementComments.authorUserId, authorUserId)');
+    expect(familyDb).toContain('Announcement comment clientId belongs to another user');
+  });
+
+  it('keeps the plus reaction picker and loads text comments only after one card is expanded', () => {
+    expect(familyPage).toContain("const REACTION_EMOJIS = ['👍', '❤️', '👏', '🙏', '😢', '✨']");
+    expect(familyPage).toContain("{showPicker ? '✕' : '＋'}");
+    expect(familyPage).toContain("💬 {commentsOpen ? '收起' : '评论'}");
+    expect(familyPage).toContain('commentsOpen && roomId && announcementId ? (');
+    expect(familyPage).toContain('<AnnouncementComments');
+    expect(familyPage).not.toContain('cloudGetAnnouncementComments(');
+    expect(comments).toContain('cloudGetAnnouncementComments(announcementId, roomId)');
+  });
+
+  it('uses a room-scoped cache and never lets cached delete permission cross accounts', () => {
+    expect(storage).toContain("ANNOUNCEMENT_COMMENTS: 'announcement_comments_v1'");
+    expect(storage).toContain('roomKey(KEYS.ANNOUNCEMENT_COMMENTS, roomId)');
+    expect(comments).toContain('canDelete is tied to the authenticated user and must be refreshed from the server');
+    expect(comments).toContain('canDelete: false');
+    expect(cloudSync).toContain('cloudGetAnnouncementComments(announcementId: number, roomId: number)');
+  });
+
+  it('stores and renders the commenter local date plus time consistently across viewer time zones', () => {
+    expect(comments).toContain('date: todayStr()');
+    expect(comments).toContain('localTimeStr: localTimeStr()');
+    expect(comments).toContain('`${match[1]}年${Number(match[2])}月${Number(match[3])}日 ${comment.localTimeStr}`');
+    expect(familyRouter).toContain('date: input.date');
+    expect(familyRouter).toContain('localTimeStr: input.localTimeStr');
+  });
+
+  it('keeps multiline input above the keyboard and preserves text when sending fails', () => {
+    expect(familyPage).toContain('<KeyboardAvoidingView');
+    expect(familyPage).toContain("behavior={Platform.OS === 'ios' ? 'padding' : 'height'}");
+    expect(familyPage).toContain('scrollResponderScrollNativeHandleToKeyboard(nativeHandle, 120, true)');
+    expect(comments).toContain('multiline');
+    expect(comments).toContain('submitBehavior="newline"');
+    expect(comments).toContain('刚才输入的文字仍然保留');
+    expect(comments).toContain('setCommentText(\'\')');
+  });
+
+  it('sends an explicit object notification and opens the exact announcement comments after switching profiles', () => {
+    expect(familyRouter).toContain('`${member.name || \'家人\'} 回复了 ${announcement.authorName || \'家人\'} 的公告`');
+    expect(familyRouter).toContain("type: 'announcement_comment'");
+    expect(familyRouter).toContain('announcementId: input.announcementId');
+    expect(rootLayout).toContain("data?.type === 'announcement_comment'");
+    expect(rootLayout).toContain("announcementId: data?.announcementId ? String(data.announcementId) : undefined");
+    expect(familyPage).toContain("params.openComments === '1'");
+    expect(familyPage).toContain('visibleOlderAnnouncements');
+  });
+});
