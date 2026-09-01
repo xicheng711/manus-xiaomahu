@@ -79,29 +79,20 @@ describe('reopened diary draft publish recovery', () => {
     cloudSyncStateMock.mockResolvedValue({ userId: 42 });
   });
 
-  it('reattaches a reopened draft to its original cloud record by clientId and publishes it once', async () => {
+  it('publishes a reopened draft directly by durable clientId without a blocking list request', async () => {
     const localDraft = draft({ serverDiaryId: undefined });
     memoryStorage.set(CACHE_KEY, JSON.stringify([localDraft]));
-    cloudGetDiariesMock.mockResolvedValue([{
-      id: 77,
-      roomId: Number(ROOM_ID),
-      authorUserId: 42,
-      clientId: localDraft.clientId,
-      date: localDraft.date,
-      content: localDraft.content,
-      localTimeStr: localDraft.localTimeStr,
-      conversationFinished: false,
-    }]);
     cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 77 });
 
     await expect(syncDiaryEntryNow(localDraft.id, ROOM_ID)).resolves.toBe(true);
+    expect(cloudGetDiariesMock).not.toHaveBeenCalled();
     expect(cloudSyncDiaryMock).toHaveBeenCalledTimes(1);
     expect(cloudSyncDiaryMock.mock.calls[0]).toMatchObject([expect.objectContaining({
       clientId: localDraft.clientId,
       content: localDraft.content,
       conversation: localDraft.conversation,
       conversationFinished: true,
-    }), 77, ROOM_ID]);
+    }), undefined, ROOM_ID]);
 
     const [published] = await getDiaryEntries(ROOM_ID);
     expect(published).toMatchObject({

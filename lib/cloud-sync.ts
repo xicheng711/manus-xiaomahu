@@ -86,6 +86,20 @@ export async function invalidateCloudCache(roomId: number, scope?: string): Prom
 }
 
 let _trpcClient: any = null;
+const DIARY_CLOUD_TIMEOUT_MS = 12_000;
+
+/** 日记发布和列表刷新不能无限等待网络；超时后保留本地内容并允许用户安全重试。 */
+async function withDiaryCloudTimeout<T>(request: Promise<T>, operation: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${operation}请求超时`)), DIARY_CLOUD_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 /** Initialize the sync layer with the tRPC client */
 export function initCloudSync(trpcClient: any) {
@@ -332,7 +346,7 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
   if (!roomId) return null;
   try {
     const client = getClient();
-    return await client.family.syncDiary.mutate({
+    return await withDiaryCloudTimeout<any>(client.family.syncDiary.mutate({
       roomId,
       serverDiaryId,
       clientId: diary.clientId,
@@ -350,7 +364,7 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
       conversation: diary.conversation,
       conversationFinished: diary.conversationFinished,
       localTimeStr: diary.localTimeStr,
-    });
+    }), '日记发布');
   } catch (e) {
     console.warn('[CloudSync] syncDiary failed:', e);
     return null;
@@ -376,7 +390,10 @@ export async function cloudGetDiaries(roomId?: number, limit = 100) {
   if (!rid) return null;
   try {
     const client = getClient();
-    return await client.family.getDiaries.query({ roomId: rid, limit });
+    return await withDiaryCloudTimeout<any>(
+      client.family.getDiaries.query({ roomId: rid, limit }),
+      '日记刷新',
+    );
   } catch (e) {
     console.warn('[CloudSync] getDiaries failed:', e);
     // null 表示网络/权限失败；[] 才表示服务端成功返回“当前家庭没有日记”。

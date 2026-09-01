@@ -1561,9 +1561,9 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
   if (existingPromise) return existingPromise;
 
   const task = (async () => {
-    let entry = await getDiaryEntryById(id, roomId);
+        let entry = await getDiaryEntryById(id, roomId);
     if (!entry) return false;
-
+    const hadPersistentClientId = !!entry.clientId;
     // 旧版本草稿没有 clientId；恢复时补齐并先写入本机，之后每次重试都稳定指向同一云端草稿。
     if (!entry.clientId) {
       const clientId = generateId();
@@ -1573,9 +1573,9 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
 
     let serverDiaryId = entry.serverDiaryId ?? null;
     if (!serverDiaryId) serverDiaryId = await waitForServerDiaryId(id);
-    if (!serverDiaryId) {
-      // 首次响应丢失或 App 重启后，优先用持久 clientId 找回原云端草稿；
-      // clientId 不存在的历史记录才降级到旧版日期/正文/时间匹配。
+    if (!serverDiaryId && !hadPersistentClientId) {
+      // 只有旧版无持久身份的草稿才需要读取列表做兼容匹配。
+      // 新版草稿直接携带 clientId 调用 syncDiary，由服务器在同一家庭和作者范围内幂等找回，避免多一次网络等待。
       const remoteEntries = await cloudGetDiaries(Number(roomId));
       if (Array.isArray(remoteEntries)) {
         const { userId } = await getCloudSyncState().catch(() => ({ userId: null }));
@@ -1619,12 +1619,13 @@ export async function syncPendingDiaries(roomId: string): Promise<void> {
   let pending = entries.filter(entry => entry.conversationFinished === true && (entry.syncPending || !entry.serverDiaryId));
   if (pending.length === 0) return;
 
-  // App 可能在“服务器已创建、serverDiaryId 尚未写回本地”的极短窗口被关闭。
-  // 重试创建前先从云端匹配作者自己的同一条记录，避免重新上线后产生重复日记。
-  const remoteEntries = await cloudGetDiaries(Number(roomId));
-  if (Array.isArray(remoteEntries)) {
+  // 只有旧版既没有 serverDiaryId、也没有 clientId 的记录才需要读取列表兼容匹配。
+  // 新版待同步日记由 syncDiary 的 roomId + author + clientId 幂等重连，避免页面进入时增加一次发布前网络等待。
+  const legacyPending = pending.filter(entry => !entry.serverDiaryId && !entry.clientId);
+  const remoteEntries = legacyPending.length > 0 ? await cloudGetDiaries(Number(roomId)) : null;
+  if (legacyPending.length > 0 && Array.isArray(remoteEntries)) {
     const { userId } = await getCloudSyncState().catch(() => ({ userId: null }));
-    for (const entry of pending.filter(item => !item.serverDiaryId)) {
+    for (const entry of legacyPending) {
         const matched = userId ? remoteEntries.find((remote: any) =>
           remote.authorUserId === userId && !!entry.clientId && remote.clientId === entry.clientId
         ) ?? remoteEntries.find((remote: any) =>

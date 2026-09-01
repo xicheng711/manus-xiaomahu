@@ -1072,6 +1072,15 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(dbMigrations).toContain('uq_diary_entries_room_author_client');
     expect(schema).toContain('uniqueIndex("uq_diary_entries_room_author_client").on(table.roomId, table.authorUserId, table.clientId)');
   });
+
+  it('publishes durable drafts directly and bounds both diary network and external push waits', () => {
+    expect(storage).toContain('if (!serverDiaryId && !hadPersistentClientId)');
+    expect(storage).toContain('const legacyPending = pending.filter(entry => !entry.serverDiaryId && !entry.clientId);');
+    expect(cloudSync).toContain('const DIARY_CLOUD_TIMEOUT_MS = 12_000;');
+    expect(cloudSync).toContain("}), '日记发布');");
+    expect(cloudSync).toContain("'日记刷新',");
+    expect(familyRouter).toContain('signal: AbortSignal.timeout(8_000)');
+  });
 });
 
 

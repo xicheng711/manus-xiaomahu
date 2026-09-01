@@ -51,6 +51,8 @@ async function sendExpoPushNotifications(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(messages),
+      // 推送是发布后的附加动作，不能因外部 Expo 服务长时间无响应而让日记保存一直卡住。
+      signal: AbortSignal.timeout(8_000),
     });
     const result = await resp.json();
     console.log('[Push] Expo API response status:', resp.status);
@@ -538,7 +540,7 @@ export const familyRouter = router({
             'syncDiary-update',
           );
         }
-                return { success: true, diaryId: resolvedDiaryId };
+        return { success: true, diaryId: resolvedDiaryId };
       }
       const createResult = await createDiaryEntry({
         roomId: input.roomId,
