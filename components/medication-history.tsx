@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import type { MedicationChangeEvent, MedicationSnapshot } from '@/lib/storage';
+import type { Medication, MedicationChangeEvent } from '@/lib/storage';
 import { AppColors } from '@/lib/design-tokens';
+import { describeMedicationChange, getChangesForMedication } from '@/lib/medication-history-display';
 
 const TYPE_LABELS: Record<MedicationChangeEvent['changeType'], string> = {
   added: '新增用药',
@@ -11,7 +12,7 @@ const TYPE_LABELS: Record<MedicationChangeEvent['changeType'], string> = {
   deleted: '停止并移除',
 };
 
-function formatTime(value: string) {
+export function formatMedicationChangeTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleString('zh-CN', {
@@ -24,32 +25,62 @@ function formatTime(value: string) {
   });
 }
 
-function snapshotName(snapshot?: MedicationSnapshot | null) {
-  return snapshot?.name?.trim() || '该药物';
-}
+export function MedicationItemHistory({
+  medication,
+  changes,
+}: {
+  medication: Medication;
+  changes: MedicationChangeEvent[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const medicationChanges = useMemo(
+    () => getChangesForMedication(medication, changes),
+    [medication, changes],
+  );
+  const visibleChanges = expanded ? medicationChanges : medicationChanges.slice(0, 1);
 
-function describeChange(change: MedicationChangeEvent): string[] {
-  const previous = change.previousSnapshot;
-  const next = change.nextSnapshot;
-  if (change.changeType === 'added') {
-    return [`开始服用 ${snapshotName(next)}${next?.dosage ? `（${next.dosage}）` : ''}`];
-  }
-  if (change.changeType === 'deleted') {
-    return [`停止并移除 ${snapshotName(previous)}`];
-  }
-  if (change.changeType === 'paused') return [`暂停 ${snapshotName(previous ?? next)}`];
-  if (change.changeType === 'resumed') return [`恢复 ${snapshotName(next ?? previous)}`];
+  if (medicationChanges.length === 0) return null;
 
-  const details: string[] = [];
-  if (previous?.name !== next?.name) details.push(`药物：${snapshotName(previous)} → ${snapshotName(next)}`);
-  if ((previous?.dosage ?? '') !== (next?.dosage ?? '')) details.push(`剂量：${previous?.dosage || '未填写'} → ${next?.dosage || '未填写'}`);
-  if ((previous?.frequency ?? '') !== (next?.frequency ?? '')) details.push(`频率：${previous?.frequency || '未填写'} → ${next?.frequency || '未填写'}`);
-  if ((previous?.times ?? []).join('、') !== (next?.times ?? []).join('、')) {
-    details.push(`时间：${previous?.times?.join('、') || '未填写'} → ${next?.times?.join('、') || '未填写'}`);
-  }
-  if ((previous?.notes ?? '') !== (next?.notes ?? '')) details.push('更新了用药备注');
-  if (previous?.active !== next?.active) details.push(next?.active ? '恢复启用' : '暂停使用');
-  return details.length > 0 ? details : [`更新了 ${snapshotName(next ?? previous)} 的用药计划`];
+  return (
+    <View style={styles.itemHistorySection}>
+      <View style={styles.itemHistoryHeader}>
+        <Text style={styles.itemHistoryTitle}>最近调整</Text>
+        <Text style={styles.itemHistoryDate}>{formatMedicationChangeTime(medicationChanges[0].changedAt)}</Text>
+      </View>
+
+      {visibleChanges.map((change, index) => (
+        <View key={change.eventId} style={[styles.itemHistoryEntry, index > 0 && styles.itemHistoryEntryDivider]}>
+          <View style={styles.itemHistoryTypeRow}>
+            <Text style={styles.itemHistoryType}>{TYPE_LABELS[change.changeType] || '调整用药'}</Text>
+            {change.syncPending ? <Text style={styles.pendingText}>⏳ 等待同步</Text> : null}
+          </View>
+          {describeMedicationChange(change).map((detail, detailIndex) => (
+            <Text key={`${change.eventId}_item_${detailIndex}`} style={styles.itemHistoryDetail}>{detail}</Text>
+          ))}
+          {change.reason ? (
+            <Text style={styles.itemHistoryReason}>
+              <Text style={styles.itemHistoryReasonLabel}>原因：</Text>{change.reason}
+            </Text>
+          ) : null}
+          <Text style={styles.itemHistoryMeta}>
+            {change.changedByName || '主照顾者'} · {formatMedicationChangeTime(change.changedAt)}
+          </Text>
+        </View>
+      ))}
+
+      {medicationChanges.length > 1 ? (
+        <TouchableOpacity
+          style={styles.itemHistoryExpandButton}
+          onPress={() => setExpanded(value => !value)}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.itemHistoryExpandText}>
+            {expanded ? '收起这款药的记录 ↑' : `查看这款药的全部 ${medicationChanges.length} 次调整 ↓`}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
 }
 
 export function MedicationHistory({ changes }: { changes: MedicationChangeEvent[] }) {
@@ -70,7 +101,7 @@ export function MedicationHistory({ changes }: { changes: MedicationChangeEvent[
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>🕰️ 用药调整记录</Text>
-          <Text style={styles.subtitle}>最近更新：{formatTime(changes[0].changedAt)}</Text>
+          <Text style={styles.subtitle}>最近更新：{formatMedicationChangeTime(changes[0].changedAt)}</Text>
         </View>
         <View style={styles.countBadge}><Text style={styles.countText}>{changes.length} 次</Text></View>
       </View>
@@ -81,7 +112,7 @@ export function MedicationHistory({ changes }: { changes: MedicationChangeEvent[
             <Text style={styles.typeLabel}>{TYPE_LABELS[change.changeType] || '调整用药'}</Text>
             {change.syncPending ? <Text style={styles.pendingText}>⏳ 等待同步</Text> : null}
           </View>
-          {describeChange(change).map((detail, detailIndex) => (
+          {describeMedicationChange(change).map((detail, detailIndex) => (
             <Text key={`${change.eventId}_${detailIndex}`} style={styles.detailText}>• {detail}</Text>
           ))}
           {change.reason ? (
@@ -91,7 +122,7 @@ export function MedicationHistory({ changes }: { changes: MedicationChangeEvent[
             </View>
           ) : null}
           <Text style={styles.metaText}>
-            {change.changedByName || '主照顾者'} · {formatTime(change.changedAt)}
+            {change.changedByName || '主照顾者'} · {formatMedicationChangeTime(change.changedAt)}
           </Text>
         </View>
       ))}
@@ -141,4 +172,56 @@ const styles = StyleSheet.create({
   metaText: { marginTop: 9, fontSize: 11, color: AppColors.text.tertiary },
   expandButton: { marginTop: 14, alignItems: 'center', paddingVertical: 9, borderRadius: 12, backgroundColor: '#FAF3F0' },
   expandText: { fontSize: 12, fontWeight: '700', color: '#9B6A58' },
+  itemHistorySection: {
+    marginTop: 13,
+    paddingTop: 13,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E8DEDA',
+  },
+  itemHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 8,
+  },
+  itemHistoryTitle: { fontSize: 12, fontWeight: '800', color: '#8C6558' },
+  itemHistoryDate: { flexShrink: 1, textAlign: 'right', fontSize: 10, color: AppColors.text.tertiary },
+  itemHistoryEntry: { paddingVertical: 2 },
+  itemHistoryEntryDivider: {
+    marginTop: 11,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E8DEDA',
+  },
+  itemHistoryTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
+  itemHistoryType: { fontSize: 12, fontWeight: '800', color: AppColors.text.primary },
+  itemHistoryDetail: { fontSize: 12, lineHeight: 18, color: AppColors.text.secondary },
+  itemHistoryReason: {
+    marginTop: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#F8F3F0',
+    fontSize: 12,
+    lineHeight: 18,
+    color: AppColors.text.primary,
+  },
+  itemHistoryReasonLabel: { fontWeight: '800', color: '#95695C' },
+  itemHistoryMeta: { marginTop: 6, fontSize: 10, color: AppColors.text.tertiary },
+  itemHistoryExpandButton: {
+    alignSelf: 'flex-start',
+    marginTop: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    backgroundColor: '#FAF3F0',
+  },
+  itemHistoryExpandText: { fontSize: 11, fontWeight: '700', color: '#95695C' },
 });

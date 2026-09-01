@@ -15,7 +15,7 @@ import {
   getProfile, getFamilyProfile,
 } from '@/lib/storage';
 import { cloudGetMedications, cloudGetMedicationChanges } from '@/lib/cloud-sync';
-import { MedicationHistory } from '@/components/medication-history';
+import { MedicationHistory, MedicationItemHistory } from '@/components/medication-history';
 import { useFamilyContext } from '@/lib/family-context';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors } from '@/lib/design-tokens';
@@ -28,7 +28,7 @@ const FREQ_ICONS = ['1️⃣', '2️⃣', '3️⃣', '📅', '📆', '⚡'];
 const MED_ICONS = ['💊', '💉', '🩺', '🌡️', '🧴', '🫁', '🧠', '❤️', '🦴', '👁️'];
 
 // ─── Animated Med Card ───────────────────────────────────────────────────────
-function MedCard({ med, onToggle, onDelete, onEdit, index, isCreator }: { med: Medication; onToggle: () => void; onDelete: () => void; onEdit: () => void; index: number; isCreator: boolean }) {
+function MedCard({ med, changes, onToggle, onDelete, onEdit, index, isCreator }: { med: Medication; changes: MedicationChangeEvent[]; onToggle: () => void; onDelete: () => void; onEdit: () => void; index: number; isCreator: boolean }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -72,6 +72,8 @@ function MedCard({ med, onToggle, onDelete, onEdit, index, isCreator }: { med: M
             <Text style={styles.reminderBadgeText}>🔔 每日提醒已开启</Text>
           </View>
         )}
+
+        <MedicationItemHistory medication={med} changes={changes} />
 
         {isCreator && (
           <View style={styles.medCardActions}>
@@ -270,9 +272,14 @@ function MedicationScreenContent() {
         changedByName: currentMemberName,
       });
       await updateMedication(editingMed.id, patch, requestedFamilyId, changeEvent);
-      setMedicationChanges(previous => [changeEvent, ...previous.filter(item => item.eventId !== changeEvent.eventId)]);
-      const updated = meds.map(m => m.id === editingMed.id ? { ...m, ...patch } : m);
-      setMeds(updated);
+      // 从当前家庭缓存读取刚写入的 pendingChanges，单药时间线可立即、准确显示本次调整。
+      const [updatedMeds, updatedChanges] = await Promise.all([
+        getMedications(requestedFamilyId),
+        getMedicationChanges(requestedFamilyId),
+      ]);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
+      setMeds(updatedMeds);
+      setMedicationChanges(updatedChanges);
       // handle reminders—差集算法：取消已删除的时间点，新增新时间点
       const oldTimes = editingMed.times || [];
       if (reminderEnabled) {
@@ -369,8 +376,13 @@ function MedicationScreenContent() {
           changedByName: currentMemberName,
         });
         await updateMedication(action.med.id, { active: nextMedication.active }, requestedFamilyId, changeEvent);
-        setMeds(previous => previous.map(item => item.id === action.med.id ? { ...item, active: nextMedication.active } : item));
-        setMedicationChanges(previous => [changeEvent, ...previous.filter(item => item.eventId !== changeEvent.eventId)]);
+        const [updatedMeds, updatedChanges] = await Promise.all([
+          getMedications(requestedFamilyId),
+          getMedicationChanges(requestedFamilyId),
+        ]);
+        if (activeFamilyRef.current !== requestedFamilyId) return;
+        setMeds(updatedMeds);
+        setMedicationChanges(updatedChanges);
       } else {
         const changeEvent = createMedicationChangeEvent({
           changeType: 'deleted',
@@ -591,7 +603,7 @@ function MedicationScreenContent() {
               </View>
             </View>
             {meds.map((med, i) => (
-              <MedCard key={med.id} med={med} onToggle={() => handleToggle(med.id)} onDelete={() => handleDelete(med.id)} onEdit={() => openEdit(med)} index={i} isCreator={isCreator} />
+              <MedCard key={med.id} med={med} changes={medicationChanges} onToggle={() => handleToggle(med.id)} onDelete={() => handleDelete(med.id)} onEdit={() => openEdit(med)} index={i} isCreator={isCreator} />
             ))}
           </View>
         ) : null}

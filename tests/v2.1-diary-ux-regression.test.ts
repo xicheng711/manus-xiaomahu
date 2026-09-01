@@ -1110,3 +1110,34 @@ describe('Diary draft-to-published list state', () => {
     expect(diaryStorage).toContain('serverDiaryId: Number(resolvedServerId), syncPending: false, roomId');
   });
 });
+
+
+describe('Per-medication adjustment history', () => {
+  const medicationPage = read('app/(tabs)/medication.tsx');
+  const medicationHistory = read('components/medication-history.tsx');
+  const medicationHistoryDisplay = read('lib/medication-history-display.ts');
+
+  it('keeps the family-wide history and also renders history inside every medication card', () => {
+    expect(medicationPage).toContain('<MedicationHistory changes={medicationChanges} />');
+    expect(medicationPage).toContain('<MedicationItemHistory medication={med} changes={changes} />');
+    expect(medicationPage).toContain('changes={medicationChanges}');
+  });
+
+  it('shows one latest adjustment by default with date, reason and an expandable per-drug timeline', () => {
+    expect(medicationHistory).toContain("const visibleChanges = expanded ? medicationChanges : medicationChanges.slice(0, 1)");
+    expect(medicationHistory).toContain('最近调整');
+    expect(medicationHistory).toContain('原因：');
+    expect(medicationHistory).toContain('查看这款药的全部');
+  });
+
+  it('matches by stable medication identity instead of editable medication names', () => {
+    expect(medicationHistoryDisplay).toContain('Number(change.medicationId) === serverId');
+    expect(medicationHistoryDisplay).toContain('pendingEventIds.has(change.eventId)');
+    expect(medicationHistoryDisplay).not.toContain('change.previousSnapshot?.name === medication.name');
+  });
+
+  it('reuses the already loaded room history without adding a per-card cloud request', () => {
+    expect(medicationPage).toContain('cloudGetMedicationChanges(Number(requestedFamilyId))');
+    expect(medicationHistory).not.toContain('cloudGetMedicationChanges');
+  });
+});
