@@ -123,7 +123,7 @@ describe('Diary draft, full text, and accidental navigation protection', () => {
     const diaryInput = diaryEdit.slice(diaryEdit.indexOf('placeholder={`${elderNickname}今天有什么特别的时刻？'), diaryEdit.indexOf('/* ── SUBMITTED'));
     expect(diaryInput).toContain('multiline');
     expect(diaryInput).not.toContain('maxLength');
-    expect(diaryEdit).toContain('<Text style={styles.summaryContent}>{content.trim()}</Text>');
+    expect(diaryEdit).toContain('<Text style={styles.summaryContent}>{displayedDiaryBody}</Text>');
   });
 
   it('supports family-scoped autosave, explicit draft save, and later restore', () => {
@@ -151,6 +151,37 @@ describe('Continuous AI diary conversation', () => {
     expect(aiRouter).toContain("role: m.role === 'user' ? 'user' : 'assistant'");
     expect(aiRouter).toContain("messages.push({ role: 'user', content: question })");
     expect(aiRouter).toContain('必须把历史消息当作正在进行的真实聊天');
+  });
+});
+
+describe('Published diary body and conversation display split', () => {
+  const diaryEdit = read('app/diary-edit.tsx');
+  const diaryDetail = read('app/diary-detail.tsx');
+  const displayHelper = read('lib/diary-conversation-display.ts');
+
+  it('renders the complete diary body once and starts the conversation with the first AI reply', () => {
+    expect(diaryEdit).toContain('getCompleteDiaryBody(content, conversation)');
+    expect(diaryEdit).toContain('getConversationAfterDiaryBody(conversation, displayedDiaryBody)');
+    expect(diaryEdit).toContain('displayedConversation.map((msg, i) =>');
+    expect(diaryEdit).not.toContain('conversation.map((msg, i) =>');
+    expect(diaryDetail).toContain('<Text style={styles.contentText}>{displayedDiaryBody}</Text>');
+    expect(diaryDetail).not.toContain("{entry.moodEmoji} {entry.content || '已记录今日护理情况 📖'}");
+  });
+
+  it('keeps every genuine follow-up and recovers the longer copy from truncated legacy entries', () => {
+    expect(displayHelper).toContain('shorterLength >= 24');
+    expect(displayHelper).toContain('return [...conversation]');
+    expect(displayHelper).toContain('getDiaryFollowUpConversation');
+    expect(diaryDetail).toContain('getDiaryFollowUpConversation(');
+  });
+
+  it('does not impose visual clipping on the unique body or conversation messages', () => {
+    const publishedRender = diaryEdit.slice(
+      diaryEdit.indexOf('/* ── SUBMITTED'),
+      diaryEdit.indexOf('/* 正式发布后显示阅读回执'),
+    );
+    expect(publishedRender).not.toContain('numberOfLines');
+    expect(publishedRender).not.toContain('maxHeight');
   });
 });
 

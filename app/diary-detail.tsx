@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { BackButton } from '@/components/back-button';
 import { trpc } from '@/lib/trpc';
 import { AppColors, Gradients } from '@/lib/design-tokens';
+import { getCompleteDiaryBody, getDiaryFollowUpConversation } from '@/lib/diary-conversation-display';
 
 const MOOD_OPTIONS = [
   { emoji: '😄', label: '很开心', color: '#22C55E' },
@@ -92,14 +93,19 @@ export default function DiaryDetailScreen() {
           try { e.tags = JSON.parse(e.tags as any); } catch { e.tags = []; }
         }
         if (!Array.isArray(e.tags)) e.tags = [];
-        // 从 conversation 字段恢复对话历史（主照顾者重开页面 / joiner 查看时都能看到完整对话）
+        // 正文和首次 AI 回复已分别在上方完整展示；这里仅恢复真正新增的后续对话。
+        // 使用内容匹配而不是固定 slice，兼容旧版 conversation 缺项或首条正文仅保存前半段的记录。
         if (Array.isArray((e as any).conversation) && (e as any).conversation.length > 0) {
-          // conversation[0] = 用户初始日记内容，conversation[1] = AI 第一条回复
-          // 这两条已经在上方「智能对话」区块显示，追问区块只渲染第 3 条起
-          const followUps = (e as any).conversation.slice(2);
+          const followUps = getDiaryFollowUpConversation(
+            (e as any).conversation,
+            e.content,
+            anyE.smartReply,
+          );
           setFollowUpHistory(
             followUps.map((m: any) => ({ role: m.role as 'user' | 'ai', text: m.text }))
           );
+        } else {
+          setFollowUpHistory([]);
         }
       }
       setEntry(e);
@@ -127,7 +133,7 @@ export default function DiaryDetailScreen() {
       const result = await followUpMutation.mutateAsync({
         elderNickname,
         caregiverName,
-        originalContent: entry.content || '',
+        originalContent: getCompleteDiaryBody(entry.content, entry.conversation),
         originalMood: entry.moodEmoji || '',
         originalAiReply: entry.smartReply || '',
         history: historyForApi,
@@ -156,8 +162,9 @@ export default function DiaryDetailScreen() {
     if (Array.isArray(entry.tags) && entry.tags.length > 0) {
       lines.push(`🏷️ ${entry.tags.join('、')}`);
     }
-    if (entry.content) {
-      lines.push('', `📝 ${entry.content}`);
+    const completeDiaryBody = getCompleteDiaryBody(entry.content, entry.conversation);
+    if (completeDiaryBody) {
+      lines.push('', `📝 ${completeDiaryBody}`);
     }
     if (entry.smartReply) {
       lines.push('', `🩺 小马虎回复：`, entry.smartReply);
@@ -203,6 +210,7 @@ export default function DiaryDetailScreen() {
   }
 
   const mood = MOOD_OPTIONS.find(m => m.emoji === entry.moodEmoji) || MOOD_OPTIONS[2];
+  const displayedDiaryBody = getCompleteDiaryBody(entry.content, entry.conversation);
   const timeStr = entry.localTimeStr || (entry.createdAt
     ? new Date(entry.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     : '');
@@ -253,11 +261,11 @@ export default function DiaryDetailScreen() {
           )}
 
           {/* Content */}
-          {entry.content ? (
+          {displayedDiaryBody ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>📝 日记内容</Text>
               <View style={styles.contentCard}>
-                <Text style={styles.contentText}>{entry.content}</Text>
+                <Text style={styles.contentText}>{displayedDiaryBody}</Text>
               </View>
             </View>
           ) : (
@@ -274,14 +282,7 @@ export default function DiaryDetailScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>💬 智能对话</Text>
               <View style={styles.chatBox}>
-                {/* User bubble: diary content */}
-                <View style={styles.bubbleRowRight}>
-                  <View style={styles.bubbleGreen}>
-                    <Text style={styles.bubbleGreenText}>
-                      {entry.moodEmoji} {entry.content || '已记录今日护理情况 📖'}
-                    </Text>
-                  </View>
-                </View>
+                {/* 日记正文已在上方完整显示，此处从首次小马虎回复开始，避免重复用户正文。 */}
                 {/* 智能助手名称行 */}
                 <View style={styles.smartNameRow}>
                   <View style={styles.smartAvatarCircle}>
@@ -315,9 +316,9 @@ export default function DiaryDetailScreen() {
           )}
 
           {/* 继续追问智能助手 — readOnly 时只展示已有对话，不显示输入框 */}
-          {entry.smartReply && (
+          {entry.smartReply && (followUpHistory.length > 0 || !isReadOnly) && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{isReadOnly ? '💬 小马虎对话' : '💬 继续和小马虎说说'}</Text>
+              <Text style={styles.sectionTitle}>💬 后续对话</Text>
               <View style={styles.chatBox}>
                 {followUpHistory.map((msg, i) => (
                   msg.role === 'user' ? (

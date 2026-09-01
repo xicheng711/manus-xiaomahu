@@ -26,6 +26,7 @@ import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import { AppColors, Gradients } from '@/lib/design-tokens';
+import { getCompleteDiaryBody, getConversationAfterDiaryBody } from '@/lib/diary-conversation-display';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -798,6 +799,10 @@ export default function DiaryEditScreen() {
     ?? (existingId && /^cloud_\d+$/.test(existingId) ? Number(existingId.replace('cloud_', '')) : null);
   const interactionRoomId = familyId ? Number(familyId) : null;
   const canShowInteractions = submitted && finished && entryRef.current?.conversationFinished !== false;
+  // 正文与旧 conversation 副本长度不一致时显示更完整的一份；对话区不再重复同一条正文。
+  const displayedDiaryBody = getCompleteDiaryBody(content, conversation);
+  const displayedConversation = getConversationAfterDiaryBody(conversation, displayedDiaryBody);
+  const firstDisplayedAiIndex = displayedConversation.findIndex(message => message.role === 'ai');
 
   if (loadingEntry) {
     return (
@@ -994,8 +999,8 @@ export default function DiaryEditScreen() {
                       </View>
                     )}
                   </View>
-                  {content.trim() ? (
-                    <Text style={styles.summaryContent}>{content.trim()}</Text>
+                  {displayedDiaryBody ? (
+                    <Text style={styles.summaryContent}>{displayedDiaryBody}</Text>
                   ) : (
                     <Text style={styles.summaryNoContent}>（未写详细内容）</Text>
                   )}
@@ -1003,17 +1008,21 @@ export default function DiaryEditScreen() {
               )}
 
               {/* ── CONVERSATION ── */}
-              {(conversation.length > 0 || smartLoading) && (
+              {(displayedConversation.length > 0 || smartLoading) && (
                 <View style={styles.chatContainer}>
                   <Text style={styles.chatTitle}>💬 小马虎对话</Text>
 
-                  {conversation.map((msg, i) =>
+                  {displayedConversation.map((msg, i) =>
                     msg.role === 'user' ? (
                       <UserBubble key={msg.id} text={msg.text} photoUri={caregiverPhotoUri} zodiacEmoji={caregiverZodiacEmoji} />
                     ) : (
                       <View key={msg.id}>
                         <SmartNameRow />
-                        <SmartBubble text={msg.text} animate={i === conversation.length - 1 && !finished} isFirst={i === 1} />
+                        <SmartBubble
+                          text={msg.text}
+                          animate={i === displayedConversation.length - 1 && !finished}
+                          isFirst={i === firstDisplayedAiIndex}
+                        />
                       </View>
                     )
                   )}
