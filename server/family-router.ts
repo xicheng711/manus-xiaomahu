@@ -23,6 +23,7 @@ import {
 } from "./family-db";
 import { updatePushToken, getUsersByIds } from "./db";
 import { ossUploadAvatar, storagePut } from "./storage";
+import { resolveDiarySyncIdentity } from "./diary-sync-identity";
 
 // ─── Expo Push Notification Helper ──────────────────────────────────────────
 
@@ -498,16 +499,27 @@ export const familyRouter = router({
         `[DiarySync] start user=${userId} room=${input.roomId} serverId=${input.serverDiaryId ?? 'none'} clientId=${input.clientId ? 'present' : 'none'} finished=${input.conversationFinished === true}`,
       );
 
-      // serverDiaryId 可在首次响应丢失或 App 重启后缺失；clientId 可安全找回同一作者的同一篇草稿。
-      const recoveredByClientId = !input.serverDiaryId && input.clientId
-        ? await getDiaryEntryByClientId(input.roomId, userId, input.clientId)
-        : null;
-      const resolvedDiaryId = input.serverDiaryId ?? recoveredByClientId?.id;
+      // 恢复草稿可能携带升级前缓存的陈旧 serverDiaryId。持久 clientId 才是同一草稿的首选身份，
+      // 且所有关联都必须同时属于当前家庭和当前作者，避免旧 ID 阻止发布或串到其他记录。
+      const [recoveredByClientId, requestedByServerId] = await Promise.all([
+        input.clientId
+          ? getDiaryEntryByClientId(input.roomId, userId, input.clientId)
+          : Promise.resolve(null),
+        input.serverDiaryId
+          ? getDiaryEntryForInteraction(input.roomId, input.serverDiaryId)
+          : Promise.resolve(null),
+      ]);
+      const existingEntry = resolveDiarySyncIdentity({
+        roomId: input.roomId,
+        userId,
+        clientId: input.clientId,
+        requestedServerDiaryId: input.serverDiaryId,
+        clientMatch: recoveredByClientId,
+        requestedMatch: requestedByServerId,
+      });
+      const resolvedDiaryId = existingEntry?.id;
 
-      if (resolvedDiaryId) {
-        const existingEntry = await getDiaryEntryForInteraction(input.roomId, resolvedDiaryId);
-        if (!existingEntry) throw new Error("日记不存在或已删除");
-        if (existingEntry.authorUserId !== userId) throw new Error("只能修改自己发布的日记");
+      if (resolvedDiaryId && existingEntry) {
         // Published diaries are immutable. A response-lost retry may resend the same payload;
         // acknowledge it idempotently without changing the published content or conversation.
         if (existingEntry.conversationFinished === true) {
@@ -544,7 +556,8 @@ export const familyRouter = router({
             'syncDiary-update',
           );
         }
-        console.log(`[DiarySync] success diary=${resolvedDiaryId} mode=updated finished=${input.conversationFinished === true}`);
+        const repairedStaleId = input.serverDiaryId && input.serverDiaryId !== resolvedDiaryId;
+        console.log(`[DiarySync] success diary=${resolvedDiaryId} mode=${repairedStaleId ? 'recovered-by-client-id' : 'updated'} finished=${input.conversationFinished === true}`);
         return { success: true, diaryId: resolvedDiaryId };
       }
       const createResult = await createDiaryEntry({

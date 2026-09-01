@@ -203,7 +203,9 @@ describe('Published diary cloud consistency and privacy', () => {
 
   it('keeps unfinished diaries private to their author and locks other authors at the API', () => {
     expect(router).toContain('entry.conversationFinished === true || entry.authorUserId === userId');
-    expect(router).toContain('只能修改自己发布的日记');
+    expect(router).toContain('resolveDiarySyncIdentity({');
+    expect(router).toContain('roomId: input.roomId');
+    expect(router).toContain('userId,');
     expect(diaryEdit).toContain("setRoleReadOnly(params.readOnly === '1' || isOthersDiary)");
   });
 
