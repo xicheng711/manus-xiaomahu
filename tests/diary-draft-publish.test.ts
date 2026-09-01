@@ -108,6 +108,7 @@ describe('reopened diary draft publish recovery', () => {
       id: localDraft.id,
       clientId: localDraft.clientId,
       serverDiaryId: 77,
+      conversationFinished: true,
       syncPending: false,
     });
     expect(published.conversation).toEqual(localDraft.conversation);
@@ -130,6 +131,7 @@ describe('reopened diary draft publish recovery', () => {
       id: localDraft.id,
       clientId: sentDraft.clientId,
       serverDiaryId: 88,
+      conversationFinished: true,
       syncPending: false,
     });
   });

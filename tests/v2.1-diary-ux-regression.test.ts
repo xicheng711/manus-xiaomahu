@@ -1073,3 +1073,15 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(schema).toContain('uniqueIndex("uq_diary_entries_room_author_client").on(table.roomId, table.authorUserId, table.clientId)');
   });
 });
+
+
+describe('Diary draft-to-published list state', () => {
+  const diaryList = read('app/(tabs)/diary.tsx');
+  const diaryStorage = read('lib/storage.ts');
+
+  it('keeps unsubmitted conversation drafts and cloud-confirmed published entries in mutually exclusive sections', () => {
+    expect(diaryList).toContain('const conversationDrafts = entries.filter(entry => entry.conversationFinished === false);');
+    expect(diaryList).toContain('const publishedEntries = entries.filter(entry => entry.conversationFinished !== false);');
+    expect(diaryStorage).toContain('serverDiaryId: Number(resolvedServerId), syncPending: false, roomId');
+  });
+});
