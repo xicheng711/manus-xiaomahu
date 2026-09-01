@@ -16,6 +16,7 @@ import {
   cloudUpdateMemberProfile,
   setCloudSyncState,
   getCloudSyncState,
+  type DiaryCloudFailureCode,
 } from "./cloud-sync";
 
 export { cloudGetRoomDetail };
@@ -1445,6 +1446,18 @@ export async function getDiaryEntriesForHome(roomId?: string, limit = 20): Promi
   return deduped.slice(0, limit);
 }
 
+export interface DiaryPublishFailure {
+  code: DiaryCloudFailureCode | 'LOCAL_ERROR';
+  message: string;
+}
+
+const _lastDiaryPublishFailures = new Map<string, DiaryPublishFailure>();
+const diaryPublishKey = (roomId: string, id: string) => `${roomId}:${id}`;
+
+export function getLastDiaryPublishFailure(id: string, roomId: string): DiaryPublishFailure | null {
+  return _lastDiaryPublishFailures.get(diaryPublishKey(roomId, id)) ?? null;
+}
+
 // Map from local diary id to a promise that resolves with serverDiaryId once cloud sync completes
 const _serverDiaryIdPromises: Map<string, Promise<number | null>> = new Map();
 
@@ -1557,13 +1570,21 @@ const _diaryPublishPromises = new Map<string, Promise<boolean>>();
  * 用于“结束并保存”和进入列表后的断网重试，避免页面先退出但家人只看到不完整对话。
  */
 export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boolean> {
-  const existingPromise = _diaryPublishPromises.get(`${roomId}:${id}`);
+  const key = diaryPublishKey(roomId, id);
+  const existingPromise = _diaryPublishPromises.get(key);
   if (existingPromise) return existingPromise;
 
   const task = (async () => {
-        let entry = await getDiaryEntryById(id, roomId);
-    if (!entry) return false;
-    const hadPersistentClientId = !!entry.clientId;
+    try {
+      let entry = await getDiaryEntryById(id, roomId);
+      if (!entry) {
+        _lastDiaryPublishFailures.set(key, {
+          code: 'LOCAL_ERROR',
+          message: '没有找到这篇本地草稿，请返回日记列表后重新打开。',
+        });
+        return false;
+      }
+      const hadPersistentClientId = !!entry.clientId;
     // 旧版本草稿没有 clientId；恢复时补齐并先写入本机，之后每次重试都稳定指向同一云端草稿。
     if (!entry.clientId) {
       const clientId = generateId();
@@ -1595,21 +1616,35 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
     }
     const result = await cloudSyncDiary(entry, serverDiaryId ?? undefined, roomId);
     const resolvedServerId = result?.diaryId ?? result?.id ?? serverDiaryId;
-    if (!result?.success || !resolvedServerId) return false;
+    if (!result?.success || !resolvedServerId) {
+      _lastDiaryPublishFailures.set(key, {
+        code: result?.errorCode ?? 'NETWORK',
+        message: result?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。',
+      });
+      return false;
+    }
 
-    const key = roomKey(KEYS.DIARY, roomId);
+    const cacheKey = roomKey(KEYS.DIARY, roomId);
     const all = await getDiaryEntries(roomId);
     const idx = all.findIndex(item => item.id === id);
     if (idx >= 0) {
       all[idx] = { ...all[idx], serverDiaryId: Number(resolvedServerId), syncPending: false, roomId };
-      await AsyncStorage.setItem(key, JSON.stringify(sortDiaryEntries(all)));
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(sortDiaryEntries(all)));
     }
+    _lastDiaryPublishFailures.delete(key);
     return true;
+    } catch (error) {
+      console.warn('[Diary] syncDiaryEntryNow failed:', error);
+      _lastDiaryPublishFailures.set(key, {
+        code: 'LOCAL_ERROR',
+        message: '日记已保存在本机，但本地同步状态暂时无法更新，请重新打开后重试。',
+      });
+      return false;
+    }
   })().finally(() => {
-    _diaryPublishPromises.delete(`${roomId}:${id}`);
+    _diaryPublishPromises.delete(key);
   });
-
-  _diaryPublishPromises.set(`${roomId}:${id}`, task);
+  _diaryPublishPromises.set(key, task);
   return task;
 }
 

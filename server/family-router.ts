@@ -494,6 +494,9 @@ export const familyRouter = router({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
+      console.log(
+        `[DiarySync] start user=${userId} room=${input.roomId} serverId=${input.serverDiaryId ?? 'none'} clientId=${input.clientId ? 'present' : 'none'} finished=${input.conversationFinished === true}`,
+      );
 
       // serverDiaryId 可在首次响应丢失或 App 重启后缺失；clientId 可安全找回同一作者的同一篇草稿。
       const recoveredByClientId = !input.serverDiaryId && input.clientId
@@ -508,6 +511,7 @@ export const familyRouter = router({
         // Published diaries are immutable. A response-lost retry may resend the same payload;
         // acknowledge it idempotently without changing the published content or conversation.
         if (existingEntry.conversationFinished === true) {
+          console.log(`[DiarySync] success diary=${resolvedDiaryId} mode=already-published`);
           return { success: true, diaryId: resolvedDiaryId };
         }
         await updateDiaryEntry(resolvedDiaryId, {
@@ -540,6 +544,7 @@ export const familyRouter = router({
             'syncDiary-update',
           );
         }
+        console.log(`[DiarySync] success diary=${resolvedDiaryId} mode=updated finished=${input.conversationFinished === true}`);
         return { success: true, diaryId: resolvedDiaryId };
       }
       const createResult = await createDiaryEntry({
@@ -565,7 +570,10 @@ export const familyRouter = router({
       const entry = createResult.entry;
       // 并发创建的另一条请求可能已先写入草稿；当前请求要继续把完整对话和正式发布状态更新到同一条。
       if (!createResult.created) {
-        if (entry.conversationFinished === true) return { success: true, diaryId: entry.id };
+        if (entry.conversationFinished === true) {
+          console.log(`[DiarySync] success diary=${entry.id} mode=dedup-already-published`);
+          return { success: true, diaryId: entry.id };
+        }
         await updateDiaryEntry(entry.id, {
           clientId: input.clientId ?? entry.clientId,
           content: input.content,
@@ -598,6 +606,7 @@ export const familyRouter = router({
         );
       }
 
+      console.log(`[DiarySync] success diary=${entry.id} mode=${createResult.created ? 'created' : 'dedup-updated'} finished=${input.conversationFinished === true}`);
       return { success: true, diaryId: entry.id };
     }),
 

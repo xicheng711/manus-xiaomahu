@@ -40,6 +40,7 @@ import {
   getDiaryEntries,
   mergeCloudDiariesIntoLocal,
   syncDiaryEntryNow,
+  getLastDiaryPublishFailure,
   type DiaryEntry,
 } from '../lib/storage';
 
@@ -125,6 +126,30 @@ describe('reopened diary draft publish recovery', () => {
       conversationFinished: true,
       syncPending: false,
     });
+  });
+
+  it('keeps the full local draft and exposes an exact authentication failure instead of waiting forever', async () => {
+    const localDraft = draft({ serverDiaryId: undefined });
+    memoryStorage.set(CACHE_KEY, JSON.stringify([localDraft]));
+    cloudSyncDiaryMock.mockResolvedValue({
+      success: false,
+      errorCode: 'AUTH_REQUIRED',
+      errorMessage: '登录状态已失效，请重新登录后再发布。',
+    });
+
+    await expect(syncDiaryEntryNow(localDraft.id, ROOM_ID)).resolves.toBe(false);
+    expect(getLastDiaryPublishFailure(localDraft.id, ROOM_ID)).toEqual({
+      code: 'AUTH_REQUIRED',
+      message: '登录状态已失效，请重新登录后再发布。',
+    });
+    const [stillLocal] = await getDiaryEntries(ROOM_ID);
+    expect(stillLocal).toMatchObject({
+      id: localDraft.id,
+      conversationFinished: true,
+      syncPending: true,
+      content: localDraft.content,
+    });
+    expect(stillLocal.conversation).toEqual(localDraft.conversation);
   });
 
   it('merges a restarted local draft and its cloud copy by clientId without creating a duplicate card', async () => {

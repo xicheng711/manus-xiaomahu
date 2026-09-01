@@ -14,6 +14,7 @@ const requireUser = t.middleware(async (opts) => {
   const { ctx, next } = opts;
 
   if (!ctx.user) {
+    console.warn(`[Auth] Protected request rejected path=${opts.path}`);
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 

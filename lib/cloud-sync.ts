@@ -11,6 +11,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -99,6 +100,24 @@ async function withDiaryCloudTimeout<T>(request: Promise<T>, operation: string):
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+export type DiaryCloudFailureCode = 'AUTH_REQUIRED' | 'FORBIDDEN' | 'TIMEOUT' | 'MISSING_ROOM' | 'NETWORK';
+export type DiaryCloudFailure = { success: false; errorCode: DiaryCloudFailureCode; errorMessage: string };
+
+function diaryCloudFailure(error: unknown): DiaryCloudFailure {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const code = String((error as any)?.data?.code ?? (error as any)?.shape?.data?.code ?? '').toUpperCase();
+  if (code === 'UNAUTHORIZED' || /please login|invalid session|未登录|登录/i.test(raw)) {
+    return { success: false, errorCode: 'AUTH_REQUIRED', errorMessage: '登录状态已失效，请重新登录后再发布。' };
+  }
+  if (code === 'FORBIDDEN' || /forbidden|permission|权限/i.test(raw)) {
+    return { success: false, errorCode: 'FORBIDDEN', errorMessage: '当前账号没有在这个家庭发布日记的权限。' };
+  }
+  if (/超时|timeout|aborted/i.test(raw)) {
+    return { success: false, errorCode: 'TIMEOUT', errorMessage: '连接家庭云端超时，请检查网络后重试。' };
+  }
+  return { success: false, errorCode: 'NETWORK', errorMessage: '未能连接家庭云端，请检查网络后重试。' };
 }
 
 /** Initialize the sync layer with the tRPC client */
@@ -343,7 +362,15 @@ export async function cloudGetCheckIns(roomId?: number, limit = 30) {
 /** Sync a diary entry to the server */
 export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explicitRoomId?: number | string | null) {
   const roomId = explicitRoomId ? Number(explicitRoomId) : await getActiveRoomId();
-  if (!roomId) return null;
+  if (!roomId) {
+    return { success: false, errorCode: 'MISSING_ROOM', errorMessage: '当前家庭信息尚未准备好，请重新进入家庭后再发布。' } satisfies DiaryCloudFailure;
+  }
+  if (Platform.OS !== 'web') {
+    const sessionToken = await getSessionToken();
+    if (!sessionToken) {
+      return { success: false, errorCode: 'AUTH_REQUIRED', errorMessage: '登录状态已失效，请重新登录后再发布。' } satisfies DiaryCloudFailure;
+    }
+  }
   try {
     const client = getClient();
     return await withDiaryCloudTimeout<any>(client.family.syncDiary.mutate({
@@ -367,7 +394,7 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
     }), '日记发布');
   } catch (e) {
     console.warn('[CloudSync] syncDiary failed:', e);
-    return null;
+    return diaryCloudFailure(e);
   }
 }
 

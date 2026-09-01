@@ -195,7 +195,8 @@ describe('Published diary cloud consistency and privacy', () => {
   it('waits for the complete conversation to reach the cloud before leaving the editor', () => {
     expect(diaryEdit).toContain('syncDiaryEntryNow(eid, familyId)');
     expect(diaryEdit).toContain("conversationFinished: true, syncPending: true");
-    expect(diaryEdit).toContain('已保存到本机');
+    expect(diaryEdit).toContain("'尚未发布到家庭'");
+    expect(diaryEdit).toContain('getLastDiaryPublishFailure(eid, familyId)');
     expect(storage).toContain('export async function syncPendingDiaries');
     expect(diaryList).toContain('syncPendingDiaries(requestedFamilyId)');
   });
@@ -1080,6 +1081,19 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(cloudSync).toContain("}), '日记发布');");
     expect(cloudSync).toContain("'日记刷新',");
     expect(familyRouter).toContain('signal: AbortSignal.timeout(8_000)');
+  });
+
+  it('reports the real publish failure and emits privacy-safe server diagnostics', () => {
+    const diaryEdit = read('app/diary-edit.tsx');
+    const trpcServer = read('server/_core/trpc.ts');
+    expect(cloudSync).toContain("errorCode: 'AUTH_REQUIRED'");
+    expect(cloudSync).toContain('const sessionToken = await getSessionToken();');
+    expect(storage).toContain('getLastDiaryPublishFailure');
+    expect(diaryEdit).toContain("failure?.code === 'AUTH_REQUIRED'");
+    expect(diaryEdit).toContain('完整日记和全部对话仍安全保存在本机，不会丢失。');
+    expect(trpcServer).toContain('[Auth] Protected request rejected path=${opts.path}');
+    expect(familyRouter).toContain('[DiarySync] start user=${userId}');
+    expect(familyRouter).toContain('[DiarySync] success diary=${entry.id}');
   });
 });
 

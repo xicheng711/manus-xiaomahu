@@ -17,7 +17,7 @@ import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
-  waitForServerDiaryId, syncDiaryEntryNow, getNapMinutes, hasRecordedNap,
+  waitForServerDiaryId, syncDiaryEntryNow, getLastDiaryPublishFailure, getNapMinutes, hasRecordedNap,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, getCloudSyncState, setCloudSyncState } from '@/lib/cloud-sync';
@@ -776,9 +776,15 @@ export default function DiaryEditScreen() {
       }
       const published = await syncDiaryEntryNow(eid, familyId);
       if (!published) {
+        const failure = getLastDiaryPublishFailure(eid, familyId);
+        const failureTitle = failure?.code === 'AUTH_REQUIRED'
+          ? '需要重新登录'
+          : failure?.code === 'FORBIDDEN'
+            ? '无法在当前家庭发布'
+            : '尚未发布到家庭';
         Alert.alert(
-          '已保存到本机',
-          '完整日记和对话已经安全保存在本机，但暂时无法发布到家庭云端。请保持网络连接并再次点击“结束并保存”。',
+          failureTitle,
+          `${failure?.message ?? '未能连接家庭云端，请检查网络后重试。'}\n\n完整日记和全部对话仍安全保存在本机，不会丢失。`,
         );
         return;
       }
