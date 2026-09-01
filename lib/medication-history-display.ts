@@ -29,7 +29,9 @@ export function describeMedicationChange(change: MedicationChangeEvent): string[
 }
 
 function getMedicationServerId(medication: Medication): number | null {
-  if (Number.isFinite(Number(medication.serverMedId))) return Number(medication.serverMedId);
+  if (medication.serverMedId != null && Number.isFinite(Number(medication.serverMedId))) {
+    return Number(medication.serverMedId);
+  }
   const cloudId = /^cloud_(\d+)$/.exec(String(medication.id));
   return cloudId ? Number(cloudId[1]) : null;
 }

@@ -1141,3 +1141,29 @@ describe('Per-medication adjustment history', () => {
     expect(medicationHistory).not.toContain('cloudGetMedicationChanges');
   });
 });
+
+
+describe('Final diary and medication safety audit', () => {
+  const diaryRouter = read('server/family-router.ts');
+  const diaryIdentity = read('server/diary-sync-identity.ts');
+  const medicationPage = read('app/(tabs)/medication.tsx');
+  const storage = read('lib/storage.ts');
+
+  it('validates legacy diary ids against the complete date and content before attaching a durable client identity', () => {
+    expect(diaryRouter).toContain('expectedDate: input.date');
+    expect(diaryRouter).toContain('expectedContent: input.content');
+    expect(diaryIdentity).toContain("requestedMatch.date === expectedDate");
+    expect(diaryIdentity).toContain("(requestedMatch.content ?? '') === expectedContent");
+  });
+
+  it('locks medication saving before any asynchronous profile read can allow a duplicate tap', () => {
+    const lockIndex = medicationPage.indexOf('setSavingMedication(true)');
+    const profileReadIndex = medicationPage.indexOf('Promise.all([getFamilyProfile(requestedFamilyId), getProfile()])');
+    expect(lockIndex).toBeGreaterThan(-1);
+    expect(profileReadIndex).toBeGreaterThan(lockIndex);
+  });
+
+  it('preserves null medication history identities until the server assigns a real id', () => {
+    expect(storage).toContain("change?.medicationId != null && Number.isFinite(Number(change.medicationId))");
+  });
+});

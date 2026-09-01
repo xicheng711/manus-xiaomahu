@@ -10,6 +10,9 @@ function entry(overrides: Partial<DiarySyncIdentity> = {}): DiarySyncIdentity {
     roomId: ROOM_ID,
     authorUserId: USER_ID,
     clientId: 'draft-client-1',
+    date: '2026-09-01',
+    content: '完整草稿正文',
+    localTimeStr: '09:45',
     ...overrides,
   };
 }
@@ -50,9 +53,28 @@ describe('reopened diary server identity resolution', () => {
       userId: USER_ID,
       clientId: 'new-durable-client-id',
       requestedServerDiaryId: 77,
+      expectedDate: '2026-09-01',
+      expectedContent: '完整草稿正文',
+      expectedLocalTimeStr: '09:45',
       clientMatch: null,
       requestedMatch: legacyRequestedMatch,
     })).toEqual(legacyRequestedMatch);
+  });
+
+  it('rejects a legacy server id that belongs to the author but contains another diary', () => {
+    const otherLegacyDiary = entry({ clientId: null, content: '另一篇日记正文' });
+
+    expect(resolveDiarySyncIdentity({
+      roomId: ROOM_ID,
+      userId: USER_ID,
+      clientId: 'draft-client-1',
+      requestedServerDiaryId: 77,
+      expectedDate: '2026-09-01',
+      expectedContent: '完整草稿正文',
+      expectedLocalTimeStr: '09:45',
+      clientMatch: null,
+      requestedMatch: otherLegacyDiary,
+    })).toBeNull();
   });
 
   it('rejects a stale server id that points to another diary instead of blocking the reopened draft', () => {

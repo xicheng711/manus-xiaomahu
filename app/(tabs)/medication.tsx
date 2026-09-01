@@ -241,17 +241,18 @@ function MedicationScreenContent() {
       Alert.alert('家庭信息尚未准备好', '请稍后重试。');
       return;
     }
-    const [fp, lp] = await Promise.all([getFamilyProfile(requestedFamilyId), getProfile()]);
-    if (activeFamilyRef.current !== requestedFamilyId) return;
-    const nickname = fp?.nickname || fp?.name || activeMembership?.room.elderName || (memberships.length === 1 ? lp?.nickname || lp?.name : undefined) || '家人';
-
     if (editingMed && !changeReason.trim()) {
       Alert.alert('请填写调整原因', '简单记录医生建议、身体反应或其他原因，方便家人以后回顾。');
       return;
     }
 
+    // 在任何异步资料读取前立即锁定按钮，避免快速双击并发创建两条药物或调整事件。
     setSavingMedication(true);
     try {
+    const [fp, lp] = await Promise.all([getFamilyProfile(requestedFamilyId), getProfile()]);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    const nickname = fp?.nickname || fp?.name || activeMembership?.room.elderName || (memberships.length === 1 ? lp?.nickname || lp?.name : undefined) || '家人';
+
     if (editingMed) {
       // ── Edit existing ── (updateMedication 自带云端同步)
       const patch = {

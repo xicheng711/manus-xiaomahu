@@ -39,6 +39,8 @@ import {
   mergeCloudAnnouncementsIntoLocal,
   mergeCloudBriefingsIntoLocal,
   mergeCloudMedicationsIntoLocal,
+  getMedicationChanges,
+  saveMedicationChanges,
   removeCachedAnnouncementComments,
 } from '../lib/storage';
 
@@ -146,6 +148,21 @@ describe('final family-scoped cache safety', () => {
     await removeCachedAnnouncementComments(ROOM_ID, 44);
     expect(await getCachedAnnouncementComments(ROOM_ID, 44)).toEqual([]);
     expect(await getCachedAnnouncementComments(ROOM_ID, 45)).toHaveLength(1);
+  });
+
+  it('keeps an unsynced medication event unassigned until the server returns a real medication id', async () => {
+    await saveMedicationChanges([{
+      eventId: 'pending-without-server-id',
+      medicationId: null,
+      changeType: 'updated',
+      reason: '等待网络后同步',
+      changedAt: '2026-09-01T00:00:00.000Z',
+      syncPending: true,
+    }], ROOM_ID);
+
+    const changes = await getMedicationChanges(ROOM_ID);
+    expect(changes[0].medicationId).toBeNull();
+    expect(changes[0].syncPending).toBe(true);
   });
 
   it('does not let a stale medication read overwrite a pending local dose change', async () => {

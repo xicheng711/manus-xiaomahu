@@ -949,9 +949,11 @@ function normalizeMedicationChange(change: any): MedicationChangeEvent {
     ? change.changedAt.toISOString()
     : (typeof change?.changedAt === 'string' ? change.changedAt : new Date().toISOString());
   return {
-    id: Number.isFinite(Number(change?.id)) ? Number(change.id) : undefined,
+    id: change?.id != null && Number.isFinite(Number(change.id)) ? Number(change.id) : undefined,
     eventId: String(change?.eventId ?? `legacy_${generateId()}`),
-    medicationId: Number.isFinite(Number(change?.medicationId)) ? Number(change.medicationId) : null,
+    medicationId: change?.medicationId != null && Number.isFinite(Number(change.medicationId))
+      ? Number(change.medicationId)
+      : null,
     changeType: change?.changeType ?? 'updated',
     reason: change?.reason ?? undefined,
     previousSnapshot: change?.previousSnapshot ?? null,

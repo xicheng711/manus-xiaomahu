@@ -514,6 +514,9 @@ export const familyRouter = router({
         userId,
         clientId: input.clientId,
         requestedServerDiaryId: input.serverDiaryId,
+        expectedDate: input.date,
+        expectedContent: input.content,
+        expectedLocalTimeStr: input.localTimeStr,
         clientMatch: recoveredByClientId,
         requestedMatch: requestedByServerId,
       });

@@ -51,6 +51,12 @@ describe('per-medication adjustment history', () => {
       .toEqual(['own']);
   });
 
+  it('does not treat a null server medication id as numeric zero', () => {
+    const med = medication({ id: 'local-only', serverMedId: null as unknown as undefined });
+    const impossibleZeroIdChange = change({ eventId: 'zero-id', medicationId: 0 });
+    expect(getChangesForMedication(med, [impossibleZeroIdChange])).toEqual([]);
+  });
+
   it('supports cloud-prefixed local medication ids when serverMedId is not yet normalized', () => {
     const med = medication({ id: 'cloud_101', serverMedId: undefined });
     expect(getChangesForMedication(med, [change()])).toHaveLength(1);
