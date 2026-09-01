@@ -751,7 +751,7 @@ describe('Final end-to-end audit safeguards', () => {
   it('keeps published diaries immutable and restores a missing authenticated user id safely', () => {
     const diaryEdit = read('app/diary-edit.tsx');
     expect(router).toContain('if (existingEntry.conversationFinished === true)');
-    expect(router).toContain('return { success: true, diaryId: input.serverDiaryId }');
+    expect(router).toContain('return { success: true, diaryId: resolvedDiaryId }');
     expect(diaryEdit).toContain('const authenticatedUser = await getUserInfo()');
     expect(diaryEdit).toContain('await setCloudSyncState({ userId: authenticatedUser.id })');
     expect(diaryEdit).toContain('entry.authorUserId && (!currentUserId || entry.authorUserId !== currentUserId)');
@@ -1041,5 +1041,35 @@ describe('Sleep overview card and restrained warm visual hierarchy', () => {
     expect(trend).toContain("sectionTitle: { fontSize: 16, lineHeight: 21, fontWeight: '800'");
     expect(trend).toContain('<Text style={styles.sectionIcon}>😴</Text>');
     expect(trend).toContain('<Text style={styles.sectionIcon}>☀️</Text>');
+  });
+});
+
+
+describe('Durable diary draft recovery and one-time publishing', () => {
+  const storage = read('lib/storage.ts');
+  const cloudSync = read('lib/cloud-sync.ts');
+  const familyRouter = read('server/family-router.ts');
+  const familyDb = read('server/family-db.ts');
+  const schema = read('drizzle/schema.ts');
+  const dbMigrations = read('server/db.ts');
+
+  it('assigns a persistent client identity before a new draft can leave the editor', () => {
+    expect(storage).toContain('clientId: generateId(),');
+    expect(cloudSync).toContain('clientId: diary.clientId');
+    expect(schema).toContain('clientId: varchar("clientId", { length: 100 })');
+  });
+
+  it('reconciles a reopened draft by room, author and clientId before legacy content matching', () => {
+    expect(storage).toContain('remote.authorUserId === userId && remote.clientId === entry.clientId');
+    expect(familyRouter).toContain('getDiaryEntryByClientId(input.roomId, userId, input.clientId)');
+    expect(familyDb).toContain('eq(diaryEntries.roomId, roomId)');
+    expect(familyDb).toContain('eq(diaryEntries.authorUserId, authorUserId)');
+    expect(familyDb).toContain('eq(diaryEntries.clientId, clientId)');
+  });
+
+  it('creates the diary client identity column and unique index during production migration', () => {
+    expect(dbMigrations).toContain("{ table: 'diary_entries',  column: 'clientId',     definition: 'varchar(100)' }");
+    expect(dbMigrations).toContain('uq_diary_entries_room_author_client');
+    expect(schema).toContain('uniqueIndex("uq_diary_entries_room_author_client").on(table.roomId, table.authorUserId, table.clientId)');
   });
 });

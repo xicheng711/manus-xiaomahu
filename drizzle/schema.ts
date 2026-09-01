@@ -127,6 +127,8 @@ export const diaryEntries = mysqlTable("diary_entries", {
   id: int("id").autoincrement().primaryKey(),
   roomId: int("roomId").notNull(),
   authorUserId: int("authorUserId").notNull(),
+  /** 稳定客户端身份：草稿退出、重启或响应丢失后仍可安全更新同一篇日记。 */
+  clientId: varchar("clientId", { length: 100 }),
   date: varchar("date", { length: 10 }).notNull(),
   content: text("content").notNull(),
   moodEmoji: varchar("moodEmoji", { length: 20 }),
@@ -143,7 +145,10 @@ export const diaryEntries = mysqlTable("diary_entries", {
   localTimeStr: varchar("localTimeStr", { length: 10 }),  // e.g. "14:23" — writer's local time, timezone-safe
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, table => [
+  // clientId 为 NULL 的历史日记仍可共存；新日记在同一家庭、同一作者下严格幂等。
+  uniqueIndex("uq_diary_entries_room_author_client").on(table.roomId, table.authorUserId, table.clientId),
+]);
 
 export type DiaryEntry = typeof diaryEntries.$inferSelect;
 export type InsertDiaryEntry = typeof diaryEntries.$inferInsert;

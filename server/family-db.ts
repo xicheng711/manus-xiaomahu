@@ -163,11 +163,38 @@ export async function getCheckInByDate(roomId: number, date: string) {
 
 // ─── Diary Entries ───────────────────────────────────────────────────────────
 
+export async function getDiaryEntryByClientId(roomId: number, authorUserId: number, clientId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(diaryEntries)
+    .where(and(
+      eq(diaryEntries.roomId, roomId),
+      eq(diaryEntries.authorUserId, authorUserId),
+      eq(diaryEntries.clientId, clientId),
+    ))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function createDiaryEntry(data: InsertDiaryEntry) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  if (data.clientId) {
+    // 同一台设备的草稿即使因响应丢失或重启再次上传，也只返回原来的服务器记录。
+    const alreadyExists = await getDiaryEntryByClientId(data.roomId, data.authorUserId, data.clientId);
+    if (alreadyExists) return { entry: alreadyExists, created: false };
+    try {
+      const result = await db.insert(diaryEntries).values(data);
+      return { entry: { id: result[0].insertId, ...data }, created: true };
+    } catch (error) {
+      // 并发首发时由唯一索引判定同一草稿；再读取原记录而非创建第二条。
+      const recovered = await getDiaryEntryByClientId(data.roomId, data.authorUserId, data.clientId);
+      if (recovered) return { entry: recovered, created: false };
+      throw error;
+    }
+  }
   const result = await db.insert(diaryEntries).values(data);
-  return { id: result[0].insertId, ...data };
+  return { entry: { id: result[0].insertId, ...data }, created: true };
 }
 
 export async function updateDiaryEntry(id: number, data: Partial<InsertDiaryEntry>) {
@@ -193,6 +220,7 @@ export async function getDiaryEntriesByRoom(roomId: number, limit = 100) {
       id: diaryEntries.id,
       roomId: diaryEntries.roomId,
       authorUserId: diaryEntries.authorUserId,
+      clientId: diaryEntries.clientId,
       date: diaryEntries.date,
       content: diaryEntries.content,
       moodEmoji: diaryEntries.moodEmoji,

@@ -12,7 +12,7 @@ import {
   upsertElderProfile, getElderProfile,
   upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
   createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
-  getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
+  getDiaryEntryByClientId, getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
   deleteDiaryCommentByAuthor, getDiaryInteractionSummaries,
   createAnnouncement, getAnnouncementByClientId, getAnnouncementsByRoom, getAnnouncementById,
   getAnnouncementComments, addAnnouncementComment, deleteAnnouncementCommentByAuthor,
@@ -473,6 +473,7 @@ export const familyRouter = router({
     .input(z.object({
       roomId: z.number(),
       serverDiaryId: z.number().optional(),  // if updating existing
+      clientId: z.string().min(1).max(100).optional(), // persisted local draft identity
       date: z.string(),
       content: z.string(),
       moodEmoji: z.string().optional(),
@@ -492,16 +493,23 @@ export const familyRouter = router({
       const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
 
-      if (input.serverDiaryId) {
-        const existingEntry = await getDiaryEntryForInteraction(input.roomId, input.serverDiaryId);
+      // serverDiaryId 可在首次响应丢失或 App 重启后缺失；clientId 可安全找回同一作者的同一篇草稿。
+      const recoveredByClientId = !input.serverDiaryId && input.clientId
+        ? await getDiaryEntryByClientId(input.roomId, userId, input.clientId)
+        : null;
+      const resolvedDiaryId = input.serverDiaryId ?? recoveredByClientId?.id;
+
+      if (resolvedDiaryId) {
+        const existingEntry = await getDiaryEntryForInteraction(input.roomId, resolvedDiaryId);
         if (!existingEntry) throw new Error("日记不存在或已删除");
         if (existingEntry.authorUserId !== userId) throw new Error("只能修改自己发布的日记");
         // Published diaries are immutable. A response-lost retry may resend the same payload;
         // acknowledge it idempotently without changing the published content or conversation.
         if (existingEntry.conversationFinished === true) {
-          return { success: true, diaryId: input.serverDiaryId };
+          return { success: true, diaryId: resolvedDiaryId };
         }
-        await updateDiaryEntry(input.serverDiaryId, {
+        await updateDiaryEntry(resolvedDiaryId, {
+          clientId: input.clientId ?? existingEntry.clientId,
           content: input.content,
           moodEmoji: input.moodEmoji ?? null,
           moodLabel: input.moodLabel ?? null,
@@ -518,7 +526,7 @@ export const familyRouter = router({
         });
         // 只有服务器状态首次从未发布变为已发布时通知；断网重试和后续幂等更新不重复提醒。
         const newlyPublished = input.conversationFinished === true;
-        if (newlyPublished && shouldSendDiaryNotification(input.serverDiaryId)) {
+        if (newlyPublished && shouldSendDiaryNotification(resolvedDiaryId)) {
           const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
           const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
           await notifyRoomMembers(
@@ -526,16 +534,16 @@ export const familyRouter = router({
             userId,
             `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
             diaryPreview || '点击查看完整日记',
-            { type: 'diary', screen: 'diary', diaryId: input.serverDiaryId, roomId: input.roomId },
+            { type: 'diary', screen: 'diary', diaryId: resolvedDiaryId, roomId: input.roomId },
             'syncDiary-update',
           );
         }
-        return { success: true, diaryId: input.serverDiaryId };
+                return { success: true, diaryId: resolvedDiaryId };
       }
-
-      const entry = await createDiaryEntry({
+      const createResult = await createDiaryEntry({
         roomId: input.roomId,
         authorUserId: userId,
+        clientId: input.clientId ?? null,
         date: input.date,
         content: input.content,
         moodEmoji: input.moodEmoji ?? null,
@@ -552,8 +560,29 @@ export const familyRouter = router({
         localTimeStr: input.localTimeStr ?? null,
       });
 
-      // 只有对话结束（日记正式保存）时才发推送通知，避免对话中途就发出通知
-      // shouldSendDiaryNotification 确保同一条日记 10 秒内只发一次通知（防止客户端并发请求导致重复通知）
+      const entry = createResult.entry;
+      // 并发创建的另一条请求可能已先写入草稿；当前请求要继续把完整对话和正式发布状态更新到同一条。
+      if (!createResult.created) {
+        if (entry.conversationFinished === true) return { success: true, diaryId: entry.id };
+        await updateDiaryEntry(entry.id, {
+          clientId: input.clientId ?? entry.clientId,
+          content: input.content,
+          moodEmoji: input.moodEmoji ?? null,
+          moodLabel: input.moodLabel ?? null,
+          moodScore: input.moodScore ?? null,
+          tags: input.tags ?? null,
+          caregiverMoodEmoji: input.caregiverMoodEmoji ?? null,
+          caregiverMoodLabel: input.caregiverMoodLabel ?? null,
+          aiReply: input.aiReply ?? null,
+          aiEmoji: input.aiEmoji ?? null,
+          aiTip: input.aiTip ?? null,
+          conversation: input.conversation ?? null,
+          conversationFinished: input.conversationFinished ?? false,
+          localTimeStr: input.localTimeStr ?? null,
+        });
+      }
+      // 只有对话结束（日记正式保存）时才发推送通知，避免对话中途就发出通知。
+      // shouldSendDiaryNotification 确保同一条日记 10 秒内只发一次通知（防止并发重试导致重复通知）。
       if (input.conversationFinished === true && shouldSendDiaryNotification(entry.id)) {
         const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
         const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;

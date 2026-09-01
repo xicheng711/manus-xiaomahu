@@ -443,6 +443,7 @@ export default function DiaryEditScreen() {
             id: localId,
             roomId: familyId ? String(familyId) : undefined,
             serverDiaryId: matched.id,
+            clientId: matched.clientId ?? undefined,
             date: matched.date,
             content: matched.content || '',
             moodEmoji: matched.moodEmoji || '😊',

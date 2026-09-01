@@ -227,6 +227,8 @@ export interface DiaryEntry {
   caregiverMoodEmoji?: string;  // v5.0: 照顾者心情（从打卡移过来）
   caregiverMoodLabel?: string;
   serverDiaryId?: number;
+  /** 本机生成且跨重启保留的云端幂等身份，用于未发布草稿恢复后重新关联。 */
+  clientId?: string;
   authorName?: string;           // 记录人姓名（本地写入时填充 caregiverName，云端同步时也会填充）
   authorUserId?: number;          // 记录人的用户 ID（云端同步时填充，用于判断是否是当前用户写的日记）
   // AI reply fields (legacy — kept for backward compatibility)
@@ -1209,6 +1211,7 @@ export function normalizeCloudDiaryEntry(diary: any, roomId?: string): DiaryEntr
     id: `server_${diary.id}`,
     roomId: roomId ? String(roomId) : (diary.roomId ? String(diary.roomId) : undefined),
     serverDiaryId: Number(diary.id),
+    clientId: diary.clientId ?? undefined,
     date: diary.date,
     content: diary.content ?? '',
     moodEmoji: diary.moodEmoji ?? '😊',
@@ -1251,17 +1254,23 @@ export async function mergeCloudDiariesIntoLocal(cloudDiaries: any[], roomId?: s
   const key = roomKey(KEYS.DIARY, rid);
   const localEntries = await getDiaryEntries(rid ?? undefined);
   const localByServerId = new Map<number, DiaryEntry>();
+  const localByClientId = new Map<string, DiaryEntry>();
   localEntries.forEach(entry => {
     if (entry.serverDiaryId) localByServerId.set(Number(entry.serverDiaryId), entry);
+    if (entry.clientId) localByClientId.set(entry.clientId, entry);
   });
 
   const cloudIds = new Set<number>();
+  const matchedLocalIds = new Set<string>();
   const mergedCloudEntries = (cloudDiaries ?? []).map((raw: any) => {
     const remote = normalizeCloudDiaryEntry(raw, rid ?? undefined);
     const remoteId = Number(remote.serverDiaryId);
     cloudIds.add(remoteId);
-    const local = localByServerId.get(remoteId);
+    // serverDiaryId 是首选；草稿重启或首次响应丢失时则用持久 clientId 重新关联。
+    const local = localByServerId.get(remoteId)
+      ?? (remote.clientId ? localByClientId.get(remote.clientId) : undefined);
     if (!local) return remote;
+    matchedLocalIds.add(local.id);
 
     const localConversation = Array.isArray(local.conversation) ? local.conversation : [];
     const remoteConversation = Array.isArray(remote.conversation) ? remote.conversation : [];
@@ -1291,8 +1300,11 @@ export async function mergeCloudDiariesIntoLocal(cloudDiaries: any[], roomId?: s
     };
   });
 
-  // 保留尚未取得 serverDiaryId 的本地新建/草稿日记，避免网络慢时被后台拉取丢失。
-  const localOnly = localEntries.filter(entry => !entry.serverDiaryId || !cloudIds.has(Number(entry.serverDiaryId)));
+  // 保留云端分页范围外或尚未上传的本地日记；已经按 clientId 与云端同一条关联的草稿不能再次保留成副本。
+  const localOnly = localEntries.filter(entry =>
+    !matchedLocalIds.has(entry.id)
+    && (!entry.serverDiaryId || !cloudIds.has(Number(entry.serverDiaryId)))
+  );
   const merged = sortDiaryEntries([...mergedCloudEntries, ...localOnly]);
   await AsyncStorage.setItem(key, JSON.stringify(merged));
   return merged;
@@ -1447,7 +1459,15 @@ export async function saveDiaryEntry(data: Omit<DiaryEntry, 'id' | 'roomId'>, ro
   const now = new Date();
   // 使用 getHours/getMinutes 生成本地时间字符串（避免 Hermes 引擎 toLocaleTimeString 返回 "下午2:30" 格式）
   const localTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const entry: DiaryEntry = { id: generateId(), ...data, roomId: rid ?? undefined, createdAt: now.toISOString(), updatedAt: now.toISOString(), localTimeStr };
+  const entry: DiaryEntry = {
+    id: generateId(),
+    clientId: generateId(),
+    ...data,
+    roomId: rid ?? undefined,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    localTimeStr,
+  };
   all.unshift(entry);
   await AsyncStorage.setItem(key, JSON.stringify(all));
   // Cloud sync: sync diary entry to server, and expose the serverDiaryId promise
@@ -1541,25 +1561,36 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
   if (existingPromise) return existingPromise;
 
   const task = (async () => {
-    const entry = await getDiaryEntryById(id, roomId);
+    let entry = await getDiaryEntryById(id, roomId);
     if (!entry) return false;
+
+    // 旧版本草稿没有 clientId；恢复时补齐并先写入本机，之后每次重试都稳定指向同一云端草稿。
+    if (!entry.clientId) {
+      const clientId = generateId();
+      const updated = await updateDiaryEntry(id, { clientId }, roomId, { skipCloud: true });
+      entry = updated ?? { ...entry, clientId };
+    }
 
     let serverDiaryId = entry.serverDiaryId ?? null;
     if (!serverDiaryId) serverDiaryId = await waitForServerDiaryId(id);
     if (!serverDiaryId) {
-      // The original create request may have reached the server while its response
-      // was lost. Reconcile before creating again so “结束并保存” cannot produce a
-      // second diary row in the same session.
+      // 首次响应丢失或 App 重启后，优先用持久 clientId 找回原云端草稿；
+      // clientId 不存在的历史记录才降级到旧版日期/正文/时间匹配。
       const remoteEntries = await cloudGetDiaries(Number(roomId));
       if (Array.isArray(remoteEntries)) {
         const { userId } = await getCloudSyncState().catch(() => ({ userId: null }));
         const matched = userId ? remoteEntries.find((remote: any) =>
+          remote.authorUserId === userId && remote.clientId === entry.clientId
+        ) ?? remoteEntries.find((remote: any) =>
           remote.authorUserId === userId &&
-          remote.date === entry.date &&
-          (remote.content ?? '') === entry.content &&
-          (remote.localTimeStr ?? '') === (entry.localTimeStr ?? '')
+          remote.date === entry!.date &&
+          (remote.content ?? '') === entry!.content &&
+          (remote.localTimeStr ?? '') === (entry!.localTimeStr ?? '')
         ) : undefined;
-        if (matched?.id) serverDiaryId = Number(matched.id);
+        if (matched?.id) {
+          serverDiaryId = Number(matched.id);
+          await updateDiaryEntry(id, { serverDiaryId }, roomId, { skipCloud: true });
+        }
       }
     }
     const result = await cloudSyncDiary(entry, serverDiaryId ?? undefined, roomId);
@@ -1594,12 +1625,14 @@ export async function syncPendingDiaries(roomId: string): Promise<void> {
   if (Array.isArray(remoteEntries)) {
     const { userId } = await getCloudSyncState().catch(() => ({ userId: null }));
     for (const entry of pending.filter(item => !item.serverDiaryId)) {
-      const matched = userId ? remoteEntries.find((remote: any) =>
-        remote.authorUserId === userId &&
-        remote.date === entry.date &&
-        (remote.content ?? '') === entry.content &&
-        (remote.localTimeStr ?? '') === (entry.localTimeStr ?? '')
-      ) : undefined;
+        const matched = userId ? remoteEntries.find((remote: any) =>
+          remote.authorUserId === userId && !!entry.clientId && remote.clientId === entry.clientId
+        ) ?? remoteEntries.find((remote: any) =>
+          remote.authorUserId === userId &&
+          remote.date === entry.date &&
+          (remote.content ?? '') === entry.content &&
+          (remote.localTimeStr ?? '') === (entry.localTimeStr ?? '')
+        ) : undefined;
       if (matched?.id) {
         await updateDiaryEntry(entry.id, { serverDiaryId: Number(matched.id) }, roomId, { skipCloud: true });
       }

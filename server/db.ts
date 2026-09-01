@@ -18,6 +18,7 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     { table: 'announcements',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'announcements',  column: 'clientId',     definition: 'varchar(100)' },
     { table: 'diary_entries',  column: 'localTimeStr', definition: 'varchar(10)' },
+    { table: 'diary_entries',  column: 'clientId',     definition: 'varchar(100)' },
     { table: 'family_members', column: 'birthYear',    definition: 'int' },
     { table: 'check_ins',      column: 'daytimeNap',   definition: 'tinyint(1) NULL' },
     { table: 'check_ins',      column: 'napMinutes',   definition: 'int NULL' },
@@ -150,6 +151,26 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     }
   } catch (e: any) {
     console.warn('[Database] Migration warning (uq_announcements_room_client):', e?.message ?? e);
+  }
+
+  // 日记草稿幂等索引：历史日记 clientId 为空不受影响；新草稿按家庭 + 作者 + clientId 可靠重连。
+  try {
+    const rows: any[] = await (db as any).execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'diary_entries'
+         AND INDEX_NAME = 'uq_diary_entries_room_author_client'
+       LIMIT 1`
+    );
+    const exists = Array.isArray(rows[0]) ? rows[0].length > 0 : rows.length > 0;
+    if (!exists) {
+      await (db as any).execute(
+        'ALTER TABLE diary_entries ADD UNIQUE KEY uq_diary_entries_room_author_client (roomId, authorUserId, clientId)'
+      );
+      console.log('[Database] Migration: added diary entries room/author/client idempotency index');
+    }
+  } catch (e: any) {
+    console.warn('[Database] Migration warning (uq_diary_entries_room_author_client):', e?.message ?? e);
   }
 
   // 简报按家庭 + 日期幂等：先保留每组最新一条，再创建唯一索引。

@@ -335,6 +335,7 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
     return await client.family.syncDiary.mutate({
       roomId,
       serverDiaryId,
+      clientId: diary.clientId,
       date: diary.date,
       content: diary.content,
       moodEmoji: diary.moodEmoji,
