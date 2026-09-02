@@ -4,6 +4,7 @@ import type { TrpcContext } from '../server/_core/context';
 const mocks = vi.hoisted(() => ({
   getMemberByUserId: vi.fn(),
   getDiaryEntryForInteraction: vi.fn(),
+  getDiaryEntryByClientId: vi.fn(),
   getDiaryEntriesByRoom: vi.fn(),
   updateDiaryEntry: vi.fn(),
   getRoomMembers: vi.fn(),
@@ -31,7 +32,7 @@ vi.mock('../server/family-db', () => ({
   updateDiaryEntry: mocks.updateDiaryEntry,
   deleteDiaryEntryById: vi.fn(),
   getDiaryEntriesByRoom: mocks.getDiaryEntriesByRoom,
-  getDiaryEntryByClientId: vi.fn(),
+  getDiaryEntryByClientId: mocks.getDiaryEntryByClientId,
   getDiaryEntryForInteraction: mocks.getDiaryEntryForInteraction,
   markDiaryRead: vi.fn(),
   getDiaryInteractions: vi.fn(),
@@ -96,6 +97,9 @@ function cloudDraft(overrides: Record<string, unknown> = {}) {
     id: 128,
     roomId: ROOM_ID,
     authorUserId: AUTHOR_ID,
+    clientId: 'draft-client-1',
+    date: '2026-09-02',
+    localTimeStr: '00:11',
     content: '完整日记正文',
     conversation: [
       { id: 'u1', role: 'user', text: '完整日记正文' },
@@ -138,6 +142,35 @@ describe('family.publishDiary', () => {
       diaryId: 128,
     });
     expect(mocks.updateDiaryEntry).not.toHaveBeenCalled();
+  });
+
+  it('publishes through the proven syncDiary route in one atomic request with finished=true', async () => {
+    let stored = cloudDraft();
+    mocks.getDiaryEntryForInteraction.mockImplementation(async () => stored);
+    mocks.getDiaryEntryByClientId.mockImplementation(async () => stored);
+    mocks.updateDiaryEntry.mockImplementation(async (_id, patch) => {
+      stored = { ...stored, ...patch };
+    });
+
+    const caller = familyRouter.createCaller(context());
+    const result = await caller.syncDiary({
+      roomId: ROOM_ID,
+      serverDiaryId: 128,
+      clientId: stored.clientId,
+      date: stored.date,
+      content: stored.content,
+      conversation: stored.conversation,
+      conversationFinished: true,
+      localTimeStr: stored.localTimeStr,
+    });
+
+    expect(result).toEqual({ success: true, diaryId: 128 });
+    expect(stored).toMatchObject({
+      conversationFinished: true,
+      content: '完整日记正文',
+      conversation: cloudDraft().conversation,
+    });
+    expect(mocks.updateDiaryEntry).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the draft private before publishing and exposes the complete entry to another member afterward', async () => {
