@@ -98,7 +98,7 @@ function TypingIndicator() {
 
 // ─── Chat Bubble Components ───────────────────────────────────────────────────
 
-function UserBubble({ text, photoUri, zodiacEmoji }: { text: string; photoUri?: string | null; zodiacEmoji?: string }) {
+function UserBubble({ text }: { text: string }) {
   return (
     <View style={styles.bubbleRowRight}>
       <LinearGradient
@@ -109,11 +109,7 @@ function UserBubble({ text, photoUri, zodiacEmoji }: { text: string; photoUri?: 
         <Text style={styles.bubbleGreenText}>{text}</Text>
       </LinearGradient>
       <View style={styles.userAvatarCircle}>
-        {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.userAvatarImg} />
-        ) : (
-          <Text style={styles.userAvatarEmoji}>{zodiacEmoji || '😊'}</Text>
-        )}
+        <Text style={styles.userAvatarEmoji}>😊</Text>
       </View>
     </View>
   );
@@ -253,8 +249,6 @@ export default function DiaryEditScreen() {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('照顾者');
-  const [caregiverPhotoUri, setCaregiverPhotoUri] = useState<string | null>(null);
-  const [caregiverZodiacEmoji, setCaregiverZodiacEmoji] = useState('😊');
   const [loadingEntry, setLoadingEntry] = useState(!!existingId);
   const [diaryCount, setDiaryCount] = useState(0);
   const [todayCheckIn, setTodayCheckIn] = useState<DailyCheckIn | null>(null);
@@ -381,8 +375,6 @@ export default function DiaryEditScreen() {
     // 多家庭时只信任当前 membership，避免 Joiner profile 继承另一个主照顾者 profile 的头像或生肖。
     const allowLegacyFallback = memberships.length === 1;
     setCaregiverName(currentMember?.name || (allowLegacyFallback ? userProfile?.caregiverName || legacyProfile?.caregiverName : undefined) || '照顾者');
-    setCaregiverPhotoUri(currentMember?.photoUri || (allowLegacyFallback ? userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri : undefined) || null);
-    setCaregiverZodiacEmoji(currentMember?.emoji || (allowLegacyFallback ? userProfile?.caregiverZodiacEmoji || legacyProfile?.caregiverZodiacEmoji : undefined) || '😊');
     setDiaryCount(entries.length);
     setTodayCheckIn(checkIn ?? null);
   }
@@ -1021,7 +1013,7 @@ export default function DiaryEditScreen() {
 
                   {displayedConversation.map((msg, i) =>
                     msg.role === 'user' ? (
-                      <UserBubble key={msg.id} text={msg.text} photoUri={caregiverPhotoUri} zodiacEmoji={caregiverZodiacEmoji} />
+                      <UserBubble key={msg.id} text={msg.text} />
                     ) : (
                       <View key={msg.id}>
                         <SmartNameRow />

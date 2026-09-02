@@ -1168,6 +1168,25 @@ describe('Final diary and medication safety audit', () => {
   });
 });
 
+describe('Diary user avatar consistency', () => {
+  const diaryEdit = read('app/diary-edit.tsx');
+
+  it('uses one fixed smiley avatar for every user message while retaining the dedicated Xiaomahu image', () => {
+    const userBubble = diaryEdit.slice(
+      diaryEdit.indexOf('function UserBubble'),
+      diaryEdit.indexOf('function SmartBubble'),
+    );
+    const smartNameRow = diaryEdit.slice(
+      diaryEdit.indexOf('function SmartNameRow'),
+      diaryEdit.indexOf('// ─── Mood Option'),
+    );
+    expect(userBubble).toContain('<Text style={styles.userAvatarEmoji}>😊</Text>');
+    expect(userBubble).not.toContain('photoUri');
+    expect(userBubble).not.toContain('zodiacEmoji');
+    expect(smartNameRow).toContain("require('../assets/images/icon.png')");
+  });
+});
+
 describe('Diary publish response safety', () => {
   const familyRouter = read('server/family-router.ts');
 
