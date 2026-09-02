@@ -41,6 +41,7 @@ vi.mock('../lib/cloud-sync', () => ({
 
 import {
   getDiaryEntries,
+  getDiaryEntryById,
   mergeCloudDiariesIntoLocal,
   syncDiaryEntryNow,
   getLastDiaryPublishFailure,
@@ -206,6 +207,26 @@ describe('reopened diary draft publish recovery', () => {
     }]));
     cloudDeleteDiaryMock.mockResolvedValue({ success: true });
     await expect(deleteDiaryEntry(legacyId, ROOM_ID)).resolves.toBeUndefined();
+    expect(cloudDeleteDiaryMock).toHaveBeenCalledWith(128, Number(ROOM_ID));
+    await expect(getDiaryEntries(ROOM_ID)).resolves.toEqual([]);
+  });
+
+  it.each(['cloud_128', 'server_128', '128'])('resolves route reference %s to the actual local record before publish and delete', async (routeId) => {
+    const actualLocalEntry = draft({ id: 'local-restored-uuid', serverDiaryId: 128 });
+    memoryStorage.set(CACHE_KEY, JSON.stringify([actualLocalEntry]));
+    cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 128 });
+
+    await expect(getDiaryEntryById(routeId, ROOM_ID)).resolves.toMatchObject({ id: 'local-restored-uuid', serverDiaryId: 128 });
+    await expect(syncDiaryEntryNow(routeId, ROOM_ID)).resolves.toBe(true);
+    expect(cloudSyncDiaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'local-restored-uuid', conversationFinished: true }),
+      128,
+      ROOM_ID,
+    );
+
+    memoryStorage.set(CACHE_KEY, JSON.stringify([{ ...actualLocalEntry, conversationFinished: true, syncPending: false }]));
+    cloudDeleteDiaryMock.mockResolvedValue({ success: true });
+    await expect(deleteDiaryEntry(routeId, ROOM_ID)).resolves.toBeUndefined();
     expect(cloudDeleteDiaryMock).toHaveBeenCalledWith(128, Number(ROOM_ID));
     await expect(getDiaryEntries(ROOM_ID)).resolves.toEqual([]);
   });

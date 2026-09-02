@@ -1699,16 +1699,28 @@ export async function syncPendingDiaries(roomId: string): Promise<void> {
   }
 }
 
+function findDiaryEntryByReference(entries: DiaryEntry[], reference: string): DiaryEntry | null {
+  const exact = entries.find(entry => entry.id === reference);
+  if (exact) return exact;
+  // 详情页恢复时可能传入 cloud_123、server_123 或纯数字路由 ID；所有候选均已限定在当前家庭缓存内。
+  const serverDiaryId = normalizeDiaryServerId(reference);
+  if (!serverDiaryId) return null;
+  return entries.find(entry =>
+    normalizeDiaryServerId(entry.serverDiaryId) === serverDiaryId ||
+    normalizeDiaryServerId(entry.id) === serverDiaryId,
+  ) ?? null;
+}
+
 export async function getDiaryEntryById(id: string, roomId?: string): Promise<DiaryEntry | null> {
   const all = await getDiaryEntries(roomId);
-  return all.find(e => e.id === id) ?? null;
+  return findDiaryEntryByReference(all, id);
 }
 
 export async function deleteDiaryEntry(id: string, roomId?: string): Promise<void> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.DIARY, rid);
   const entries = await getDiaryEntries(rid ?? undefined);
-  const target = entries.find(entry => entry.id === id);
+  const target = findDiaryEntryByReference(entries, id);
   if (!target) return;
 
   // Server-first：已进入云端的日记必须先删除服务器记录；失败时保留本地，避免下次刷新“复活”。
@@ -1720,7 +1732,7 @@ export async function deleteDiaryEntry(id: string, roomId?: string): Promise<voi
     if (!result?.success) throw new Error('云端删除失败，请检查网络后重试');
   }
 
-  const filtered = entries.filter(entry => entry.id !== id);
+  const filtered = entries.filter(entry => entry.id !== target.id);
   await AsyncStorage.setItem(key, JSON.stringify(filtered));
 }
 

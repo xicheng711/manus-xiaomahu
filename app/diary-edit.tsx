@@ -485,8 +485,10 @@ export default function DiaryEditScreen() {
       }
     }
     if (entry) {
+      // 路由 id 可能是 cloud_123、server_123 或旧缓存别名；后续发布/删除必须使用实际本地记录 id。
       entryRef.current = entry;
-      setServerDiaryId(entry.serverDiaryId ?? (/^cloud_\d+$/.test(entry.id) ? Number(entry.id.replace('cloud_', '')) : null));
+      setEntryId(entry.id);
+      setServerDiaryId(entry.serverDiaryId ?? (/^(?:cloud|server)_\d+$/.test(entry.id) ? Number(entry.id.replace(/^(?:cloud|server)_/, '')) : null));
       const moodIdx = MOOD_OPTIONS.findIndex(m => m.emoji === entry!.moodEmoji);
       setSelectedMood(moodIdx >= 0 ? moodIdx : 0);
       if (entry.caregiverMoodEmoji) {
@@ -557,9 +559,10 @@ export default function DiaryEditScreen() {
   }
 
   async function handleDeleteEntry() {
-    if (!entryId) return;
+    const localEntryId = entryRef.current?.id ?? entryId;
+    if (!localEntryId) return;
     try {
-      await deleteDiaryEntry(entryId, familyId ?? undefined);
+      await deleteDiaryEntry(localEntryId, familyId ?? undefined);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowDeleteModal(false);
       returnToDiaryList();
@@ -750,8 +753,8 @@ export default function DiaryEditScreen() {
     try {
       // 使用 ref 获取最新对话内容（避免 React state 闭包问题）
       const latestConv = conversationRef.current;
-      // 使用 entryRef.current?.id 作为 fallback，避免 entryId state 闭包问题导致 id 为 null
-      const eid = entryId ?? entryRef.current?.id ?? null;
+      // 恢复草稿的路由 id 可能是云端别名；优先使用已加载条目的实际本地 id，和普通新建保存保持一致。
+      const eid = entryRef.current?.id ?? entryId ?? null;
       if (!eid || !familyId) {
         Alert.alert('保存失败', '当前家庭信息尚未准备好，请稍后重试');
         return;
