@@ -12,7 +12,7 @@ import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, todayStr, syncPendingCheckIns } from '@/lib/storage';
 import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
-import { getZodiacFromDate } from '@/lib/zodiac';
+import { getMemberDisplayEmoji } from '@/lib/member-avatar';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -478,8 +478,7 @@ function CreatorHomeScreen() {
   const [caregiverName, setCaregiverName] = useState('');
   const [memberPhotoUri, setMemberPhotoUri] = useState<string | null>(null);
   const [photoLoadError, setPhotoLoadError] = useState(false);
-  const [zodiacColor, setZodiacColor] = useState(AppColors.coral.primary);
-  const [zodiacEmoji, setZodiacEmoji] = useState('🐎');
+  const [memberAvatarEmoji, setMemberAvatarEmoji] = useState('👤');
   const { weatherData, cityName, buildGreeting, refresh: refreshWeather } = useWeather();
   const [latestCheckIn, setLatestCheckIn] = useState<DailyCheckIn | null>(null);
   const [briefingSummary, setBriefingSummary] = useState<string | null>(null);
@@ -540,6 +539,7 @@ function CreatorHomeScreen() {
     // 3. member.photoUri (from getCurrentMember) — set by member upload
     // Use whichever is a valid https:// URL, or fall back to any non-null value
     const member = requestedMembership.room.members.find(m => m.id === requestedMembership.myMemberId) ?? null;
+    setMemberAvatarEmoji(getMemberDisplayEmoji(member));
     // 头像加载：主动从云端拉取最新 room detail，确保头像是最新的
     let resolvedPhotoUri: string | null = null;
     let serverHasPhoto = false;
@@ -590,13 +590,6 @@ function CreatorHomeScreen() {
     // 刷新天气数据（weather-context 会自动读取城市）
     refreshWeather();
     setGreeting(buildGreeting(cgName || undefined));
-    // Elder zodiac: prefer family-scoped birthDate
-    const birthDate = familyProfile?.birthDate || (memberships.length === 1 ? legacyProfile?.birthDate : undefined);
-    if (birthDate) {
-      const zodiac = getZodiacFromDate(birthDate);
-      setZodiacColor(zodiac.color);
-      setZodiacEmoji(zodiac.emoji);
-    }
     const fid = requestedFamilyId;
     const today = await getTodayCheckIn(fid);
     if (!isCurrentFamily()) return;
@@ -828,7 +821,7 @@ function CreatorHomeScreen() {
                 />
               ) : (
                 <LinearGradient colors={[...Gradients.coral]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileGradient}>
-                  <Text style={{ fontSize: 24 }}>{zodiacEmoji || '🧑'}</Text>
+                  <Text style={{ fontSize: 24 }}>{memberAvatarEmoji}</Text>
                 </LinearGradient>
               )}
             </TouchableOpacity>
@@ -912,7 +905,7 @@ function CreatorHomeScreen() {
               const isActive = activeMembership?.familyId === m.familyId;
               const roleLabel = m.role === 'creator' ? '主照顾者' : '家庭成员';
               const myMember = m.room.members.find(mem => mem.id === m.myMemberId);
-              const avatarEmoji = myMember?.emoji || m.room.members[0]?.emoji || '🏠';
+              const avatarEmoji = getMemberDisplayEmoji(myMember ?? m.room.members[0], '🏠');
               return (
                 <TouchableOpacity
                   key={m.familyId}

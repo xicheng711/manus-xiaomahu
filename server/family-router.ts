@@ -24,6 +24,7 @@ import {
 import { updatePushToken, getUsersByIds } from "./db";
 import { ossUploadAvatar, storagePut } from "./storage";
 import { resolveDiarySyncIdentity } from "./diary-sync-identity";
+import { getMemberDisplayEmoji } from "../lib/member-avatar";
 
 // ─── Expo Push Notification Helper ──────────────────────────────────────────
 
@@ -815,7 +816,7 @@ export const familyRouter = router({
         clientId: input.clientId ?? null,
         authorUserId: userId,
         authorName: member.name,
-        authorEmoji: member.emoji,
+        authorEmoji: getMemberDisplayEmoji(member),
         authorColor: member.color,
         content: input.content,
         emoji: input.emoji ?? null,
@@ -830,7 +831,7 @@ export const familyRouter = router({
         await notifyRoomMembers(
           input.roomId,
           userId,
-          `${member.emoji} ${member.name} 有新消息要告诉你`,
+          `${getMemberDisplayEmoji(member)} ${member.name} 有新消息要告诉你`,
           announcementPreview,
           { type: 'announcement', screen: 'family', roomId: input.roomId },
           'postAnnouncement',
@@ -850,11 +851,16 @@ export const familyRouter = router({
         getAnnouncementsByRoom(input.roomId, input.limit),
         getRoomMembers(input.roomId),
       ]);
-      const memberIdByUserId = new Map(members.map(member => [member.userId, String(member.id)]));
-      return rows.map(row => ({
-        ...row,
-        authorId: memberIdByUserId.get(row.authorUserId) ?? String(row.authorUserId),
-      }));
+      const memberByUserId = new Map(members.map(member => [member.userId, member]));
+      return rows.map(row => {
+        const author = memberByUserId.get(row.authorUserId);
+        return {
+          ...row,
+          authorId: author ? String(author.id) : String(row.authorUserId),
+          // 历史公告按当前家庭成员资料显示，避免旧女性/默认 Emoji 固化在界面上。
+          authorEmoji: getMemberDisplayEmoji(author, row.authorEmoji || '👤'),
+        };
+      });
     }),
 
   /** Load comments only after one announcement is expanded, so the family tab stays fast. */
@@ -865,9 +871,14 @@ export const familyRouter = router({
       await requireRoomMember(userId, input.roomId);
       const announcement = await getAnnouncementById(input.roomId, input.announcementId);
       if (!announcement) throw new Error("公告不存在，或不属于当前家庭");
-      const comments = await getAnnouncementComments(input.roomId, input.announcementId);
+      const [comments, members] = await Promise.all([
+        getAnnouncementComments(input.roomId, input.announcementId),
+        getRoomMembers(input.roomId),
+      ]);
+      const memberByUserId = new Map(members.map(member => [member.userId, member]));
       return comments.map(comment => ({
         ...comment,
+        authorEmoji: getMemberDisplayEmoji(memberByUserId.get(comment.authorUserId), comment.authorEmoji || '👤'),
         canDelete: comment.authorUserId === userId,
       }));
     }),
@@ -893,7 +904,7 @@ export const familyRouter = router({
         clientId: input.clientId,
         authorUserId: userId,
         authorName: member.name,
-        authorEmoji: member.emoji,
+        authorEmoji: getMemberDisplayEmoji(member),
         content: input.content,
         date: input.date,
         localTimeStr: input.localTimeStr,
@@ -915,7 +926,10 @@ export const familyRouter = router({
           'addAnnouncementComment',
         );
       }
-      return { success: true, comment: { ...result.comment, canDelete: true } };
+      return {
+        success: true,
+        comment: { ...result.comment, authorEmoji: getMemberDisplayEmoji(member), canDelete: true },
+      };
     }),
 
   /** Delete an announcement comment; only its author can delete it. */
@@ -1209,7 +1223,7 @@ export const familyRouter = router({
         input.announcementId,
         member.id,
         member.name,
-        member.emoji,
+        getMemberDisplayEmoji(member),
         input.emoji,
       );
       // 判断是添加还是取消 reaction（只有添加时才发通知）

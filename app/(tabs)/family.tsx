@@ -36,6 +36,7 @@ import { FamilySkeleton } from '@/components/skeleton-loader';
 import { cloudGetAnnouncements, cloudGetCheckIns, cloudGetDiaries, cloudGetElderProfile } from '@/lib/cloud-sync';
 import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiac } from '@/lib/zodiac';
+import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -843,7 +844,7 @@ export default function FamilyScreen() {
       const newAnn = await saveFamilyAnnouncement({
         authorId: postingMember.id,
         authorName: postingMember.name,
-        authorEmoji: postingMember.emoji,
+        authorEmoji: getMemberDisplayEmoji(postingMember),
         authorColor: postingMember.color,
         content: composeText.trim(),
         emoji: composeEmoji,
@@ -969,6 +970,7 @@ export default function FamilyScreen() {
 
   const typeInfo = (type: FamilyAnnouncement['type']) =>
     ANNOUNCEMENT_TYPES.find(t => t.type === type) ?? ANNOUNCEMENT_TYPES[0];
+  const memberEmojiById = getMemberEmojiById(room.members);
 
   const todayAnnouncements = announcements.filter(a => a.date === todayStr());
   const olderAnnouncements = announcements.filter(a => a.date !== todayStr());
@@ -1112,6 +1114,7 @@ export default function FamilyScreen() {
                   onDelete={() => handleDeleteAnnouncement(ann.id)}
                   isNew={ann.id === newAnnouncementId}
                   currentMember={currentMember}
+                  memberEmojiById={memberEmojiById}
                   roomId={familyId ? Number(familyId) : null}
                   forceOpenComments={targetAnnouncementId === Number(ann.serverAnnouncementId ?? ann.id)}
                   onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
@@ -1152,6 +1155,7 @@ export default function FamilyScreen() {
                     isOwn={ann.authorId === currentMember.id}
                     onDelete={() => handleDeleteAnnouncement(ann.id)}
                     currentMember={currentMember}
+                    memberEmojiById={memberEmojiById}
                     roomId={familyId ? Number(familyId) : null}
                     forceOpenComments={targetAnnouncementId === Number(ann.serverAnnouncementId ?? ann.id)}
                     onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
@@ -1370,7 +1374,7 @@ export default function FamilyScreen() {
           {/* Author info — centered */}
           <View style={styles.composeAuthorCenter}>
             <View style={[styles.composeAvatarLarge, { backgroundColor: currentMember.color + '20', borderColor: currentMember.color }]}>
-              <Text style={styles.composeAvatarLargeText}>{currentMember.emoji}</Text>
+              <Text style={styles.composeAvatarLargeText}>{getMemberDisplayEmoji(currentMember)}</Text>
             </View>
             <Text style={styles.composeAuthorName}>{currentMember.name}</Text>
             <Text style={styles.composeAuthorRole}>{currentMember.roleLabel}</Text>
@@ -1592,7 +1596,7 @@ export default function FamilyScreen() {
 const REACTION_EMOJIS = ['👍', '❤️', '👏', '🙏', '😢', '✨'];
 
 function AnnouncementCard({
-  ann, typeInfo, isOwn, onDelete, isNew, currentMember, roomId,
+  ann, typeInfo, isOwn, onDelete, isNew, currentMember, memberEmojiById, roomId,
   forceOpenComments, onLayoutY, onCommentInputFocus, onCommentInputBlur, onReactionToggle,
 }: {
   ann: FamilyAnnouncement;
@@ -1601,6 +1605,7 @@ function AnnouncementCard({
   onDelete: () => void;
   isNew?: boolean;
   currentMember?: FamilyMember;
+  memberEmojiById: Map<string, string>;
   roomId: number | null;
   forceOpenComments?: boolean;
   onLayoutY?: (y: number) => void;
@@ -1661,6 +1666,7 @@ function AnnouncementCard({
 
   const reactions = ann.reactions ?? [];
   const myId = currentMember?.id ?? '';
+  const authorEmoji = memberEmojiById.get(String(ann.authorId)) ?? ann.authorEmoji ?? '👤';
 
   async function handleReact(emoji: string) {
     if (!onReactionToggle) return;
@@ -1682,7 +1688,7 @@ function AnnouncementCard({
         </View>
         <View style={card.body}>
           <View style={card.authorRow}>
-            <Text style={card.authorEmoji}>{ann.authorEmoji}</Text>
+            <Text style={card.authorEmoji}>{authorEmoji}</Text>
             <Text style={[card.authorName, { color: ann.authorColor }]}>{ann.authorName}</Text>
             <Text style={card.roleLabel}>{typeInfo.label}</Text>
             <Text style={card.time}>{date}{time}{ann.syncPending ? ' · 待同步' : ''}</Text>
@@ -1763,7 +1769,7 @@ function AnnouncementCard({
                 <Text style={card.reactorsTitle}>{group.emoji} 的成员</Text>
                 {group.members.map(m => (
                   <View key={m.memberId} style={card.reactorRow}>
-                    <Text style={card.reactorEmoji}>{m.memberEmoji}</Text>
+                    <Text style={card.reactorEmoji}>{memberEmojiById.get(String(m.memberId)) ?? m.memberEmoji ?? '👤'}</Text>
                     <Text style={card.reactorName}>{m.memberName}</Text>
                     {m.memberId === myId && <Text style={card.reactorMe}>（我）</Text>}
                   </View>

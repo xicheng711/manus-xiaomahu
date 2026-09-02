@@ -74,6 +74,7 @@ async function navigateAfterLogin(router: Router) {
             emoji: m.emoji ?? '👤',
             color: m.color ?? '#888',
             photoUri: m.photoUri ?? null,
+            birthYear: m.birthYear ?? null,
             joinedAt: m.joinedAt ?? new Date().toISOString(),
             isCreator: m.isCreator ?? false,
             isCurrentUser: false,

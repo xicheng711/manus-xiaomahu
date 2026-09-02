@@ -24,6 +24,7 @@ import { getLunarDate, getFormattedDate } from '@/lib/lunar';
 import { SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { useFamilyContext } from '@/lib/family-context';
+import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
 
 type FeedItem = {
   id: string;
@@ -36,6 +37,7 @@ type FeedItem = {
   title: string;
   detail: string;
   author: string | null;
+  authorEmoji?: string | null;
   sortKey: number;
 };
 
@@ -151,6 +153,7 @@ function buildFeed(
       title: a.content.length > 24 ? a.content.slice(0, 24) + '…' : a.content,
       detail: a.emoji ? `${a.emoji} ${a.content}` : a.content,
       author: a.authorName,
+      authorEmoji: a.authorEmoji,
       sortKey: new Date(a.createdAt).getTime(),
     });
   });
@@ -218,7 +221,7 @@ function FeedRow({ item, isLast, onPress }: { item: FeedItem; isLast: boolean; o
           </View>
           {item.author && (
             <View style={styles.feedAuthorRow}>
-              <Text style={styles.feedAuthorIcon}>👤</Text>
+              <Text style={styles.feedAuthorIcon}>{item.authorEmoji || '👤'}</Text>
               <Text style={styles.feedAuthorName}>{item.author}</Text>
             </View>
           )}
@@ -285,7 +288,7 @@ function PostAnnouncementModal({ visible, onClose, onPosted, member, roomId }: {
       await saveFamilyAnnouncement({
         authorId: member?.id ?? 'unknown',
         authorName: member?.name ?? '家庭成员',
-        authorEmoji: member?.emoji ?? '👤',
+        authorEmoji: getMemberDisplayEmoji(member),
         authorColor: member?.color ?? AppColors.text.secondary,
         content: content.trim(),
         emoji: ANNOUNCE_TYPES.find(t => t.key === type)?.emoji,
@@ -468,7 +471,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       setZodiacEmoji('');
     } else {
       setMemberPhotoUri(null);
-      setZodiacEmoji((allowLegacyFallback ? profile?.caregiverZodiacEmoji : undefined) || scopedMember?.emoji || '👤');
+      setZodiacEmoji(getMemberDisplayEmoji(scopedMember, (allowLegacyFallback ? profile?.caregiverZodiacEmoji : undefined) || '👤'));
     }
 
     // Joiner 也先读取当前家庭的本地缓存；正常切换页面不会每次都等待云端。
@@ -541,6 +544,11 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       announcements = await getFamilyAnnouncements(30, requestedFamilyId);
     }
     if (!isCurrentFamily()) return;
+    const memberEmojiById = getMemberEmojiById(requestedMembership.room.members);
+    announcements = announcements.map(announcement => ({
+      ...announcement,
+      authorEmoji: memberEmojiById.get(String(announcement.authorId)) ?? announcement.authorEmoji,
+    }));
     setLatestAnnounce(announcements[0] ?? null);
     // 「今日活动记录」必须只显示今天，不再混入昨天或明天的记录。
     // 所有共享记录都已经保存发布者写入的 YYYY-MM-DD date，因此统一按 date 精确匹配。
@@ -701,7 +709,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={styles.avatarGradient}
               >
-                <Text style={{ fontSize: 24 }}>{zodiacEmoji || currentMember?.emoji || '👤'}</Text>
+                <Text style={{ fontSize: 24 }}>{zodiacEmoji || getMemberDisplayEmoji(currentMember)}</Text>
               </LinearGradient>
             )}
           </TouchableOpacity>
@@ -951,7 +959,7 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
                     setShowSwitcher(false);
                   }}
                 >
-                  <Text style={{ fontSize: 22, marginRight: 12 }}>{m.room.members[0]?.emoji || '🏠'}</Text>
+                  <Text style={{ fontSize: 22, marginRight: 12 }}>{getMemberDisplayEmoji(m.room.members.find(member => member.id === m.myMemberId) ?? m.room.members[0], '🏠')}</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.switcherName}>{m.room.elderName}</Text>
                     <Text style={styles.switcherRole}>{m.role === 'creator' ? '📋 主要照顾者' : '👁️ 家庭成员'}</Text>
