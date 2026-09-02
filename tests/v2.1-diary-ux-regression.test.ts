@@ -1167,3 +1167,17 @@ describe('Final diary and medication safety audit', () => {
     expect(storage).toContain("change?.medicationId != null && Number.isFinite(Number(change.medicationId))");
   });
 });
+
+describe('Diary publish response safety', () => {
+  const familyRouter = read('server/family-router.ts');
+
+  it('does not await push notification delivery inside syncDiary publish branches', () => {
+    const diarySync = familyRouter.slice(
+      familyRouter.indexOf('syncDiary: protectedProcedure'),
+      familyRouter.indexOf('/** Get diary entries for a room */'),
+    );
+    expect(diarySync).toContain("void notifyRoomMembers(");
+    expect(diarySync).toContain(".catch(error => console.warn('[DiarySync] async notification failed:', error))");
+    expect(diarySync).not.toContain('await notifyRoomMembers(');
+  });
+});

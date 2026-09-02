@@ -550,14 +550,16 @@ export const familyRouter = router({
         if (newlyPublished && shouldSendDiaryNotification(resolvedDiaryId)) {
           const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
           const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
-          await notifyRoomMembers(
+          // 通知是发布后的附加动作，绝不能阻塞日记数据库写入和客户端确认。
+          // Expo 推送服务慢或暂时不可用时，日记仍应立即返回成功。
+          void notifyRoomMembers(
             input.roomId,
             userId,
             `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
             diaryPreview || '点击查看完整日记',
             { type: 'diary', screen: 'diary', diaryId: resolvedDiaryId, roomId: input.roomId },
             'syncDiary-update',
-          );
+          ).catch(error => console.warn('[DiarySync] async notification failed:', error));
         }
         const repairedStaleId = input.serverDiaryId && input.serverDiaryId !== resolvedDiaryId;
         console.log(`[DiarySync] success diary=${resolvedDiaryId} mode=${repairedStaleId ? 'recovered-by-client-id' : 'updated'} finished=${input.conversationFinished === true}`);
@@ -612,14 +614,15 @@ export const familyRouter = router({
       if (input.conversationFinished === true && shouldSendDiaryNotification(entry.id)) {
         const diaryActorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
         const diaryPreview = input.content.length > 40 ? input.content.slice(0, 40) + '...' : input.content;
-        await notifyRoomMembers(
+        // 通知是发布后的附加动作，绝不能阻塞日记数据库写入和客户端确认。
+        void notifyRoomMembers(
           input.roomId,
           userId,
           `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
           diaryPreview || '点击查看完整日记',
           { type: 'diary', screen: 'diary', diaryId: entry.id, roomId: input.roomId },
           'syncDiary',
-        );
+        ).catch(error => console.warn('[DiarySync] async notification failed:', error));
       }
 
       console.log(`[DiarySync] success diary=${entry.id} mode=${createResult.created ? 'created' : 'dedup-updated'} finished=${input.conversationFinished === true}`);
