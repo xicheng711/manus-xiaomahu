@@ -1568,6 +1568,16 @@ export async function updateDiaryEntry(
 const _diaryPublishPromises = new Map<string, Promise<boolean>>();
 
 /**
+ * 将新旧本地缓存中的服务器日记 ID 统一为正整数。
+ * 旧版云端缓存可能把本地 id 保存为 cloud_123；空值、0、普通 UUID 一律不能冒充服务器 ID。
+ */
+function normalizeDiaryServerId(value: unknown): number | null {
+  const raw = typeof value === 'string' ? value.replace(/^cloud_/, '') : value;
+  const numeric = Number(raw);
+  return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+/**
  * 将指定日记的当前完整快照同步到云端并等待结果。
  * 用于“结束并保存”和进入列表后的断网重试，避免页面先退出但家人只看到不完整对话。
  */
@@ -1594,8 +1604,9 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
       entry = updated ?? { ...entry, clientId };
     }
 
-    let serverDiaryId = entry.serverDiaryId ?? null;
-    if (!serverDiaryId) serverDiaryId = await waitForServerDiaryId(id);
+    // 恢复云端缓存时，serverDiaryId 可能缺失但本地 id 已是 cloud_123；两种格式都安全归一化。
+    let serverDiaryId = normalizeDiaryServerId(entry.serverDiaryId) ?? normalizeDiaryServerId(entry.id);
+    if (!serverDiaryId) serverDiaryId = normalizeDiaryServerId(await waitForServerDiaryId(id));
     if (!serverDiaryId && !hadPersistentClientId) {
       // 只有旧版无持久身份的草稿才需要读取列表做兼容匹配。
       // 新版草稿直接携带 clientId 调用 syncDiary，由服务器在同一家庭和作者范围内幂等找回，避免多一次网络等待。
@@ -1620,7 +1631,7 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
     // 在同一个原子写入中保存完整对话并将状态切换为已发布，避免第二个独立 tRPC 端点成为断点。
     const publishSnapshot = { ...entry, conversationFinished: true, syncPending: true };
     const publishResult = await cloudSyncDiary(publishSnapshot, serverDiaryId ?? undefined, roomId);
-    const resolvedServerId = publishResult?.diaryId ?? publishResult?.id ?? serverDiaryId;
+    const resolvedServerId = normalizeDiaryServerId(publishResult?.diaryId ?? publishResult?.id ?? serverDiaryId);
     if (!publishResult?.success || !resolvedServerId) {
       _lastDiaryPublishFailures.set(key, {
         code: publishResult?.errorCode ?? 'NETWORK',
@@ -1633,7 +1644,7 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
     const all = await getDiaryEntries(roomId);
     const idx = all.findIndex(item => item.id === id);
     if (idx >= 0) {
-      all[idx] = { ...all[idx], serverDiaryId: Number(resolvedServerId), syncPending: false, roomId };
+      all[idx] = { ...all[idx], serverDiaryId: resolvedServerId, syncPending: false, roomId };
       await AsyncStorage.setItem(cacheKey, JSON.stringify(sortDiaryEntries(all)));
     }
     _lastDiaryPublishFailures.delete(key);
@@ -1700,8 +1711,9 @@ export async function deleteDiaryEntry(id: string, roomId?: string): Promise<voi
   if (!target) return;
 
   // Server-first：已进入云端的日记必须先删除服务器记录；失败时保留本地，避免下次刷新“复活”。
-  let serverDiaryId = target.serverDiaryId ?? null;
-  if (!serverDiaryId) serverDiaryId = await waitForServerDiaryId(id);
+  // 与恢复发布共用同一 ID 解析：支持旧 cloud_123 缓存，同时绝不把空值规范化为 0。
+  let serverDiaryId = normalizeDiaryServerId(target.serverDiaryId) ?? normalizeDiaryServerId(target.id);
+  if (!serverDiaryId) serverDiaryId = normalizeDiaryServerId(await waitForServerDiaryId(id));
   if (serverDiaryId && rid) {
     const result = await cloudDeleteDiary(serverDiaryId, Number(rid));
     if (!result?.success) throw new Error('云端删除失败，请检查网络后重试');

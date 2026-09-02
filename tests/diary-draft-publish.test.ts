@@ -4,6 +4,7 @@ const memoryStorage = vi.hoisted(() => new Map<string, string>());
 const cloudSyncDiaryMock = vi.hoisted(() => vi.fn<(entry: any, serverId?: number, roomId?: string) => Promise<any>>());
 const cloudGetDiariesMock = vi.hoisted(() => vi.fn<(roomId?: number) => Promise<any[] | null>>());
 const cloudPublishDiaryMock = vi.hoisted(() => vi.fn<(diaryId: number, roomId?: string) => Promise<any>>());
+const cloudDeleteDiaryMock = vi.hoisted(() => vi.fn<(diaryId: number, roomId?: number) => Promise<any>>());
 const cloudSyncStateMock = vi.hoisted(() => vi.fn<() => Promise<{ userId: number | null }>>());
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -23,7 +24,7 @@ vi.mock('../lib/cloud-sync', () => ({
   cloudSyncDiary: cloudSyncDiaryMock,
   cloudPublishDiary: cloudPublishDiaryMock,
   cloudGetDiaries: cloudGetDiariesMock,
-  cloudDeleteDiary: vi.fn(),
+  cloudDeleteDiary: cloudDeleteDiaryMock,
   cloudSyncMedication: vi.fn(),
   cloudDeleteMedication: vi.fn(),
   cloudPostAnnouncement: vi.fn(),
@@ -43,6 +44,7 @@ import {
   mergeCloudDiariesIntoLocal,
   syncDiaryEntryNow,
   getLastDiaryPublishFailure,
+  deleteDiaryEntry,
   type DiaryEntry,
 } from '../lib/storage';
 
@@ -79,6 +81,7 @@ describe('reopened diary draft publish recovery', () => {
     cloudSyncDiaryMock.mockReset();
     cloudGetDiariesMock.mockReset();
     cloudPublishDiaryMock.mockReset();
+    cloudDeleteDiaryMock.mockReset();
     cloudSyncStateMock.mockReset();
     cloudSyncStateMock.mockResolvedValue({ userId: 42 });
   });
@@ -182,6 +185,29 @@ describe('reopened diary draft publish recovery', () => {
       syncPending: true,
     });
     expect(stillLocal.conversation).toEqual(localDraft.conversation);
+  });
+
+  it('uses a legacy cloud_ local id as the same positive server id for publish and delete', async () => {
+    const restored = draft({ id: 'cloud_128', serverDiaryId: undefined });
+    memoryStorage.set(CACHE_KEY, JSON.stringify([restored]));
+    cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 128 });
+
+    await expect(syncDiaryEntryNow(restored.id, ROOM_ID)).resolves.toBe(true);
+    expect(cloudSyncDiaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'cloud_128', conversationFinished: true }),
+      128,
+      ROOM_ID,
+    );
+
+    memoryStorage.set(CACHE_KEY, JSON.stringify([{
+      ...restored,
+      conversationFinished: true,
+      syncPending: false,
+    }]));
+    cloudDeleteDiaryMock.mockResolvedValue({ success: true });
+    await expect(deleteDiaryEntry('cloud_128', ROOM_ID)).resolves.toBeUndefined();
+    expect(cloudDeleteDiaryMock).toHaveBeenCalledWith(128, Number(ROOM_ID));
+    await expect(getDiaryEntries(ROOM_ID)).resolves.toEqual([]);
   });
 
   it('merges a restarted local draft and its cloud copy by clientId without creating a duplicate card', async () => {

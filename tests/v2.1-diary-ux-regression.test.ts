@@ -1107,7 +1107,8 @@ describe('Diary draft-to-published list state', () => {
   it('keeps unsubmitted conversation drafts and cloud-confirmed published entries in mutually exclusive sections', () => {
     expect(diaryList).toContain('const conversationDrafts = entries.filter(entry => entry.conversationFinished === false);');
     expect(diaryList).toContain('const publishedEntries = entries.filter(entry => entry.conversationFinished !== false);');
-    expect(diaryStorage).toContain('serverDiaryId: Number(resolvedServerId), syncPending: false, roomId');
+    expect(diaryStorage).toContain('serverDiaryId: resolvedServerId, syncPending: false, roomId');
+    expect(diaryStorage).toContain('function normalizeDiaryServerId(value: unknown): number | null');
   });
 });
 
