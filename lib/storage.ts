@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   cloudSyncCheckIn,
   cloudSyncDiary,
+  cloudPublishDiary,
   cloudGetDiaries,
   cloudDeleteDiary,
   cloudSyncMedication,
@@ -1616,12 +1617,24 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
         }
       }
     }
-    const result = await cloudSyncDiary(entry, serverDiaryId ?? undefined, roomId);
-    const resolvedServerId = result?.diaryId ?? result?.id ?? serverDiaryId;
-    if (!result?.success || !resolvedServerId) {
+    // 先同步完整对话，但继续保持为私有草稿。这样即使原草稿很长，最后发布只需传两个数字 ID，
+    // 不会因重新发送大段对话在移动网络上失败或超时。
+    const draftSnapshot = { ...entry, conversationFinished: false, syncPending: true };
+    const syncResult = await cloudSyncDiary(draftSnapshot, serverDiaryId ?? undefined, roomId);
+    const resolvedServerId = syncResult?.diaryId ?? syncResult?.id ?? serverDiaryId;
+    if (!syncResult?.success || !resolvedServerId) {
       _lastDiaryPublishFailures.set(key, {
-        code: result?.errorCode ?? 'NETWORK',
-        message: result?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。',
+        code: syncResult?.errorCode ?? 'NETWORK',
+        message: syncResult?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。',
+      });
+      return false;
+    }
+
+    const publishResult = await cloudPublishDiary(Number(resolvedServerId), roomId);
+    if (!publishResult?.success) {
+      _lastDiaryPublishFailures.set(key, {
+        code: publishResult?.errorCode ?? 'NETWORK',
+        message: publishResult?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。',
       });
       return false;
     }

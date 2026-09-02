@@ -629,6 +629,44 @@ export const familyRouter = router({
       return { success: true, diaryId: entry.id };
     }),
 
+  /**
+   * Mark an already-synced private diary as published.
+   *
+   * The full conversation is synced while the diary is still private. Keeping
+   * this final transition intentionally small avoids retransmitting a large
+   * conversation when the user taps “结束并保存”, and makes retries idempotent.
+   */
+  publishDiary: protectedProcedure
+    .input(z.object({ roomId: z.number(), diaryId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      await requireRoomMember(userId, input.roomId);
+      console.log(`[DiaryPublish] start user=${userId} room=${input.roomId} diary=${input.diaryId}`);
+      const entry = await getDiaryEntryForInteraction(input.roomId, input.diaryId);
+      if (!entry) throw new Error('日记不存在或已删除');
+      if (entry.authorUserId !== userId) throw new Error('只能发布自己正在编辑的日记');
+      if (entry.conversationFinished === true) {
+        console.log(`[DiaryPublish] success diary=${entry.id} mode=already-published`);
+        return { success: true, diaryId: entry.id };
+      }
+
+      await updateDiaryEntry(entry.id, { conversationFinished: true });
+      if (shouldSendDiaryNotification(entry.id)) {
+        const diaryActorMember = (await getRoomMembers(input.roomId)).find(member => member.userId === userId);
+        const diaryPreview = entry.content.length > 40 ? `${entry.content.slice(0, 40)}...` : entry.content;
+        void notifyRoomMembers(
+          input.roomId,
+          userId,
+          `${diaryActorMember?.name || '照顾者'}写了一篇日记 📖`,
+          diaryPreview || '点击查看完整日记',
+          { type: 'diary', screen: 'diary', diaryId: entry.id, roomId: input.roomId },
+          'publishDiary',
+        ).catch(error => console.warn('[DiaryPublish] async notification failed:', error));
+      }
+      console.log(`[DiaryPublish] success diary=${entry.id} mode=published`);
+      return { success: true, diaryId: entry.id };
+    }),
+
   /** Get diary entries for a room */
   getDiaries: protectedProcedure
     .input(z.object({ roomId: z.number(), limit: z.number().default(100) }))

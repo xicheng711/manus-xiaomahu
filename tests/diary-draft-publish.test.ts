@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const memoryStorage = vi.hoisted(() => new Map<string, string>());
 const cloudSyncDiaryMock = vi.hoisted(() => vi.fn<(entry: any, serverId?: number, roomId?: string) => Promise<any>>());
 const cloudGetDiariesMock = vi.hoisted(() => vi.fn<(roomId?: number) => Promise<any[] | null>>());
+const cloudPublishDiaryMock = vi.hoisted(() => vi.fn<(diaryId: number, roomId?: string) => Promise<any>>());
 const cloudSyncStateMock = vi.hoisted(() => vi.fn<() => Promise<{ userId: number | null }>>());
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -20,6 +21,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('../lib/cloud-sync', () => ({
   cloudSyncCheckIn: vi.fn(),
   cloudSyncDiary: cloudSyncDiaryMock,
+  cloudPublishDiary: cloudPublishDiaryMock,
   cloudGetDiaries: cloudGetDiariesMock,
   cloudDeleteDiary: vi.fn(),
   cloudSyncMedication: vi.fn(),
@@ -76,6 +78,7 @@ describe('reopened diary draft publish recovery', () => {
     memoryStorage.clear();
     cloudSyncDiaryMock.mockReset();
     cloudGetDiariesMock.mockReset();
+    cloudPublishDiaryMock.mockReset();
     cloudSyncStateMock.mockReset();
     cloudSyncStateMock.mockResolvedValue({ userId: 42 });
   });
@@ -84,6 +87,7 @@ describe('reopened diary draft publish recovery', () => {
     const localDraft = draft({ serverDiaryId: undefined });
     memoryStorage.set(CACHE_KEY, JSON.stringify([localDraft]));
     cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 77 });
+    cloudPublishDiaryMock.mockResolvedValue({ success: true, diaryId: 77 });
 
     await expect(syncDiaryEntryNow(localDraft.id, ROOM_ID)).resolves.toBe(true);
     expect(cloudGetDiariesMock).not.toHaveBeenCalled();
@@ -92,8 +96,10 @@ describe('reopened diary draft publish recovery', () => {
       clientId: localDraft.clientId,
       content: localDraft.content,
       conversation: localDraft.conversation,
-      conversationFinished: true,
+      // 完整对话在发布确认前先同步为私有草稿，避免最终发布重传长正文。
+      conversationFinished: false,
     }), undefined, ROOM_ID]);
+    expect(cloudPublishDiaryMock).toHaveBeenCalledWith(77, ROOM_ID);
 
     const [published] = await getDiaryEntries(ROOM_ID);
     expect(published).toMatchObject({
@@ -111,6 +117,7 @@ describe('reopened diary draft publish recovery', () => {
     memoryStorage.set(CACHE_KEY, JSON.stringify([localDraft]));
     cloudGetDiariesMock.mockResolvedValue([]);
     cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 88 });
+    cloudPublishDiaryMock.mockResolvedValue({ success: true, diaryId: 88 });
 
     await expect(syncDiaryEntryNow(localDraft.id, ROOM_ID)).resolves.toBe(true);
     expect(cloudSyncDiaryMock).toHaveBeenCalledTimes(1);
@@ -148,6 +155,31 @@ describe('reopened diary draft publish recovery', () => {
       conversationFinished: true,
       syncPending: true,
       content: localDraft.content,
+    });
+    expect(stillLocal.conversation).toEqual(localDraft.conversation);
+  });
+
+  it('keeps the full local draft pending when the lightweight publish confirmation fails', async () => {
+    const localDraft = draft({ serverDiaryId: 77 });
+    memoryStorage.set(CACHE_KEY, JSON.stringify([localDraft]));
+    cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 77 });
+    cloudPublishDiaryMock.mockResolvedValue({
+      success: false,
+      errorCode: 'TIMEOUT',
+      errorMessage: '连接家庭云端超时，请检查网络后重试。',
+    });
+
+    await expect(syncDiaryEntryNow(localDraft.id, ROOM_ID)).resolves.toBe(false);
+    expect(getLastDiaryPublishFailure(localDraft.id, ROOM_ID)).toEqual({
+      code: 'TIMEOUT',
+      message: '连接家庭云端超时，请检查网络后重试。',
+    });
+    const [stillLocal] = await getDiaryEntries(ROOM_ID);
+    expect(stillLocal).toMatchObject({
+      id: localDraft.id,
+      serverDiaryId: 77,
+      conversationFinished: true,
+      syncPending: true,
     });
     expect(stillLocal.conversation).toEqual(localDraft.conversation);
   });

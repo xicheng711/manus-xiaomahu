@@ -398,6 +398,34 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
   }
 }
 
+/**
+ * Finalize a diary that has already synced its full private conversation.
+ * This deliberately sends only stable identifiers, so a long restored draft
+ * does not need to traverse the network again just to become family-visible.
+ */
+export async function cloudPublishDiary(diaryId: number, explicitRoomId?: number | string | null) {
+  const roomId = explicitRoomId ? Number(explicitRoomId) : await getActiveRoomId();
+  if (!roomId) {
+    return { success: false, errorCode: 'MISSING_ROOM', errorMessage: '当前家庭信息尚未准备好，请重新进入家庭后再发布。' } satisfies DiaryCloudFailure;
+  }
+  if (Platform.OS !== 'web') {
+    const sessionToken = await getSessionToken();
+    if (!sessionToken) {
+      return { success: false, errorCode: 'AUTH_REQUIRED', errorMessage: '登录状态已失效，请重新登录后再发布。' } satisfies DiaryCloudFailure;
+    }
+  }
+  try {
+    const client = getClient();
+    return await withDiaryCloudTimeout<any>(
+      client.family.publishDiary.mutate({ roomId, diaryId }),
+      '日记发布确认',
+    );
+  } catch (e) {
+    console.warn('[CloudSync] publishDiary failed:', e);
+    return diaryCloudFailure(e);
+  }
+}
+
 /** Delete one diary from the server. The server verifies room membership and authorship. */
 export async function cloudDeleteDiary(diaryId: number, roomId?: number) {
   const rid = roomId ?? await getActiveRoomId();
