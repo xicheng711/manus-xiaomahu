@@ -96,10 +96,10 @@ describe('reopened diary draft publish recovery', () => {
       clientId: localDraft.clientId,
       content: localDraft.content,
       conversation: localDraft.conversation,
-      // 完整对话在发布确认前先同步为私有草稿，避免最终发布重传长正文。
-      conversationFinished: false,
+      // 最终发布复用已验证可达的 syncDiary 链路，并在同一写入中提交完整对话与发布状态。
+      conversationFinished: true,
     }), undefined, ROOM_ID]);
-    expect(cloudPublishDiaryMock).toHaveBeenCalledWith(77, ROOM_ID);
+    expect(cloudPublishDiaryMock).not.toHaveBeenCalled();
 
     const [published] = await getDiaryEntries(ROOM_ID);
     expect(published).toMatchObject({
@@ -159,11 +159,10 @@ describe('reopened diary draft publish recovery', () => {
     expect(stillLocal.conversation).toEqual(localDraft.conversation);
   });
 
-  it('keeps the full local draft pending when the lightweight publish confirmation fails', async () => {
+  it('keeps the full local draft pending when the verified publish request times out', async () => {
     const localDraft = draft({ serverDiaryId: 77 });
     memoryStorage.set(CACHE_KEY, JSON.stringify([localDraft]));
-    cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 77 });
-    cloudPublishDiaryMock.mockResolvedValue({
+    cloudSyncDiaryMock.mockResolvedValue({
       success: false,
       errorCode: 'TIMEOUT',
       errorMessage: '连接家庭云端超时，请检查网络后重试。',
@@ -174,6 +173,7 @@ describe('reopened diary draft publish recovery', () => {
       code: 'TIMEOUT',
       message: '连接家庭云端超时，请检查网络后重试。',
     });
+    expect(cloudPublishDiaryMock).not.toHaveBeenCalled();
     const [stillLocal] = await getDiaryEntries(ROOM_ID);
     expect(stillLocal).toMatchObject({
       id: localDraft.id,

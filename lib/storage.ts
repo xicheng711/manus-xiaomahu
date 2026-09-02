@@ -2,7 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   cloudSyncCheckIn,
   cloudSyncDiary,
-  cloudPublishDiary,
   cloudGetDiaries,
   cloudDeleteDiary,
   cloudSyncMedication,
@@ -1617,21 +1616,12 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
         }
       }
     }
-    // 先同步完整对话，但继续保持为私有草稿。这样即使原草稿很长，最后发布只需传两个数字 ID，
-    // 不会因重新发送大段对话在移动网络上失败或超时。
-    const draftSnapshot = { ...entry, conversationFinished: false, syncPending: true };
-    const syncResult = await cloudSyncDiary(draftSnapshot, serverDiaryId ?? undefined, roomId);
-    const resolvedServerId = syncResult?.diaryId ?? syncResult?.id ?? serverDiaryId;
-    if (!syncResult?.success || !resolvedServerId) {
-      _lastDiaryPublishFailures.set(key, {
-        code: syncResult?.errorCode ?? 'NETWORK',
-        message: syncResult?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。',
-      });
-      return false;
-    }
-
-    const publishResult = await cloudPublishDiary(Number(resolvedServerId), roomId);
-    if (!publishResult?.success) {
+    // 现场日志已经验证 syncDiary 可稳定抵达服务器；最终发布复用这条已验证链路，
+    // 在同一个原子写入中保存完整对话并将状态切换为已发布，避免第二个独立 tRPC 端点成为断点。
+    const publishSnapshot = { ...entry, conversationFinished: true, syncPending: true };
+    const publishResult = await cloudSyncDiary(publishSnapshot, serverDiaryId ?? undefined, roomId);
+    const resolvedServerId = publishResult?.diaryId ?? publishResult?.id ?? serverDiaryId;
+    if (!publishResult?.success || !resolvedServerId) {
       _lastDiaryPublishFailures.set(key, {
         code: publishResult?.errorCode ?? 'NETWORK',
         message: publishResult?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。',
