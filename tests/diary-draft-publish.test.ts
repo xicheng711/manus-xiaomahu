@@ -187,14 +187,14 @@ describe('reopened diary draft publish recovery', () => {
     expect(stillLocal.conversation).toEqual(localDraft.conversation);
   });
 
-  it('uses a legacy cloud_ local id as the same positive server id for publish and delete', async () => {
-    const restored = draft({ id: 'cloud_128', serverDiaryId: undefined });
+  it.each(['cloud_128', 'server_128'])('uses %s as the same positive server id for publish and delete', async (legacyId) => {
+    const restored = draft({ id: legacyId, serverDiaryId: undefined });
     memoryStorage.set(CACHE_KEY, JSON.stringify([restored]));
     cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 128 });
 
     await expect(syncDiaryEntryNow(restored.id, ROOM_ID)).resolves.toBe(true);
     expect(cloudSyncDiaryMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'cloud_128', conversationFinished: true }),
+      expect.objectContaining({ id: legacyId, conversationFinished: true }),
       128,
       ROOM_ID,
     );
@@ -205,7 +205,7 @@ describe('reopened diary draft publish recovery', () => {
       syncPending: false,
     }]));
     cloudDeleteDiaryMock.mockResolvedValue({ success: true });
-    await expect(deleteDiaryEntry('cloud_128', ROOM_ID)).resolves.toBeUndefined();
+    await expect(deleteDiaryEntry(legacyId, ROOM_ID)).resolves.toBeUndefined();
     expect(cloudDeleteDiaryMock).toHaveBeenCalledWith(128, Number(ROOM_ID));
     await expect(getDiaryEntries(ROOM_ID)).resolves.toEqual([]);
   });

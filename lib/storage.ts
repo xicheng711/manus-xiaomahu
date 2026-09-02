@@ -1569,10 +1569,11 @@ const _diaryPublishPromises = new Map<string, Promise<boolean>>();
 
 /**
  * 将新旧本地缓存中的服务器日记 ID 统一为正整数。
- * 旧版云端缓存可能把本地 id 保存为 cloud_123；空值、0、普通 UUID 一律不能冒充服务器 ID。
+ * 历史云端条目可能以 cloud_123（旧列表）或 server_123（当前归一化缓存）作为本地 id。
+ * 空值、0、普通 UUID 一律不能冒充服务器 ID。
  */
 function normalizeDiaryServerId(value: unknown): number | null {
-  const raw = typeof value === 'string' ? value.replace(/^cloud_/, '') : value;
+  const raw = typeof value === 'string' ? value.replace(/^(?:cloud|server)_/, '') : value;
   const numeric = Number(raw);
   return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
 }
@@ -1604,7 +1605,7 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
       entry = updated ?? { ...entry, clientId };
     }
 
-    // 恢复云端缓存时，serverDiaryId 可能缺失但本地 id 已是 cloud_123；两种格式都安全归一化。
+    // 恢复云端缓存时，serverDiaryId 可能缺失但本地 id 是 cloud_123 或 server_123；两种格式都安全归一化。
     let serverDiaryId = normalizeDiaryServerId(entry.serverDiaryId) ?? normalizeDiaryServerId(entry.id);
     if (!serverDiaryId) serverDiaryId = normalizeDiaryServerId(await waitForServerDiaryId(id));
     if (!serverDiaryId && !hadPersistentClientId) {
@@ -1711,7 +1712,7 @@ export async function deleteDiaryEntry(id: string, roomId?: string): Promise<voi
   if (!target) return;
 
   // Server-first：已进入云端的日记必须先删除服务器记录；失败时保留本地，避免下次刷新“复活”。
-  // 与恢复发布共用同一 ID 解析：支持旧 cloud_123 缓存，同时绝不把空值规范化为 0。
+  // 与恢复发布共用同一 ID 解析：支持 cloud_123 与 server_123 缓存，同时绝不把空值规范化为 0。
   let serverDiaryId = normalizeDiaryServerId(target.serverDiaryId) ?? normalizeDiaryServerId(target.id);
   if (!serverDiaryId) serverDiaryId = normalizeDiaryServerId(await waitForServerDiaryId(id));
   if (serverDiaryId && rid) {
