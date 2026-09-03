@@ -242,6 +242,8 @@ export interface DiaryEntry {
   // Multi-turn conversation history (new in v3.0)
   conversation?: ConversationMessage[];
   conversationFinished?: boolean; // true when user tapped "End and Save"
+  /** 仅用于客户端发布链路诊断，不包含任何日记内容。 */
+  publishRevision?: string;
   /** 仅本地使用：正式发布尚未成功同步到云端，进入列表时会自动重试。 */
   syncPending?: boolean;
   localTimeStr?: string;  // e.g. "14:23" — writer's local time, timezone-safe

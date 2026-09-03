@@ -390,6 +390,8 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
       aiTip: diary.aiTip ?? diary.smartTip,
       conversation: diary.conversation,
       conversationFinished: diary.conversationFinished,
+      // 仅用于确认本轮 TestFlight 发布链路，不包含日记正文或对话内容。
+      publishRevision: diary.publishRevision,
       localTimeStr: diary.localTimeStr,
     }), '日记发布');
   } catch (e) {

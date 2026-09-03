@@ -491,13 +491,15 @@ export const familyRouter = router({
       aiTip: z.string().optional(),
       conversation: z.any().optional(),
       conversationFinished: z.boolean().optional(),
+      // 仅用于客户端发布流程诊断；绝不保存正文或对话内容。
+      publishRevision: z.string().max(80).optional(),
       localTimeStr: z.string().optional(),  // e.g. "14:23" — writer's local time
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
       console.log(
-        `[DiarySync] start user=${userId} room=${input.roomId} serverId=${input.serverDiaryId ?? 'none'} clientId=${input.clientId ? 'present' : 'none'} finished=${input.conversationFinished === true}`,
+        `[DiarySync] start user=${userId} room=${input.roomId} serverId=${input.serverDiaryId ?? 'none'} clientId=${input.clientId ? 'present' : 'none'} finished=${input.conversationFinished === true} revision=${input.publishRevision ?? 'none'}`,
       );
 
       // 恢复草稿可能携带升级前缓存的陈旧 serverDiaryId。持久 clientId 才是同一草稿的首选身份，

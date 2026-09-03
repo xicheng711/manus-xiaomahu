@@ -31,6 +31,8 @@ import { getCompleteDiaryBody, getConversationAfterDiaryBody } from '@/lib/diary
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SW = Dimensions.get('window').width;
+// 仅用于本轮 TestFlight 验收：显示在结束保存按钮下方，并随最终发布请求传给服务器；不包含日记内容。
+const DIARY_PUBLISH_REVISION = 'draft-snapshot-v4';
 
 function formatDiaryPublishedLabel(entry?: DiaryEntry | null): string {
   const dateStr = entry?.date || todayStr();
@@ -773,6 +775,7 @@ export default function DiaryEditScreen() {
         conversation: latestConv,
         conversationFinished: true,
         syncPending: true,
+        publishRevision: DIARY_PUBLISH_REVISION,
         updatedAt: new Date().toISOString(),
       };
       const updatedEntry = await updateDiaryEntry(
@@ -1151,6 +1154,7 @@ export default function DiaryEditScreen() {
                     <Text style={styles.endAndSaveBtnText}>✅ 结束并保存</Text>
                   )}
                 </TouchableOpacity>
+                <Text style={styles.publishRevisionText}>发布校验：{DIARY_PUBLISH_REVISION}</Text>
               </>
             ) : (
               <View style={styles.finishedBottomBanner}>
@@ -1465,6 +1469,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8B5E3C',
     letterSpacing: 0.3,
+  },
+  publishRevisionText: {
+    textAlign: 'center',
+    color: AppColors.text.tertiary,
+    fontSize: 10,
+    marginTop: 2,
   },
   inputWrap: { flex: 1 },
   chatInput: {
