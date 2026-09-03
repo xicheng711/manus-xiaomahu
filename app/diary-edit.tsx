@@ -1166,7 +1166,6 @@ export default function DiaryEditScreen() {
                     <Text style={styles.endAndSaveBtnText}>✅ 结束并保存</Text>
                   )}
                 </TouchableOpacity>
-                <Text style={styles.publishRevisionText}>发布校验：{DIARY_PUBLISH_REVISION}</Text>
               </>
             ) : (
               <View style={styles.finishedBottomBanner}>
@@ -1481,12 +1480,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8B5E3C',
     letterSpacing: 0.3,
-  },
-  publishRevisionText: {
-    textAlign: 'center',
-    color: AppColors.text.tertiary,
-    fontSize: 10,
-    marginTop: 2,
   },
   inputWrap: { flex: 1 },
   chatInput: {

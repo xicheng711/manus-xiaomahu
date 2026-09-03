@@ -1108,10 +1108,10 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(serverCore).toContain('DiarySyncFallback');
   });
 
-  it('shows a visible revision and sends only that revision to correlate the end-save request in server logs', () => {
+  it('keeps the revision private to the final request and does not show diagnostic text in the diary UI', () => {
     const diaryEdit = read('app/diary-edit.tsx');
     expect(diaryEdit).toContain("const DIARY_PUBLISH_REVISION = 'draft-snapshot-v4'");
-    expect(diaryEdit).toContain('发布校验：{DIARY_PUBLISH_REVISION}');
+    expect(diaryEdit).not.toContain('发布校验：{DIARY_PUBLISH_REVISION}');
     expect(diaryEdit).toContain('publishRevision: DIARY_PUBLISH_REVISION');
     expect(cloudSync).toContain('publishRevision: diary.publishRevision');
     expect(familyRouter).toContain('revision=${input.publishRevision ?? \'none\'}');
