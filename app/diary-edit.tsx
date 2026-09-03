@@ -17,10 +17,10 @@ import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
-  waitForServerDiaryId, syncDiaryEntryNow, getLastDiaryPublishFailure, getNapMinutes, hasRecordedNap,
+  waitForServerDiaryId, getNapMinutes, hasRecordedNap,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
-import { cloudGetDiaries, getCloudSyncState, setCloudSyncState } from '@/lib/cloud-sync';
+import { cloudGetDiaries, cloudSyncDiary, getCloudSyncState, setCloudSyncState } from '@/lib/cloud-sync';
 import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
 import { COLORS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { trpc } from '@/lib/trpc';
@@ -786,25 +786,37 @@ export default function DiaryEditScreen() {
       );
       const publishSnapshot = updatedEntry ?? finalSnapshot;
       entryRef.current = publishSnapshot;
-      const published = await syncDiaryEntryNow(localEntryId, familyId, publishSnapshot);
-      if (!published) {
-        const failure = getLastDiaryPublishFailure(localEntryId, familyId);
-        const failureTitle = failure?.code === 'AUTH_REQUIRED'
+
+      // 和正常新建日记后更新对话完全一致：直接把当前快照交给 cloudSyncDiary。
+      // 不再经过恢复草稿专用的二次 ID 查找、等待或 Promise 去重分支。
+      const publishResult = await cloudSyncDiary(
+        publishSnapshot,
+        publishSnapshot.serverDiaryId ?? serverDiaryId ?? undefined,
+        familyId,
+      );
+      const resolvedServerDiaryId = Number(publishResult?.diaryId ?? publishResult?.id ?? 0);
+      if (!publishResult?.success || !Number.isSafeInteger(resolvedServerDiaryId) || resolvedServerDiaryId <= 0) {
+        const errorCode = publishResult?.errorCode;
+        const failureTitle = errorCode === 'AUTH_REQUIRED'
           ? '需要重新登录'
-          : failure?.code === 'FORBIDDEN'
+          : errorCode === 'FORBIDDEN'
             ? '无法在当前家庭发布'
             : '尚未发布到家庭';
         Alert.alert(
           failureTitle,
-          `${failure?.message ?? '未能连接家庭云端，请检查网络后重试。'}\n\n完整日记和全部对话仍安全保存在本机，不会丢失。`,
+          `${publishResult?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。'}\n\n完整日记和全部对话仍安全保存在本机，不会丢失。`,
         );
         return;
       }
-      const syncedEntry = await getDiaryEntryById(localEntryId, familyId);
-      if (syncedEntry) {
-        entryRef.current = syncedEntry;
-        setServerDiaryId(syncedEntry.serverDiaryId ?? null);
-      }
+      const publishedEntry = {
+        ...publishSnapshot,
+        serverDiaryId: resolvedServerDiaryId,
+        conversationFinished: true,
+        syncPending: false,
+      };
+      await updateDiaryEntry(localEntryId, publishedEntry, familyId, { skipCloud: true });
+      entryRef.current = publishedEntry;
+      setServerDiaryId(resolvedServerDiaryId);
       setFinished(true);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       returnToDiaryList();

@@ -193,11 +193,12 @@ describe('Published diary cloud consistency and privacy', () => {
   const familyDb = read('server/family-db.ts');
 
   it('waits for the complete conversation to reach the cloud before leaving the editor', () => {
-    expect(diaryEdit).toContain('syncDiaryEntryNow(localEntryId, familyId, publishSnapshot)');
+    expect(diaryEdit).toContain('const publishResult = await cloudSyncDiary(');
+    expect(diaryEdit).toContain('publishSnapshot.serverDiaryId ?? serverDiaryId ?? undefined');
     expect(diaryEdit).toContain('conversationFinished: true');
     expect(diaryEdit).toContain('syncPending: true');
     expect(diaryEdit).toContain("'尚未发布到家庭'");
-    expect(diaryEdit).toContain('getLastDiaryPublishFailure(localEntryId, familyId)');
+    expect(diaryEdit).toContain('publishResult?.errorMessage');
     expect(storage).toContain('export async function syncPendingDiaries');
     expect(diaryList).toContain('syncPendingDiaries(requestedFamilyId)');
   });
@@ -1090,7 +1091,9 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     const diaryEdit = read('app/diary-edit.tsx');
     expect(diaryEdit).toContain('const finalSnapshot: DiaryEntry = {');
     expect(diaryEdit).toContain('conversationFinished: true');
-    expect(diaryEdit).toContain('const published = await syncDiaryEntryNow(localEntryId, familyId, publishSnapshot);');
+    expect(diaryEdit).toContain('const publishResult = await cloudSyncDiary(');
+    expect(diaryEdit).toContain('publishSnapshot.serverDiaryId ?? serverDiaryId ?? undefined');
+    expect(diaryEdit).toContain('const publishedEntry = {');
     expect(storage).toContain('entrySnapshot ? { ...entrySnapshot } : await getDiaryEntryById(id, roomId)');
   });
 
@@ -1108,8 +1111,9 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     const trpcServer = read('server/_core/trpc.ts');
     expect(cloudSync).toContain("errorCode: 'AUTH_REQUIRED'");
     expect(cloudSync).toContain('const sessionToken = await getSessionToken();');
-    expect(storage).toContain('getLastDiaryPublishFailure');
-    expect(diaryEdit).toContain("failure?.code === 'AUTH_REQUIRED'");
+    expect(diaryEdit).toContain("const errorCode = publishResult?.errorCode;");
+    expect(diaryEdit).toContain("errorCode === 'AUTH_REQUIRED'");
+    expect(diaryEdit).toContain('publishResult?.errorMessage');
     expect(diaryEdit).toContain('完整日记和全部对话仍安全保存在本机，不会丢失。');
     expect(trpcServer).toContain('[Auth] Protected request rejected path=${opts.path}');
     expect(familyRouter).toContain('[DiarySync] start user=${userId}');
