@@ -753,25 +753,39 @@ export default function DiaryEditScreen() {
     try {
       // 使用 ref 获取最新对话内容（避免 React state 闭包问题）
       const latestConv = conversationRef.current;
-      // 恢复草稿的路由 id 可能是云端别名；优先使用已加载条目的实际本地 id，和普通新建保存保持一致。
-      const eid = entryRef.current?.id ?? entryId ?? null;
-      if (!eid || !familyId) {
+      // 恢复草稿时不要再依赖路由别名；直接使用页面已经完整加载的实际条目快照。
+      const routeOrLocalId = entryRef.current?.id ?? entryId ?? null;
+      if (!routeOrLocalId || !familyId) {
         Alert.alert('保存失败', '当前家庭信息尚未准备好，请稍后重试');
         return;
       }
-      // 先把最新完整对话可靠写入当前家庭本地缓存，再等待同一快照成功发布到云端。
-      await updateDiaryEntry(
-        eid,
-        { conversation: latestConv, conversationFinished: true, syncPending: true },
+      const loadedEntry = entryRef.current ?? await getDiaryEntryById(routeOrLocalId, familyId);
+      if (!loadedEntry) {
+        Alert.alert('保存失败', '没有找到这篇本地草稿，请返回日记列表后重新打开。');
+        return;
+      }
+      const localEntryId = loadedEntry.id;
+      // 先写本机，再把完全相同的最终快照直接交给已验证可达的 syncDiary；不再二次查找草稿。
+      const finalSnapshot: DiaryEntry = {
+        ...loadedEntry,
+        id: localEntryId,
+        roomId: familyId,
+        conversation: latestConv,
+        conversationFinished: true,
+        syncPending: true,
+        updatedAt: new Date().toISOString(),
+      };
+      const updatedEntry = await updateDiaryEntry(
+        localEntryId,
+        finalSnapshot,
         familyId,
         { skipCloud: true },
       );
-      if (entryRef.current) {
-        entryRef.current = { ...entryRef.current, conversation: latestConv, conversationFinished: true, syncPending: true };
-      }
-      const published = await syncDiaryEntryNow(eid, familyId);
+      const publishSnapshot = updatedEntry ?? finalSnapshot;
+      entryRef.current = publishSnapshot;
+      const published = await syncDiaryEntryNow(localEntryId, familyId, publishSnapshot);
       if (!published) {
-        const failure = getLastDiaryPublishFailure(eid, familyId);
+        const failure = getLastDiaryPublishFailure(localEntryId, familyId);
         const failureTitle = failure?.code === 'AUTH_REQUIRED'
           ? '需要重新登录'
           : failure?.code === 'FORBIDDEN'
@@ -783,7 +797,7 @@ export default function DiaryEditScreen() {
         );
         return;
       }
-      const syncedEntry = await getDiaryEntryById(eid, familyId);
+      const syncedEntry = await getDiaryEntryById(localEntryId, familyId);
       if (syncedEntry) {
         entryRef.current = syncedEntry;
         setServerDiaryId(syncedEntry.serverDiaryId ?? null);

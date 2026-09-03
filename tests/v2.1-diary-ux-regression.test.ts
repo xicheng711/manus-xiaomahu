@@ -193,10 +193,11 @@ describe('Published diary cloud consistency and privacy', () => {
   const familyDb = read('server/family-db.ts');
 
   it('waits for the complete conversation to reach the cloud before leaving the editor', () => {
-    expect(diaryEdit).toContain('syncDiaryEntryNow(eid, familyId)');
-    expect(diaryEdit).toContain("conversationFinished: true, syncPending: true");
+    expect(diaryEdit).toContain('syncDiaryEntryNow(localEntryId, familyId, publishSnapshot)');
+    expect(diaryEdit).toContain('conversationFinished: true');
+    expect(diaryEdit).toContain('syncPending: true');
     expect(diaryEdit).toContain("'尚未发布到家庭'");
-    expect(diaryEdit).toContain('getLastDiaryPublishFailure(eid, familyId)');
+    expect(diaryEdit).toContain('getLastDiaryPublishFailure(localEntryId, familyId)');
     expect(storage).toContain('export async function syncPendingDiaries');
     expect(diaryList).toContain('syncPendingDiaries(requestedFamilyId)');
   });
@@ -1083,6 +1084,14 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(cloudSync).toContain("}), '日记发布');");
     expect(cloudSync).toContain("'日记刷新',");
     expect(familyRouter).toContain('signal: AbortSignal.timeout(8_000)');
+  });
+
+  it('passes the editor final snapshot directly into the proven sync route before leaving the page', () => {
+    const diaryEdit = read('app/diary-edit.tsx');
+    expect(diaryEdit).toContain('const finalSnapshot: DiaryEntry = {');
+    expect(diaryEdit).toContain('conversationFinished: true');
+    expect(diaryEdit).toContain('const published = await syncDiaryEntryNow(localEntryId, familyId, publishSnapshot);');
+    expect(storage).toContain('entrySnapshot ? { ...entrySnapshot } : await getDiaryEntryById(id, roomId)');
   });
 
   it('reports the real publish failure and emits privacy-safe server diagnostics', () => {

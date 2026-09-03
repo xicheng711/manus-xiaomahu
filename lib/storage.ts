@@ -1582,14 +1582,15 @@ function normalizeDiaryServerId(value: unknown): number | null {
  * 将指定日记的当前完整快照同步到云端并等待结果。
  * 用于“结束并保存”和进入列表后的断网重试，避免页面先退出但家人只看到不完整对话。
  */
-export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boolean> {
+export async function syncDiaryEntryNow(id: string, roomId: string, entrySnapshot?: DiaryEntry): Promise<boolean> {
   const key = diaryPublishKey(roomId, id);
   const existingPromise = _diaryPublishPromises.get(key);
   if (existingPromise) return existingPromise;
 
   const task = (async () => {
     try {
-      let entry = await getDiaryEntryById(id, roomId);
+      // 编辑页已持有的当前快照优先使用，避免恢复草稿时再次用路由别名查找本地记录而在发送请求前中断。
+      let entry = entrySnapshot ? { ...entrySnapshot } : await getDiaryEntryById(id, roomId);
       if (!entry) {
         _lastDiaryPublishFailures.set(key, {
           code: 'LOCAL_ERROR',
@@ -1597,17 +1598,18 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
         });
         return false;
       }
+      const localEntryId = entry.id;
       const hadPersistentClientId = !!entry.clientId;
     // 旧版本草稿没有 clientId；恢复时补齐并先写入本机，之后每次重试都稳定指向同一云端草稿。
     if (!entry.clientId) {
       const clientId = generateId();
-      const updated = await updateDiaryEntry(id, { clientId }, roomId, { skipCloud: true });
+      const updated = await updateDiaryEntry(localEntryId, { clientId }, roomId, { skipCloud: true });
       entry = updated ?? { ...entry, clientId };
     }
 
     // 恢复云端缓存时，serverDiaryId 可能缺失但本地 id 是 cloud_123 或 server_123；两种格式都安全归一化。
     let serverDiaryId = normalizeDiaryServerId(entry.serverDiaryId) ?? normalizeDiaryServerId(entry.id);
-    if (!serverDiaryId) serverDiaryId = normalizeDiaryServerId(await waitForServerDiaryId(id));
+    if (!serverDiaryId) serverDiaryId = normalizeDiaryServerId(await waitForServerDiaryId(localEntryId));
     if (!serverDiaryId && !hadPersistentClientId) {
       // 只有旧版无持久身份的草稿才需要读取列表做兼容匹配。
       // 新版草稿直接携带 clientId 调用 syncDiary，由服务器在同一家庭和作者范围内幂等找回，避免多一次网络等待。
@@ -1624,7 +1626,7 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
         ) : undefined;
         if (matched?.id) {
           serverDiaryId = Number(matched.id);
-          await updateDiaryEntry(id, { serverDiaryId }, roomId, { skipCloud: true });
+          await updateDiaryEntry(localEntryId, { serverDiaryId }, roomId, { skipCloud: true });
         }
       }
     }
@@ -1643,7 +1645,7 @@ export async function syncDiaryEntryNow(id: string, roomId: string): Promise<boo
 
     const cacheKey = roomKey(KEYS.DIARY, roomId);
     const all = await getDiaryEntries(roomId);
-    const idx = all.findIndex(item => item.id === id);
+    const idx = all.findIndex(item => item.id === localEntryId);
     if (idx >= 0) {
       all[idx] = { ...all[idx], serverDiaryId: resolvedServerId, syncPending: false, roomId };
       await AsyncStorage.setItem(cacheKey, JSON.stringify(sortDiaryEntries(all)));

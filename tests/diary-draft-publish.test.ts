@@ -163,6 +163,25 @@ describe('reopened diary draft publish recovery', () => {
     expect(stillLocal.conversation).toEqual(localDraft.conversation);
   });
 
+  it('publishes the editor snapshot without depending on a second local-id lookup', async () => {
+    const loadedSnapshot = draft({ id: 'actual-local-diary', serverDiaryId: 135, conversationFinished: true, syncPending: true });
+    memoryStorage.set(CACHE_KEY, JSON.stringify([]));
+    cloudSyncDiaryMock.mockResolvedValue({ success: true, diaryId: 135 });
+
+    await expect(syncDiaryEntryNow('actual-local-diary', ROOM_ID, loadedSnapshot)).resolves.toBe(true);
+    expect(cloudSyncDiaryMock).toHaveBeenCalledTimes(1);
+    expect(cloudSyncDiaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'actual-local-diary',
+        serverDiaryId: 135,
+        conversationFinished: true,
+        conversation: loadedSnapshot.conversation,
+      }),
+      135,
+      ROOM_ID,
+    );
+  });
+
   it('keeps the full local draft pending when the verified publish request times out', async () => {
     const localDraft = draft({ serverDiaryId: 77 });
     memoryStorage.set(CACHE_KEY, JSON.stringify([localDraft]));
