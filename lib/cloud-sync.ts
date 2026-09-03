@@ -13,6 +13,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
+import { getApiBaseUrl } from '@/constants/oauth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -359,43 +360,80 @@ export async function cloudGetCheckIns(roomId?: number, limit = 30) {
 
 // ─── Diary Sync ──────────────────────────────────────────────────────────────
 
+/** 构造 tRPC 与 HTTP 兼容端点共享的日记载荷，避免两条传输通道发生字段漂移。 */
+function diarySyncPayload(diary: any, roomId: number, serverDiaryId?: number) {
+  return {
+    roomId,
+    serverDiaryId,
+    clientId: diary.clientId,
+    date: diary.date,
+    content: diary.content,
+    moodEmoji: diary.moodEmoji,
+    moodLabel: diary.moodLabel,
+    moodScore: diary.moodScore,
+    tags: diary.tags,
+    caregiverMoodEmoji: diary.caregiverMoodEmoji,
+    caregiverMoodLabel: diary.caregiverMoodLabel,
+    aiReply: diary.aiReply ?? diary.smartReply,
+    aiEmoji: diary.aiEmoji,
+    aiTip: diary.aiTip ?? diary.smartTip,
+    conversation: diary.conversation,
+    conversationFinished: diary.conversationFinished,
+    // 仅用于确认本轮 TestFlight 发布链路，不包含日记正文或对话内容。
+    publishRevision: diary.publishRevision,
+    localTimeStr: diary.localTimeStr,
+  };
+}
+
+/** tRPC 传输异常时，最终发布可使用同认证、同业务路由的 HTTP 兼容端点。 */
+async function cloudSyncDiaryFallback(payload: Record<string, unknown>, sessionToken: string | null): Promise<any> {
+  try {
+    const response = await withDiaryCloudTimeout(
+      fetch(`${getApiBaseUrl()}/api/diary-sync-fallback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      }),
+      '日记发布兼容',
+    );
+    const result = await response.json().catch(() => null);
+    if (result && typeof result === 'object') return result;
+    return { success: false, errorCode: 'NETWORK', errorMessage: '家庭云端没有返回有效响应，请稍后重试。' } satisfies DiaryCloudFailure;
+  } catch (error) {
+    console.warn('[CloudSync] syncDiary fallback failed:', error);
+    return diaryCloudFailure(error);
+  }
+}
+
 /** Sync a diary entry to the server */
 export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explicitRoomId?: number | string | null) {
   const roomId = explicitRoomId ? Number(explicitRoomId) : await getActiveRoomId();
   if (!roomId) {
     return { success: false, errorCode: 'MISSING_ROOM', errorMessage: '当前家庭信息尚未准备好，请重新进入家庭后再发布。' } satisfies DiaryCloudFailure;
   }
-  if (Platform.OS !== 'web') {
-    const sessionToken = await getSessionToken();
-    if (!sessionToken) {
-      return { success: false, errorCode: 'AUTH_REQUIRED', errorMessage: '登录状态已失效，请重新登录后再发布。' } satisfies DiaryCloudFailure;
-    }
+  const sessionToken = Platform.OS !== 'web' ? await getSessionToken() : null;
+  if (Platform.OS !== 'web' && !sessionToken) {
+    return { success: false, errorCode: 'AUTH_REQUIRED', errorMessage: '登录状态已失效，请重新登录后再发布。' } satisfies DiaryCloudFailure;
   }
+  const payload = diarySyncPayload(diary, roomId, serverDiaryId);
   try {
     const client = getClient();
-    return await withDiaryCloudTimeout<any>(client.family.syncDiary.mutate({
-      roomId,
-      serverDiaryId,
-      clientId: diary.clientId,
-      date: diary.date,
-      content: diary.content,
-      moodEmoji: diary.moodEmoji,
-      moodLabel: diary.moodLabel,
-      moodScore: diary.moodScore,
-      tags: diary.tags,
-      caregiverMoodEmoji: diary.caregiverMoodEmoji,
-      caregiverMoodLabel: diary.caregiverMoodLabel,
-      aiReply: diary.aiReply ?? diary.smartReply,
-      aiEmoji: diary.aiEmoji,
-      aiTip: diary.aiTip ?? diary.smartTip,
-      conversation: diary.conversation,
-      conversationFinished: diary.conversationFinished,
-      // 仅用于确认本轮 TestFlight 发布链路，不包含日记正文或对话内容。
-      publishRevision: diary.publishRevision,
-      localTimeStr: diary.localTimeStr,
-    }), '日记发布');
+    const result = await withDiaryCloudTimeout<any>(client.family.syncDiary.mutate(payload), '日记发布');
+    // 只在用户正式发布时回退，普通草稿/对话同步仍严格使用原有 tRPC 通道。
+    if (diary.conversationFinished === true && !result?.success) {
+      return await cloudSyncDiaryFallback(payload, sessionToken);
+    }
+    return result;
   } catch (e) {
     console.warn('[CloudSync] syncDiary failed:', e);
+    // 当前现场问题是最终发布在 tRPC 传输阶段没有进入路由；回退仍会通过同一身份和业务校验。
+    if (diary.conversationFinished === true) {
+      return await cloudSyncDiaryFallback(payload, sessionToken);
+    }
     return diaryCloudFailure(e);
   }
 }

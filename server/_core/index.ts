@@ -65,11 +65,55 @@ async function startServer() {
     res.json({ ok: true, timestamp: Date.now() });
   });
 
+  /**
+   * 日记正式发布的 HTTP 兼容通道。
+   * 它复用 createContext 与 appRouter 的 family.syncDiary 过程，因此认证、Zod 校验、
+   * 房间成员校验、作者隔离、幂等 clientId 与数据库写入逻辑均与 tRPC 完全相同。
+   * 仅在客户端最终发布的 tRPC 传输失败时回退使用，避免再次建立一套业务逻辑。
+   */
+  app.post('/api/diary-sync-fallback', async (req, res) => {
+    // createContext 当前只依赖 req/res 做身份认证；info 为 tRPC 适配器要求的元数据。
+    const context = await createContext({ req, res, info: {} as any });
+    if (!context.user) {
+      console.warn('[DiarySyncFallback] rejected code=UNAUTHORIZED');
+      res.status(401).json({ success: false, errorCode: 'AUTH_REQUIRED', errorMessage: '登录状态已失效，请重新登录后再发布。' });
+      return;
+    }
+    try {
+      const result = await appRouter.createCaller(context).family.syncDiary(req.body);
+      console.log(`[DiarySyncFallback] success user=${context.user.id} diary=${result.diaryId}`);
+      res.json(result);
+    } catch (error: any) {
+      const code = String(error?.code ?? 'INTERNAL_SERVER_ERROR');
+      const status = code === 'UNAUTHORIZED' ? 401 : code === 'FORBIDDEN' ? 403 : code === 'BAD_REQUEST' ? 400 : 500;
+      const safeRoomId = req.body && typeof req.body === 'object' ? req.body.roomId : undefined;
+      const safeFinished = req.body && typeof req.body === 'object' && req.body.conversationFinished === true;
+      console.warn(`[DiarySyncFallback] rejected code=${code} user=${context.user.id} room=${safeRoomId ?? 'none'} finished=${safeFinished}`);
+      res.status(status).json({
+        success: false,
+        errorCode: code === 'UNAUTHORIZED' ? 'AUTH_REQUIRED' : code === 'FORBIDDEN' ? 'FORBIDDEN' : 'NETWORK',
+        errorMessage: code === 'BAD_REQUEST' ? '日记发布数据格式异常，请保留草稿后重试。' : '未能连接家庭云端，请检查网络后重试。',
+      });
+    }
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      // syncDiary 在 Zod 输入校验或认证阶段失败时，路由内部的 DiarySync 日志尚未执行。
+      // 仅记录安全的元信息，绝不输出日记正文、对话、令牌或完整请求体。
+      onError({ path, error, input }) {
+        if (path !== 'family.syncDiary') return;
+        const safeInput = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+        const fieldNames = error.code === 'BAD_REQUEST' && 'issues' in error.cause!
+          ? (error.cause as any).issues?.map((issue: any) => issue.path?.join('.')).filter(Boolean).join(',')
+          : undefined;
+        console.warn(
+          `[DiarySync] rejected code=${error.code} room=${safeInput.roomId ?? 'none'} serverId=${safeInput.serverDiaryId ?? 'none'} finished=${safeInput.conversationFinished === true} revision=${safeInput.publishRevision ?? 'none'} fields=${fieldNames ?? 'none'}`,
+        );
+      },
     }),
   );
 

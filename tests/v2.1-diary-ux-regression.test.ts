@@ -1055,6 +1055,7 @@ describe('Durable diary draft recovery and one-time publishing', () => {
   const cloudSync = read('lib/cloud-sync.ts');
   const familyRouter = read('server/family-router.ts');
   const familyDb = read('server/family-db.ts');
+  const serverCore = read('server/_core/index.ts');
   const schema = read('drizzle/schema.ts');
   const dbMigrations = read('server/db.ts');
 
@@ -1082,7 +1083,8 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(storage).toContain('if (!serverDiaryId && !hadPersistentClientId)');
     expect(storage).toContain('const legacyPending = pending.filter(entry => !entry.serverDiaryId && !entry.clientId);');
     expect(cloudSync).toContain('const DIARY_CLOUD_TIMEOUT_MS = 12_000;');
-    expect(cloudSync).toContain("}), '日记发布');");
+    expect(cloudSync).toContain("client.family.syncDiary.mutate(payload), '日记发布'");
+    expect(cloudSync).toContain('cloudSyncDiaryFallback(payload, sessionToken)');
     expect(cloudSync).toContain("'日记刷新',");
     expect(familyRouter).toContain('signal: AbortSignal.timeout(8_000)');
   });
@@ -1095,6 +1097,15 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(diaryEdit).toContain('publishSnapshot.serverDiaryId ?? serverDiaryId ?? undefined');
     expect(diaryEdit).toContain('const publishedEntry = {');
     expect(storage).toContain('entrySnapshot ? { ...entrySnapshot } : await getDiaryEntryById(id, roomId)');
+  });
+
+  it('falls back only for final publication through the same authenticated syncDiary business route', () => {
+    expect(cloudSync).toContain("fetch(`${getApiBaseUrl()}/api/diary-sync-fallback`");
+    expect(cloudSync).toContain('if (diary.conversationFinished === true)');
+    expect(serverCore).toContain("app.post('/api/diary-sync-fallback'");
+    expect(serverCore).toContain('createContext({ req, res, info: {} as any })');
+    expect(serverCore).toContain('appRouter.createCaller(context).family.syncDiary(req.body)');
+    expect(serverCore).toContain('DiarySyncFallback');
   });
 
   it('shows a visible revision and sends only that revision to correlate the end-save request in server logs', () => {
