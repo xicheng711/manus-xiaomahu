@@ -77,6 +77,14 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-apple-authentication",
     [
+      "expo-image-picker",
+      {
+        photosPermission: "允许小马虎访问您的相册，用于选择并上传头像和家庭照片。",
+        cameraPermission: false,
+        microphonePermission: false,
+      },
+    ],
+    [
       "expo-video",
       { supportsBackgroundPlayback: true, supportsPictureInPicture: true },
     ],
@@ -93,7 +101,8 @@ const config: ExpoConfig = {
     [
       "expo-location",
       {
-        locationAlwaysAndWhenInUsePermission: "允许小马虎获取您的位置，用于显示当地天气信息。",
+        locationAlwaysAndWhenInUsePermission: false,
+        locationAlwaysPermission: false,
         locationWhenInUsePermission: "允许小马虎获取您的位置，用于显示当地天气信息。",
       },
     ],
