@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
 import { getApiBaseUrl } from '@/constants/oauth';
+import { buildDiarySyncPayload } from '@/lib/diary-sync-payload';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -360,30 +361,6 @@ export async function cloudGetCheckIns(roomId?: number, limit = 30) {
 
 // ─── Diary Sync ──────────────────────────────────────────────────────────────
 
-/** 构造 tRPC 与 HTTP 兼容端点共享的日记载荷，避免两条传输通道发生字段漂移。 */
-function diarySyncPayload(diary: any, roomId: number, serverDiaryId?: number) {
-  return {
-    roomId,
-    serverDiaryId,
-    clientId: diary.clientId,
-    date: diary.date,
-    content: diary.content,
-    moodEmoji: diary.moodEmoji,
-    moodLabel: diary.moodLabel,
-    moodScore: diary.moodScore,
-    tags: diary.tags,
-    caregiverMoodEmoji: diary.caregiverMoodEmoji,
-    caregiverMoodLabel: diary.caregiverMoodLabel,
-    aiReply: diary.aiReply ?? diary.smartReply,
-    aiEmoji: diary.aiEmoji,
-    aiTip: diary.aiTip ?? diary.smartTip,
-    conversation: diary.conversation,
-    conversationFinished: diary.conversationFinished,
-    // 仅用于确认本轮 TestFlight 发布链路，不包含日记正文或对话内容。
-    publishRevision: diary.publishRevision,
-    localTimeStr: diary.localTimeStr,
-  };
-}
 
 /** tRPC 传输异常时，最终发布可使用同认证、同业务路由的 HTTP 兼容端点。 */
 async function cloudSyncDiaryFallback(payload: Record<string, unknown>, sessionToken: string | null): Promise<any> {
@@ -419,7 +396,7 @@ export async function cloudSyncDiary(diary: any, serverDiaryId?: number, explici
   if (Platform.OS !== 'web' && !sessionToken) {
     return { success: false, errorCode: 'AUTH_REQUIRED', errorMessage: '登录状态已失效，请重新登录后再发布。' } satisfies DiaryCloudFailure;
   }
-  const payload = diarySyncPayload(diary, roomId, serverDiaryId);
+  const payload = buildDiarySyncPayload(diary, roomId, serverDiaryId);
   try {
     const client = getClient();
     const result = await withDiaryCloudTimeout<any>(client.family.syncDiary.mutate(payload), '日记发布');

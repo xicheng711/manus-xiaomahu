@@ -69,6 +69,7 @@ vi.mock('../server/storage', () => ({
 }));
 
 import { familyRouter } from '../server/family-router';
+import { buildDiarySyncPayload } from '../lib/diary-sync-payload';
 
 const ROOM_ID = 21;
 const AUTHOR_ID = 4280;
@@ -169,6 +170,40 @@ describe('family.publishDiary', () => {
       conversationFinished: true,
       content: '完整日记正文',
       conversation: cloudDraft().conversation,
+    });
+    expect(mocks.updateDiaryEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts a restored cloud draft after nullable database fields are removed from the shared transport payload', async () => {
+    let stored = cloudDraft();
+    mocks.getDiaryEntryForInteraction.mockImplementation(async () => stored);
+    mocks.getDiaryEntryByClientId.mockImplementation(async () => stored);
+    mocks.updateDiaryEntry.mockImplementation(async (_id, patch) => {
+      stored = { ...stored, ...patch };
+    });
+
+    const payload = buildDiarySyncPayload({
+      ...stored,
+      moodEmoji: '😊',
+      moodLabel: '还可以',
+      moodScore: null,
+      caregiverMoodEmoji: null,
+      caregiverMoodLabel: null,
+      aiReply: '完整的小马虎回复',
+      aiEmoji: null,
+      aiTip: null,
+      localTimeStr: null,
+      conversationFinished: true,
+    }, ROOM_ID, 128);
+
+    expect(Object.values(payload)).not.toContain(null);
+    const caller = familyRouter.createCaller(context());
+    await expect(caller.syncDiary(payload as any)).resolves.toEqual({ success: true, diaryId: 128 });
+    expect(stored).toMatchObject({
+      id: 128,
+      clientId: 'draft-client-1',
+      conversationFinished: true,
+      content: '完整日记正文',
     });
     expect(mocks.updateDiaryEntry).toHaveBeenCalledTimes(1);
   });

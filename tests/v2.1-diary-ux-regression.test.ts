@@ -1053,6 +1053,7 @@ describe('Sleep overview card and restrained warm visual hierarchy', () => {
 describe('Durable diary draft recovery and one-time publishing', () => {
   const storage = read('lib/storage.ts');
   const cloudSync = read('lib/cloud-sync.ts');
+  const diarySyncPayload = read('lib/diary-sync-payload.ts');
   const familyRouter = read('server/family-router.ts');
   const familyDb = read('server/family-db.ts');
   const serverCore = read('server/_core/index.ts');
@@ -1061,7 +1062,7 @@ describe('Durable diary draft recovery and one-time publishing', () => {
 
   it('assigns a persistent client identity before a new draft can leave the editor', () => {
     expect(storage).toContain('clientId: generateId(),');
-    expect(cloudSync).toContain('clientId: diary.clientId');
+    expect(diarySyncPayload).toContain('clientId: optionalString(diary.clientId)');
     expect(schema).toContain('clientId: varchar("clientId", { length: 100 })');
   });
 
@@ -1113,7 +1114,7 @@ describe('Durable diary draft recovery and one-time publishing', () => {
     expect(diaryEdit).toContain("const DIARY_PUBLISH_REVISION = 'draft-snapshot-v4'");
     expect(diaryEdit).not.toContain('发布校验：{DIARY_PUBLISH_REVISION}');
     expect(diaryEdit).toContain('publishRevision: DIARY_PUBLISH_REVISION');
-    expect(cloudSync).toContain('publishRevision: diary.publishRevision');
+    expect(diarySyncPayload).toContain('publishRevision: optionalString(diary.publishRevision)');
     expect(familyRouter).toContain('revision=${input.publishRevision ?? \'none\'}');
   });
 
