@@ -7,6 +7,7 @@ const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
 
 describe('iOS protected resource purpose strings', () => {
   const appConfig = read('app.config.ts');
+  const loginScreen = read('app/login.tsx');
   const packageJson = read('package.json');
   const pnpmLockfile = read('pnpm-lock.yaml');
   const npmLockfile = read('package-lock.json');
@@ -22,6 +23,23 @@ describe('iOS protected resource purpose strings', () => {
     expect(pnpmLockfile).not.toMatch(/^\s{2}expo-audio:/m);
     expect(npmLockfile).not.toContain('expo-audio');
     expect(npmLockfile).not.toContain('expo-av');
+  });
+
+  it('uses the native Sign in with Apple button instead of custom logo artwork', () => {
+    expect(loginScreen).toContain('AppleAuthentication.AppleAuthenticationButton');
+    expect(loginScreen).toContain('AppleAuthentication.AppleAuthenticationButtonType.CONTINUE');
+    expect(loginScreen).toContain('AppleAuthentication.AppleAuthenticationButtonStyle.BLACK');
+    expect(loginScreen).not.toContain('🍎');
+  });
+
+  it('does not ship the unused video module or declare background audio', () => {
+    expect(appConfig).not.toContain('"expo-video"');
+    expect(appConfig).not.toContain('supportsBackgroundPlayback');
+    expect(appConfig).not.toContain('supportsPictureInPicture');
+    expect(appConfig).not.toContain('UIBackgroundModes');
+    expect(packageJson).not.toContain('"expo-video"');
+    expect(pnpmLockfile).not.toMatch(/^\s{2}expo-video:/m);
+    expect(npmLockfile).not.toContain('expo-video');
   });
 
   it('keeps specific user-facing explanations for the protected resources that are used', () => {

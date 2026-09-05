@@ -85,10 +85,6 @@ const config: ExpoConfig = {
       },
     ],
     [
-      "expo-video",
-      { supportsBackgroundPlayback: true, supportsPictureInPicture: true },
-    ],
-    [
       "expo-splash-screen",
       {
         image: "./assets/images/splash-icon.png",

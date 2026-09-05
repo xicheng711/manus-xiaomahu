@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -124,17 +125,28 @@ export default function LoginScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.buttonSection, { opacity: contentFade, transform: [{ translateY: contentSlide }] }]}>
-          <TouchableOpacity
-            style={[styles.appleBtn, loading === 'apple' && styles.btnLoading]}
-            onPress={handleAppleLogin}
-            activeOpacity={0.92}
-            disabled={!!loading}
-          >
-            <Text style={styles.appleIcon}>🍎</Text>
-            <Text style={styles.appleText}>
-              {loading === 'apple' ? '登录中...' : '通过 Apple 继续'}
-            </Text>
-          </TouchableOpacity>
+          {Platform.OS === 'ios' ? (
+            <View
+              style={[styles.appleButtonContainer, loading === 'apple' && styles.btnLoading]}
+              pointerEvents={loading === 'apple' ? 'none' : 'auto'}
+            >
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={14}
+                style={styles.appleButton}
+                onPress={handleAppleLogin}
+              />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.appleUnavailableBtn}
+              onPress={handleAppleLogin}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.appleUnavailableText}>Apple 登录仅支持 iOS 设备</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.agreementRow}>
             <Animated.View style={{ transform: [{ scale: checkScale }] }}>
@@ -213,15 +225,20 @@ const styles = StyleSheet.create({
 
   buttonSection: { marginBottom: 24 },
 
-  appleBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#1C1C1E', borderRadius: 14,
-    paddingVertical: 16, paddingHorizontal: 20, marginBottom: 18,
+  appleButtonContainer: {
+    width: '100%',
+    marginBottom: 18,
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
   },
-  appleIcon: { fontSize: 17, marginRight: 8 },
-  appleText: { fontSize: 16, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
+  appleButton: { width: '100%', height: 52 },
+  appleUnavailableBtn: {
+    alignItems: 'center', justifyContent: 'center',
+    minHeight: 52, marginBottom: 18,
+    borderRadius: 14, borderWidth: 1, borderColor: AppColors.border.soft,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  appleUnavailableText: { fontSize: 14, color: AppColors.text.secondary, fontWeight: '500' },
   btnLoading: { opacity: 0.6 },
 
   agreementRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 4 },
