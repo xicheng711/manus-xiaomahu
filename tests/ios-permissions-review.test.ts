@@ -8,7 +8,8 @@ const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
 describe('iOS protected resource purpose strings', () => {
   const appConfig = read('app.config.ts');
   const packageJson = read('package.json');
-  const lockfile = read('pnpm-lock.yaml');
+  const pnpmLockfile = read('pnpm-lock.yaml');
+  const npmLockfile = read('package-lock.json');
 
   it('does not ship microphone capability when the app has no recording feature', () => {
     expect(appConfig).not.toContain('NSMicrophoneUsageDescription');
@@ -18,7 +19,9 @@ describe('iOS protected resource purpose strings', () => {
     expect(appConfig).toContain('locationAlwaysPermission: false');
     expect(appConfig).not.toContain('"expo-audio"');
     expect(packageJson).not.toContain('"expo-audio"');
-    expect(lockfile).not.toMatch(/^\s{2}expo-audio:/m);
+    expect(pnpmLockfile).not.toMatch(/^\s{2}expo-audio:/m);
+    expect(npmLockfile).not.toContain('expo-audio');
+    expect(npmLockfile).not.toContain('expo-av');
   });
 
   it('keeps specific user-facing explanations for the protected resources that are used', () => {
