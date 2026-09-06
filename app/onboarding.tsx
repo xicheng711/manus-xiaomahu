@@ -10,7 +10,7 @@ import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg';
 import { ScreenContainer } from '@/components/screen-container';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { saveProfile, saveUserProfile, getUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
-import { getSessionToken } from '@/lib/_core/auth';
+import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
 import { scheduleAllReminders, registerPushToken } from '@/lib/notifications';
 import { cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from "../lib/family-context";
@@ -220,12 +220,34 @@ export default function OnboardingScreen() {
   const [joinerCodeChecked, setJoinerCodeChecked] = useState(false);
   const [joinerCodeError, setJoinerCodeError] = useState('');
   const [joinerName, setJoinerName] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [isAppleAccount, setIsAppleAccount] = useState(false);
   const [joinerEmoji, setJoinerEmoji] = useState('👩');
   // joiner 不再支持照片上传，只使用 emoji 头像
   const [joinerRelationship, setJoinerRelationship] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Authentication Services supplies the user's name during Apple account
+  // creation. Adopt it automatically instead of asking for the same data again.
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([getUserInfo(), getUserProfile()]).then(([authUser, localProfile]) => {
+      if (!mounted) return;
+      const authName = authUser?.name?.trim() || '';
+      const savedName = localProfile?.caregiverName?.trim() || '';
+      const preferredName = authName || savedName || (authUser?.loginMethod === 'apple' ? 'Apple 用户' : '');
 
+      setIsAppleAccount(authUser?.loginMethod === 'apple');
+      setAccountName(preferredName);
+      if (preferredName) {
+        setCaregiverName(current => current.trim() || preferredName);
+        setJoinerName(current => current.trim() || preferredName);
+      }
+    }).catch(error => {
+      console.warn('[Onboarding] Failed to load authenticated account name:', error);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   // ── Legacy family step states (kept for compatibility) ────────
   const [familyMode, setFamilyMode] = useState<'choose' | 'join' | 'create' | 'skip'>('choose');
@@ -342,6 +364,8 @@ export default function OnboardingScreen() {
       }
     }
 
+    const resolvedCaregiverName = caregiverName.trim() || accountName || '家人';
+
     // Step 1: Create the cloud family room FIRST.
     // If this fails we abort immediately — no local data is written, so the
     // device stays in a clean state and the user can safely retry.
@@ -350,7 +374,7 @@ export default function OnboardingScreen() {
       newRoom = await createFamilyRoom(
         elderNickname || elderName || '家人',
         {
-          name: caregiverName || '家人',
+          name: resolvedCaregiverName,
           role: 'caregiver',
           roleLabel: '主要照顾者',
           emoji: '👩',
@@ -386,7 +410,7 @@ export default function OnboardingScreen() {
     // Step 2: Cloud room created successfully. Now persist all local data.
     // Write to new split models (UserProfile + FamilyProfile) as primary truth
     await saveUserProfile({
-      caregiverName: caregiverName || '家人',
+      caregiverName: resolvedCaregiverName,
       caregiverBirthYear: String(caregiverBirthYear),
       caregiverZodiacEmoji: caregiverZodiac.emoji,
       caregiverZodiacName: caregiverZodiac.name,
@@ -418,7 +442,7 @@ export default function OnboardingScreen() {
       zodiacName: elderZodiac.name,
       elderPhotoUri: finalElderPhotoUri,
       elderAvatarType,
-      caregiverName: caregiverName || '家人',
+      caregiverName: resolvedCaregiverName,
       caregiverBirthYear: String(caregiverBirthYear),
       caregiverZodiacEmoji: caregiverZodiac.emoji,
       caregiverZodiacName: caregiverZodiac.name,
@@ -470,7 +494,7 @@ export default function OnboardingScreen() {
     // Joiner 不再上传照片，只使用自选 emoji 作为头像
     const rel = joinerRelationship.trim();
     const result = await joinFamilyRoom(joinerCode.trim(), {
-      name: joinerName.trim() || '家人',
+      name: joinerName.trim() || accountName || '家人',
       role: 'family',
       roleLabel: rel || '家庭成员',
       emoji: joinerEmoji,
@@ -488,7 +512,7 @@ export default function OnboardingScreen() {
     const existingUserProfile = await getUserProfile();
     await saveUserProfile({
       ...existingUserProfile,
-      caregiverName: joinerName.trim() || '家人',
+      caregiverName: joinerName.trim() || accountName || '家人',
       caregiverPhotoUri: undefined, // joiner 不保存照片 URI
       caregiverAvatarType: 'zodiac', // 用 zodiac 类型表示 emoji模式
     });
@@ -516,11 +540,11 @@ export default function OnboardingScreen() {
     if (userType === 'joiner') {
       if (step === 2) return joinerCode.trim().length >= 6;
       if (step === 3) return true; // confirm step
-      if (step === 4) return joinerName.trim().length > 0;
+      if (step === 4) return isAppleAccount || joinerName.trim().length > 0;
     }
     // Creator path (step 2-7)
     if (step === 2) return elderName.trim().length > 0;
-    if (step === 3) return caregiverName.trim().length > 0;
+    if (step === 3) return isAppleAccount || caregiverName.trim().length > 0;
     if (step === 4) return city.length > 0;
     return true;
   }
@@ -830,18 +854,29 @@ export default function OnboardingScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              <Text style={styles.title}>您的信息</Text>
-              <Text style={styles.subtitle}>照顾者的信息</Text>
+              <Text style={styles.title}>{isAppleAccount ? '设置您的头像' : '您的信息'}</Text>
+              <Text style={styles.subtitle}>
+                {isAppleAccount ? '姓名已从登录信息中自动填写，无需重复输入' : '照顾者的信息'}
+              </Text>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>姓名</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="请输入姓名"                  value={caregiverName}
-                  onChangeText={setCaregiverName}
-                  placeholderTextColor="#9BA1A6"
-                />
-              </View>
+              {isAppleAccount ? (
+                <View style={styles.accountNameCard}>
+                  <Text style={styles.accountNameLabel}>账户姓名</Text>
+                  <Text style={styles.accountNameValue}>{caregiverName || accountName || 'Apple 用户'}</Text>
+                  <Text style={styles.accountNameHint}>稍后可在个人资料中修改</Text>
+                </View>
+              ) : (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>姓名</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="请输入姓名"
+                    value={caregiverName}
+                    onChangeText={setCaregiverName}
+                    placeholderTextColor="#9BA1A6"
+                  />
+                </View>
+              )}
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>您的出生年份</Text>
@@ -1144,20 +1179,29 @@ export default function OnboardingScreen() {
               </View>
             </View>
 
-            <Text style={[styles.title, { marginTop: 16 }]}>告诉我们您是谁</Text>
-            <Text style={[styles.subtitle, { marginBottom: 20 }]}>选一个头像，让家人认识您</Text>
+            <Text style={[styles.title, { marginTop: 16 }]}>{isAppleAccount ? '选择您的家庭头像' : '告诉我们您是谁'}</Text>
+            <Text style={[styles.subtitle, { marginBottom: 20 }]}>
+              {isAppleAccount ? '姓名已从登录信息中自动填写，只需选择头像' : '选一个头像，让家人认识您'}
+            </Text>
 
-            {/* 昵称输入 */}
-            <View style={[styles.inputGroup, { width: '100%' }]}>
-              <Text style={styles.label}>您的昵称</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="如：小红、大明、婷婷..."
-                value={joinerName}
-                onChangeText={setJoinerName}
-                placeholderTextColor="#9BA1A6"
-              />
-            </View>
+            {isAppleAccount ? (
+              <View style={[styles.accountNameCard, { width: '100%' }]}>
+                <Text style={styles.accountNameLabel}>账户姓名</Text>
+                <Text style={styles.accountNameValue}>{joinerName || accountName || 'Apple 用户'}</Text>
+                <Text style={styles.accountNameHint}>稍后可在个人资料中修改</Text>
+              </View>
+            ) : (
+              <View style={[styles.inputGroup, { width: '100%' }]}>
+                <Text style={styles.label}>您的昵称</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="如：小红、大明、婷婷..."
+                  value={joinerName}
+                  onChangeText={setJoinerName}
+                  placeholderTextColor="#9BA1A6"
+                />
+              </View>
+            )}
 
             {/* 分组 emoji 选择器 */}
             <View style={{ width: '100%', gap: 14 }}>
@@ -1353,6 +1397,13 @@ const styles = StyleSheet.create({
   featureCardLabel: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', letterSpacing: -0.2 },
   featureCardDesc: { fontSize: 11, color: AppColors.text.tertiary, textAlign: 'center', fontWeight: '500' },
   inputGroup: { width: '100%', marginBottom: 20 },
+  accountNameCard: {
+    width: '100%', marginBottom: 20, paddingVertical: 14, paddingHorizontal: 16,
+    borderRadius: 16, borderWidth: 1, borderColor: '#DDD6FE', backgroundColor: '#F5F3FF',
+  },
+  accountNameLabel: { fontSize: 12, fontWeight: '600', color: '#7C6F9B', marginBottom: 4 },
+  accountNameValue: { fontSize: 17, fontWeight: '800', color: AppColors.text.primary },
+  accountNameHint: { fontSize: 12, color: AppColors.text.tertiary, marginTop: 4 },
   label: { fontSize: 14, fontWeight: '600', color: '#687076', marginBottom: 8 },
   zodiacHint: { fontSize: 16, fontWeight: '700', color: AppColors.coral.primary, marginBottom: 8, textAlign: 'center' },
   input: {

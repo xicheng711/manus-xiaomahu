@@ -5,6 +5,12 @@ import { getSessionCookieOptions } from './_core/cookies';
 import { sdk } from './_core/sdk';
 import { getUserByOpenId, upsertUser } from './db';
 import { ENV } from './_core/env';
+import {
+  APPLE_ACCOUNT_FALLBACK_NAME,
+  formatAppleFullName,
+  normalizeProviderText,
+  resolveProviderText,
+} from '../shared/apple-auth.js';
 
 const APPLE_JWKS = createRemoteJWKSet(
   new URL('https://appleid.apple.com/auth/keys')
@@ -19,13 +25,28 @@ async function createSessionAndRespond(
   loginMethod: string,
 ) {
   const lastSignedIn = new Date();
-  await upsertUser({ openId, name, email, loginMethod, lastSignedIn });
-  const user = await getUserByOpenId(openId);
+  const existingUser = await getUserByOpenId(openId);
+  const fallbackName = loginMethod === 'apple'
+    ? APPLE_ACCOUNT_FALLBACK_NAME
+    : openId.split('_')[1]?.substring(0, 8) || openId;
+  const effectiveName = resolveProviderText(name, existingUser?.name, fallbackName);
+  const effectiveEmail = resolveProviderText(email, existingUser?.email, null, 320);
 
-  const displayName = name || openId.split('_')[1]?.substring(0, 8) || openId;
+  // Apple only supplies name/email during the initial authorization. Never
+  // replace a previously stored value with null on a later sign-in.
+  await upsertUser({
+    openId,
+    ...(normalizeProviderText(name) ? { name: effectiveName } : {}),
+    ...(normalizeProviderText(email, 320) ? { email: effectiveEmail } : {}),
+    loginMethod,
+    lastSignedIn,
+  });
+  const user = await getUserByOpenId(openId);
+  const responseName = resolveProviderText(user?.name, effectiveName, fallbackName);
+  const responseEmail = resolveProviderText(user?.email, effectiveEmail, null, 320);
 
   const sessionToken = await sdk.createSessionToken(openId, {
-    name: displayName,
+    name: responseName ?? fallbackName,
     expiresInMs: ONE_YEAR_MS,
   });
 
@@ -37,8 +58,8 @@ async function createSessionAndRespond(
     user: {
       id: user?.id ?? null,
       openId,
-      name: name ?? null,
-      email: email ?? null,
+      name: responseName,
+      email: responseEmail,
       loginMethod,
       lastSignedIn: lastSignedIn.toISOString(),
     },
@@ -132,11 +153,7 @@ export function registerAuthProviderRoutes(app: Express) {
 
       const appleOpenId = `apple_${sub}`;
       const appleEmail = email || (payload.email as string) || null;
-      let appleName: string | null = null;
-      if (fullName) {
-        const parts = [fullName.familyName, fullName.givenName].filter(Boolean);
-        appleName = parts.join('') || null;
-      }
+      const appleName = formatAppleFullName(fullName);
 
       console.log('[Apple] Login success, openId:', appleOpenId);
       await createSessionAndRespond(req, res, appleOpenId, appleName, appleEmail, 'apple');
