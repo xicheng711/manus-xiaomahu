@@ -9,6 +9,26 @@ export type AppleFullName = {
 
 export const APPLE_ACCOUNT_FALLBACK_NAME = 'Apple 用户';
 
+export function chooseOnboardingAccountName({
+  authName,
+  savedName,
+  isAppleAccount,
+  preferSavedName = false,
+}: {
+  authName: unknown;
+  savedName: unknown;
+  isAppleAccount: boolean;
+  preferSavedName?: boolean;
+}): string {
+  const normalizedAuthName = normalizeProviderText(authName);
+  const normalizedSavedName = normalizeProviderText(savedName);
+  const preferred = preferSavedName
+    ? normalizedSavedName ?? normalizedAuthName
+    : normalizedAuthName ?? normalizedSavedName;
+
+  return preferred ?? (isAppleAccount ? APPLE_ACCOUNT_FALLBACK_NAME : '');
+}
+
 export function normalizeProviderText(value: unknown, maxLength = 100): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.replace(/\s+/g, ' ').trim();

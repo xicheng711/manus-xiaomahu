@@ -15,6 +15,7 @@ import { scheduleAllReminders, registerPushToken } from '@/lib/notifications';
 import { cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from "../lib/family-context";
 import { getZodiac } from '@/lib/zodiac';
+import { chooseOnboardingAccountName } from '@/shared/apple-auth';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -233,11 +234,18 @@ export default function OnboardingScreen() {
     let mounted = true;
     Promise.all([getUserInfo(), getUserProfile()]).then(([authUser, localProfile]) => {
       if (!mounted) return;
-      const authName = authUser?.name?.trim() || '';
-      const savedName = localProfile?.caregiverName?.trim() || '';
-      const preferredName = authName || savedName || (authUser?.loginMethod === 'apple' ? 'Apple 用户' : '');
+      const appleAccount = authUser?.loginMethod === 'apple';
+      const preferredName = chooseOnboardingAccountName({
+        authName: authUser?.name,
+        savedName: localProfile?.caregiverName,
+        isAppleAccount: appleAccount,
+        // When an existing user creates another family from Profile, keep the
+        // display name they deliberately edited instead of restoring Apple's
+        // original first-authorization name.
+        preferSavedName: fromProfile,
+      });
 
-      setIsAppleAccount(authUser?.loginMethod === 'apple');
+      setIsAppleAccount(appleAccount);
       setAccountName(preferredName);
       if (preferredName) {
         setCaregiverName(current => current.trim() || preferredName);
@@ -247,7 +255,7 @@ export default function OnboardingScreen() {
       console.warn('[Onboarding] Failed to load authenticated account name:', error);
     });
     return () => { mounted = false; };
-  }, []);
+  }, [fromProfile]);
 
   // ── Legacy family step states (kept for compatibility) ────────
   const [familyMode, setFamilyMode] = useState<'choose' | 'join' | 'create' | 'skip'>('choose');

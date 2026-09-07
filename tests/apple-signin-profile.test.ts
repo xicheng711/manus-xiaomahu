@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   APPLE_ACCOUNT_FALLBACK_NAME,
+  chooseOnboardingAccountName,
   formatAppleFullName,
   normalizeProviderText,
   resolveProviderText,
@@ -29,12 +30,25 @@ describe('Sign in with Apple account data', () => {
     expect(resolveProviderText('李小红', '王小明', APPLE_ACCOUNT_FALLBACK_NAME)).toBe('李小红');
     expect(resolveProviderText(null, null, APPLE_ACCOUNT_FALLBACK_NAME)).toBe('Apple 用户');
   });
+
+  it('uses Apple name for new users but preserves an existing user’s later profile edit', () => {
+    expect(chooseOnboardingAccountName({
+      authName: '王小明', savedName: null, isAppleAccount: true,
+    })).toBe('王小明');
+    expect(chooseOnboardingAccountName({
+      authName: '王小明', savedName: '小明姐姐', isAppleAccount: true, preferSavedName: true,
+    })).toBe('小明姐姐');
+    expect(chooseOnboardingAccountName({
+      authName: null, savedName: null, isAppleAccount: true,
+    })).toBe('Apple 用户');
+  });
 });
 
 describe('Sign in with Apple onboarding review safeguards', () => {
   const clientAuth = read('lib/auth-providers.ts');
   const serverAuth = read('server/auth-providers.ts');
   const onboarding = read('app/onboarding.tsx');
+  const profile = read('app/profile.tsx');
 
   it('requests and sends the Authentication Services full name', () => {
     expect(clientAuth).toContain('AppleAuth.AppleAuthenticationScope.FULL_NAME');
@@ -49,9 +63,19 @@ describe('Sign in with Apple onboarding review safeguards', () => {
     expect(serverAuth).toContain('name: responseName');
   });
 
+  it('keeps registered users out of onboarding and preserves voluntary profile-name editing', () => {
+    expect(clientAuth).toContain('if (Array.isArray(serverRooms) && serverRooms.length > 0)');
+    expect(clientAuth).toContain("router.replace('/(tabs)' as any)");
+    expect(profile).toContain('caregiverName: draftCaregiverName.trim() || userProfile?.caregiverName ||');
+    expect(profile).toContain('cloudUpdateMemberProfile({');
+    expect(profile).toContain('name: updatedUp.caregiverName');
+  });
+
   it('automatically adopts the Apple account name and does not require another name entry', () => {
     expect(onboarding).toContain('Promise.all([getUserInfo(), getUserProfile()])');
-    expect(onboarding).toContain("setIsAppleAccount(authUser?.loginMethod === 'apple')");
+    expect(onboarding).toContain("const appleAccount = authUser?.loginMethod === 'apple'");
+    expect(onboarding).toContain('const preferredName = chooseOnboardingAccountName({');
+    expect(onboarding).toContain('preferSavedName: fromProfile');
     expect(onboarding).toContain('setCaregiverName(current => current.trim() || preferredName)');
     expect(onboarding).toContain('setJoinerName(current => current.trim() || preferredName)');
     expect(onboarding).toContain("if (step === 3) return isAppleAccount || caregiverName.trim().length > 0");
