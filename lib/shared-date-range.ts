@@ -34,6 +34,18 @@ export function resolveSharedDataAnchorDate(
   return now;
 }
 
+/**
+ * 选择家庭共享数据的“当前”记录。记录日期属于填写者的本地日历，
+ * 所以跨时区查看时允许最新有效记录比查看者本地日期领先一天。
+ */
+export function findCurrentSharedRecord<T extends { date?: string | null }>(
+  records: T[],
+  now = new Date(),
+): T | null {
+  const anchorKey = localDateKey(resolveSharedDataAnchorDate(records, now));
+  return records.find(record => record.date === anchorKey) ?? null;
+}
+
 export function buildRecentDateKeys(anchor: Date, length = 7): string[] {
   return Array.from({ length }, (_, index) => {
     const date = new Date(anchor);

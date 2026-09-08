@@ -11,7 +11,7 @@ import * as Haptics from 'expo-haptics';
 import {
   getFamilyRoom, getFamilyAnnouncements, saveFamilyRoom, cloudGetRoomDetail, saveFamilyAnnouncement,
   deleteFamilyAnnouncement, getCurrentMember, createFamilyRoom,
-  joinFamilyRoom, setCurrentMember, getTodayCheckIn, getYesterdayCheckIn,
+  joinFamilyRoom, setCurrentMember,
   getAllCheckIns, getDiaryEntries, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal,
   mergeCloudAnnouncementsIntoLocal, syncPendingAnnouncements, syncPendingBriefings,
   getProfile, getFamilyProfile, getUserProfile,
@@ -38,6 +38,7 @@ import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiac } from '@/lib/zodiac';
 import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
+import { findCurrentSharedRecord } from '@/lib/shared-date-range';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -618,7 +619,7 @@ export default function FamilyScreen() {
           nickname: cachedFamilyProfile.nickname || (allowLegacyProfileFallback ? cachedLegacyProfile?.nickname : undefined),
         }
       : allowLegacyProfileFallback ? cachedLegacyProfile : null;
-    const cachedToday = cachedCheckIns.find(checkIn => checkIn.date === todayStr()) ?? null;
+    const cachedToday = findCurrentSharedRecord(cachedCheckIns);
     const cachedHistory = buildFamilyBriefingHistory(cachedCheckIns, cachedDiaries, localAnns);
     setRoom(rLocal);
     setCurrentMemberState(m);
@@ -765,8 +766,7 @@ export default function FamilyScreen() {
       allCheckIns = Array.isArray(cloudCIs)
         ? await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId)
         : await getAllCheckIns(requestedFamilyId);
-      const todayDate = todayStr();
-      todayCheckIn = allCheckIns.find((ci: any) => ci.date === todayDate) ?? null;
+      todayCheckIn = findCurrentSharedRecord(allCheckIns);
       diaryEntries = Array.isArray(cloudDiaries)
         ? await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId)
         : await getDiaryEntries(requestedFamilyId);
@@ -774,15 +774,14 @@ export default function FamilyScreen() {
       profile = cloudProfile ?? scopedProfile ?? { nickname: requestedMembership.room.elderName };
     } else {
       // Creator: read local first, then sync from cloud in background
-      const [localToday, localAll, localDiaries, localFp, localProfile] = await Promise.all([
-        getTodayCheckIn(requestedFamilyId),
+      const [localAll, localDiaries, localFp, localProfile] = await Promise.all([
         getAllCheckIns(requestedFamilyId),
         getDiaryEntries(requestedFamilyId),
         getFamilyProfile(requestedFamilyId),
         getProfile(),
       ]);
-      todayCheckIn = localToday;
       allCheckIns = localAll;
+      todayCheckIn = findCurrentSharedRecord(localAll);
       diaryEntries = localDiaries;
       // 如果本地缓存为空（如退出登录后），立即从云端拉取数据
       if (allCheckIns.length === 0 && diaryEntries.length === 0) {
@@ -793,8 +792,7 @@ export default function FamilyScreen() {
           ]);
           if (Array.isArray(cloudCIs)) {
             allCheckIns = await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId);
-            const todayDate = todayStr();
-            todayCheckIn = allCheckIns.find((c: any) => c.date === todayDate) ?? null;
+            todayCheckIn = findCurrentSharedRecord(allCheckIns);
           }
           if (Array.isArray(cloudDiaries)) {
             diaryEntries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { buildRecentDateKeys, localDateKey, resolveSharedDataAnchorDate } from "../lib/shared-date-range";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildRecentDateKeys, findCurrentSharedRecord, localDateKey, resolveSharedDataAnchorDate } from "../lib/shared-date-range";
 
 /**
  * Tests for trend chart data preparation and share card logic.
@@ -113,6 +115,41 @@ describe("Cross-timezone shared record range", () => {
       "2026-09-01", "2026-08-31", "2026-08-30", "2026-08-29",
       "2026-08-28", "2026-08-27", "2026-08-26",
     ]);
+  });
+
+  it("keeps a Beijing caregiver’s completed evening record selected after a New York viewer refreshes", () => {
+    const newYorkNow = new Date(2026, 7, 31, 11, 0, 0);
+    const cachedRecords = [
+      { date: "2026-09-01", morningDone: true, eveningDone: true, eveningNotes: "晚间已完成" },
+      { date: "2026-08-31", morningDone: true, eveningDone: false },
+    ];
+    const refreshedRecords = [...cachedRecords];
+
+    // The viewer's local 8/31 must not replace the caregiver's 9/1
+    // record simply because the viewer is in an earlier time zone.
+    expect(findCurrentSharedRecord(cachedRecords, newYorkNow)).toMatchObject({
+      date: "2026-09-01", eveningDone: true, eveningNotes: "晚间已完成",
+    });
+    expect(findCurrentSharedRecord(refreshedRecords, newYorkNow)).toMatchObject({
+      date: "2026-09-01", eveningDone: true, eveningNotes: "晚间已完成",
+    });
+  });
+
+  it("keeps viewer today as the selected record when no caregiver record is ahead", () => {
+    const now = new Date(2026, 7, 31, 23, 0, 0);
+    const selected = findCurrentSharedRecord([
+      { date: "2026-08-31", eveningDone: true },
+      { date: "2026-08-30", eveningDone: true },
+    ], now);
+    expect(selected).toMatchObject({ date: "2026-08-31", eveningDone: true });
+  });
+
+  it("uses the shared date selector for both cached and refreshed family check-ins", () => {
+    const familyScreen = readFileSync(resolve(__dirname, "../app/(tabs)/family.tsx"), "utf8");
+    expect(familyScreen).toContain("const cachedToday = findCurrentSharedRecord(cachedCheckIns)");
+    expect(familyScreen).toContain("todayCheckIn = findCurrentSharedRecord(allCheckIns)");
+    expect(familyScreen).toContain("todayCheckIn = findCurrentSharedRecord(localAll)");
+    expect(familyScreen).not.toContain("todayCheckIn = allCheckIns.find((ci: any) => ci.date === todayDate)");
   });
 
   it("ignores corrupted records farther than one calendar day in the future", () => {
