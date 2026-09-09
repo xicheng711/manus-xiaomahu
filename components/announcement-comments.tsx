@@ -28,6 +28,8 @@ type Props = {
   announcementAuthorName: string;
   onInputFocus?: (nativeHandle: number | null) => void;
   onInputBlur?: () => void;
+  /** Keeps the collapsed announcement card's count and latest-comment preview current. */
+  onCommentsUpdated?: (comments: AnnouncementComment[]) => void;
 };
 
 function localTimeStr(): string {
@@ -76,6 +78,7 @@ export function AnnouncementComments({
   announcementAuthorName,
   onInputFocus,
   onInputBlur,
+  onCommentsUpdated,
 }: Props) {
   const [comments, setComments] = useState<AnnouncementComment[]>([]);
   const [commentText, setCommentText] = useState('');
@@ -84,6 +87,7 @@ export function AnnouncementComments({
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const commentsRef = useRef<AnnouncementComment[]>([]);
   const scopeKey = `${roomId}:${announcementId}`;
   const scopeKeyRef = useRef(scopeKey);
   const pendingClientIdRef = useRef<string | null>(null);
@@ -93,6 +97,13 @@ export function AnnouncementComments({
     void cacheAnnouncementComments(String(roomId), announcementId, next).catch(() => {});
   }, [announcementId, roomId]);
 
+  const replaceComments = useCallback((next: AnnouncementComment[]) => {
+    commentsRef.current = next;
+    setComments(next);
+    saveCache(next);
+    onCommentsUpdated?.(next);
+  }, [onCommentsUpdated, saveCache]);
+
   const loadComments = useCallback(async () => {
     const requestedScope = `${roomId}:${announcementId}`;
     setLoading(true);
@@ -101,7 +112,7 @@ export function AnnouncementComments({
       if (scopeKeyRef.current !== requestedScope) return;
       if (cached.length > 0) {
         // canDelete is tied to the authenticated user and must be refreshed from the server.
-        setComments(cached.map(item => ({ ...normalizeComment(item), canDelete: false })));
+        replaceComments(cached.map(item => ({ ...normalizeComment(item), canDelete: false })));
         setLoading(false);
       }
 
@@ -110,8 +121,7 @@ export function AnnouncementComments({
       setLoadFailed(result.loadFailed);
       if (!result.loadFailed) {
         const next = (Array.isArray(result.comments) ? result.comments : []).map(normalizeComment);
-        setComments(next);
-        saveCache(next);
+        replaceComments(next);
       }
     } catch (error) {
       if (scopeKeyRef.current === requestedScope) {
@@ -121,9 +131,10 @@ export function AnnouncementComments({
     } finally {
       if (scopeKeyRef.current === requestedScope) setLoading(false);
     }
-  }, [announcementId, roomId, saveCache]);
+  }, [announcementId, replaceComments, roomId]);
 
   useEffect(() => {
+    commentsRef.current = [];
     setComments([]);
     setCommentText('');
     setLoadFailed(false);
@@ -161,15 +172,11 @@ export function AnnouncementComments({
       return;
     }
     const sent = normalizeComment(result.comment);
-    setComments(current => {
-      const withoutDuplicate = current.filter(item => item.id !== sent.id && item.clientId !== sent.clientId);
-      const next = [...withoutDuplicate, sent];
-      saveCache(next);
-      return next;
-    });
+    const withoutDuplicate = commentsRef.current.filter(item => item.id !== sent.id && item.clientId !== sent.clientId);
+    replaceComments([...withoutDuplicate, sent]);
     setCommentText('');
     pendingClientIdRef.current = null;
-  }, [announcementId, commentText, roomId, saveCache, sending]);
+  }, [announcementId, commentText, replaceComments, roomId, sending]);
 
   const handleDelete = useCallback((comment: AnnouncementComment) => {
     if (!comment.canDelete || deletingId !== null) return;
@@ -188,18 +195,14 @@ export function AnnouncementComments({
               Alert.alert('删除没有成功', '请检查网络后重试，评论仍然保留。');
               return;
             }
-            setComments(current => {
-              const next = current.filter(item => item.id !== comment.id);
-              saveCache(next);
-              return next;
-            });
+            replaceComments(commentsRef.current.filter(item => item.id !== comment.id));
           } finally {
             if (scopeKeyRef.current === requestedScope) setDeletingId(null);
           }
         },
       },
     ]);
-  }, [announcementId, deletingId, roomId, saveCache]);
+  }, [announcementId, deletingId, replaceComments, roomId]);
 
   return (
     <View style={styles.section}>

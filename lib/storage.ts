@@ -296,6 +296,17 @@ export interface AnnouncementComment {
   canDelete?: boolean;
 }
 
+export interface AnnouncementCommentPreview {
+  id: number;
+  authorUserId: number;
+  authorName: string;
+  authorEmoji: string;
+  content: string;
+  date: string;
+  localTimeStr: string;
+  createdAt: string | Date;
+}
+
 export interface FamilyAnnouncement {
   id: string;
   /** 云端公告主键；本地 id 保持稳定，避免同步后列表 key 跳变。 */
@@ -313,6 +324,9 @@ export interface FamilyAnnouncement {
   date: string;        // YYYY-MM-DD
   localTimeStr?: string; // HH:MM — 发布者本地时间，避免时区偏差
   reactions?: AnnouncementReaction[];
+  /** 评论摘要随当前家庭的公告列表一并加载，避免每张卡片单独请求完整评论。 */
+  commentCount?: number;
+  latestComment?: AnnouncementCommentPreview | null;
 }
 
 export interface FamilyRoom {
@@ -2105,6 +2119,14 @@ function normalizeCloudAnnouncement(raw: any, local?: FamilyAnnouncement): Famil
     localTimeStr: raw.localTimeStr ?? local?.localTimeStr,
     createdAt,
     reactions: Array.isArray(raw.reactions) ? raw.reactions : (local?.reactions ?? []),
+    commentCount: typeof raw.commentCount === 'number'
+      ? Math.max(0, Math.floor(raw.commentCount))
+      : (local?.commentCount ?? 0),
+    latestComment: raw.latestComment
+      ? raw.latestComment
+      : raw.commentCount === 0
+        ? null
+        : (local?.latestComment ?? null),
   };
 }
 

@@ -15,7 +15,7 @@ import {
   getAllCheckIns, getDiaryEntries, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal,
   mergeCloudAnnouncementsIntoLocal, syncPendingAnnouncements, syncPendingBriefings,
   getProfile, getFamilyProfile, getUserProfile,
-  FamilyAnnouncement, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
+  FamilyAnnouncement, AnnouncementComment, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
   getActiveRoomIdCache, getActiveMembership, removeCachedAnnouncementComments,
 } from '@/lib/storage';
@@ -1614,6 +1614,10 @@ function AnnouncementCard({
   const [showPicker, setShowPicker] = useState(false);
   const [showReactorsFor, setShowReactorsFor] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [liveCommentSummary, setLiveCommentSummary] = useState<{
+    commentCount: number;
+    latestComment: FamilyAnnouncement['latestComment'];
+  } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const deleteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const announcementId = ann.serverAnnouncementId
@@ -1629,6 +1633,51 @@ function AnnouncementCard({
 
   useEffect(() => () => {
     if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+  }, []);
+
+  // A server refresh is authoritative for comments written by other family members.
+  // Keep the immediate local summary only until the announcement's remote summary changes.
+  const remoteCommentSignature = `${ann.commentCount ?? 0}:${ann.latestComment?.id ?? ''}`;
+  useEffect(() => {
+    setLiveCommentSummary(null);
+  }, [remoteCommentSignature]);
+
+  const commentCount = liveCommentSummary?.commentCount ?? ann.commentCount ?? 0;
+  const latestComment = liveCommentSummary?.latestComment ?? ann.latestComment ?? null;
+
+  function toggleComments() {
+    if (!roomId || !announcementId) {
+      Alert.alert('公告正在同步', '公告同步完成后就可以写评论了。');
+      return;
+    }
+    if (commentsOpen) Keyboard.dismiss();
+    setCommentsOpen(open => !open);
+    setShowPicker(false);
+    setShowReactorsFor(null);
+  }
+
+  const handleCommentsUpdated = useCallback((comments: AnnouncementComment[]) => {
+    const latest = comments.reduce<AnnouncementComment | null>((newest, comment) => {
+      if (!newest) return comment;
+      const newestTime = new Date(newest.createdAt).getTime();
+      const commentTime = new Date(comment.createdAt).getTime();
+      if (Number.isFinite(commentTime) && (!Number.isFinite(newestTime) || commentTime > newestTime)) return comment;
+      if (commentTime === newestTime && comment.id > newest.id) return comment;
+      return newest;
+    }, null);
+    setLiveCommentSummary({
+      commentCount: comments.length,
+      latestComment: latest ? {
+        id: latest.id,
+        authorUserId: latest.authorUserId,
+        authorName: latest.authorName,
+        authorEmoji: latest.authorEmoji,
+        content: latest.content,
+        date: latest.date,
+        localTimeStr: latest.localTimeStr,
+        createdAt: latest.createdAt,
+      } : null,
+    });
   }, []);
 
   function handleDeletePress() {
@@ -1721,23 +1770,28 @@ function AnnouncementCard({
             </TouchableOpacity>
             <TouchableOpacity
               style={[card.commentToggleBtn, commentsOpen && card.commentToggleBtnActive]}
-              onPress={() => {
-                if (!roomId || !announcementId) {
-                  Alert.alert('公告正在同步', '公告同步完成后就可以写评论了。');
-                  return;
-                }
-                if (commentsOpen) Keyboard.dismiss();
-                setCommentsOpen(open => !open);
-                setShowPicker(false);
-                setShowReactorsFor(null);
-              }}
+              onPress={toggleComments}
               activeOpacity={0.75}
             >
               <Text style={[card.commentToggleText, commentsOpen && card.commentToggleTextActive]}>
-                💬 {commentsOpen ? '收起' : '评论'}
+                💬 {commentsOpen ? '收起' : commentCount > 0 ? `${commentCount} 条评论` : '评论'}
               </Text>
             </TouchableOpacity>
           </View>
+
+          {commentCount > 0 && !commentsOpen ? (
+            <TouchableOpacity style={card.commentPreview} onPress={toggleComments} activeOpacity={0.78}>
+              <View style={card.commentPreviewHeader}>
+                <Text style={card.commentPreviewCount}>💬 {commentCount} 条评论</Text>
+                <Text style={card.commentPreviewOpen}>查看全部 ›</Text>
+              </View>
+              {latestComment ? (
+                <Text style={card.commentPreviewText} numberOfLines={2}>
+                  {latestComment.authorEmoji || '👤'} {latestComment.authorName || '家人'}：{latestComment.content}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+          ) : null}
 
           {/* ── Emoji picker ── */}
           {showPicker && (
@@ -1783,6 +1837,7 @@ function AnnouncementCard({
               announcementAuthorName={ann.authorName}
               onInputFocus={onCommentInputFocus}
               onInputBlur={onCommentInputBlur}
+              onCommentsUpdated={handleCommentsUpdated}
             />
           ) : null}
         </View>
@@ -2026,6 +2081,19 @@ const card = StyleSheet.create({
   commentToggleBtnActive: { backgroundColor: '#FEF0F4', borderColor: '#EDAABB' },
   commentToggleText: { fontSize: 11, color: AppColors.text.secondary, fontWeight: '700' },
   commentToggleTextActive: { color: '#B8426A' },
+  commentPreview: {
+    marginTop: 9,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: '#FCF7F8',
+    borderWidth: 1,
+    borderColor: '#F0DDE4',
+  },
+  commentPreviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  commentPreviewCount: { fontSize: 12, fontWeight: '800', color: '#9D4861' },
+  commentPreviewOpen: { fontSize: 11, fontWeight: '700', color: '#B8426A' },
+  commentPreviewText: { marginTop: 5, fontSize: 12, lineHeight: 18, color: '#695B60' },
   pickerRow: {
     flexDirection: 'row', gap: 6, marginTop: 8,
     backgroundColor: AppColors.surface.whiteStrong,

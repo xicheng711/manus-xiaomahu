@@ -14,7 +14,7 @@ import {
   createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
   getDiaryEntryByClientId, getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
   deleteDiaryCommentByAuthor, getDiaryInteractionSummaries,
-  createAnnouncement, getAnnouncementByClientId, getAnnouncementsByRoom, getAnnouncementById,
+  createAnnouncement, getAnnouncementByClientId, getAnnouncementsByRoom, getAnnouncementCommentSummaries, getAnnouncementById,
   getAnnouncementComments, addAnnouncementComment, deleteAnnouncementCommentByAuthor,
   deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
@@ -849,18 +849,32 @@ export const familyRouter = router({
     .query(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       await requireRoomMember(userId, input.roomId);
-      const [rows, members] = await Promise.all([
-        getAnnouncementsByRoom(input.roomId, input.limit),
+      const rows = await getAnnouncementsByRoom(input.roomId, input.limit);
+      const [members, commentSummaries] = await Promise.all([
         getRoomMembers(input.roomId),
+        getAnnouncementCommentSummaries(input.roomId, rows.map(row => row.id)),
       ]);
       const memberByUserId = new Map(members.map(member => [member.userId, member]));
+      const commentSummaryByAnnouncementId = new Map(
+        commentSummaries.map(summary => [summary.announcementId, summary]),
+      );
       return rows.map(row => {
         const author = memberByUserId.get(row.authorUserId);
+        const summary = commentSummaryByAnnouncementId.get(row.id);
+        const latestComment = summary?.latestComment;
         return {
           ...row,
           authorId: author ? String(author.id) : String(row.authorUserId),
           // 历史公告按当前家庭成员资料显示，避免旧女性/默认 Emoji 固化在界面上。
           authorEmoji: getMemberDisplayEmoji(author, row.authorEmoji || '👤'),
+          commentCount: summary?.commentCount ?? 0,
+          latestComment: latestComment ? {
+            ...latestComment,
+            authorEmoji: getMemberDisplayEmoji(
+              memberByUserId.get(latestComment.authorUserId),
+              latestComment.authorEmoji || '👤',
+            ),
+          } : null,
         };
       });
     }),

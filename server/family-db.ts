@@ -391,6 +391,41 @@ export async function getAnnouncementsByRoom(roomId: number, limit = 50) {
     .limit(limit);
 }
 
+/**
+ * Load compact comment metadata for a set of visible announcements in one room-scoped query.
+ * Full comment threads remain on-demand; this only powers the card-level count and newest preview.
+ */
+export async function getAnnouncementCommentSummaries(roomId: number, announcementIds: number[]) {
+  const db = await getDb();
+  const ids = [...new Set(announcementIds.filter(id => Number.isFinite(id)))];
+  if (!db || ids.length === 0) return [];
+  const comments = await db.select().from(announcementComments)
+    .where(and(
+      eq(announcementComments.roomId, roomId),
+      inArray(announcementComments.announcementId, ids),
+    ))
+    .orderBy(desc(announcementComments.createdAt), desc(announcementComments.id));
+
+  const countByAnnouncementId = new Map<number, number>();
+  const newestByAnnouncementId = new Map<number, typeof comments[number]>();
+  for (const comment of comments) {
+    countByAnnouncementId.set(
+      comment.announcementId,
+      (countByAnnouncementId.get(comment.announcementId) ?? 0) + 1,
+    );
+    // Rows are newest-first, so retain the first comment for the compact preview.
+    if (!newestByAnnouncementId.has(comment.announcementId)) {
+      newestByAnnouncementId.set(comment.announcementId, comment);
+    }
+  }
+
+  return ids.map(announcementId => ({
+    announcementId,
+    commentCount: countByAnnouncementId.get(announcementId) ?? 0,
+    latestComment: newestByAnnouncementId.get(announcementId) ?? null,
+  }));
+}
+
 export async function getAnnouncementById(roomId: number, announcementId: number) {
   const db = await getDb();
   if (!db) return null;

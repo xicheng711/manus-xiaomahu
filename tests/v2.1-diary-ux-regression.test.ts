@@ -926,14 +926,28 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
     expect(familyDb).toContain('Announcement comment clientId belongs to another user');
   });
 
-  it('keeps the plus reaction picker and loads text comments only after one card is expanded', () => {
+  it('keeps the plus reaction picker while showing a compact comment count and newest preview before expansion', () => {
     expect(familyPage).toContain("const REACTION_EMOJIS = ['👍', '❤️', '👏', '🙏', '😢', '✨']");
     expect(familyPage).toContain("{showPicker ? '✕' : '＋'}");
-    expect(familyPage).toContain("💬 {commentsOpen ? '收起' : '评论'}");
+    expect(familyPage).toContain("commentCount > 0 ? `${commentCount} 条评论` : '评论'");
+    expect(familyPage).toContain('commentCount > 0 && !commentsOpen ? (');
+    expect(familyPage).toContain('latestComment.authorName || \'家人\'');
+    expect(familyPage).toContain('查看全部 ›');
     expect(familyPage).toContain('commentsOpen && roomId && announcementId ? (');
     expect(familyPage).toContain('<AnnouncementComments');
+    expect(familyPage).toContain('onCommentsUpdated={handleCommentsUpdated}');
     expect(familyPage).not.toContain('cloudGetAnnouncementComments(');
     expect(comments).toContain('cloudGetAnnouncementComments(announcementId, roomId)');
+  });
+
+  it('returns room-scoped announcement comment summaries in the list response without loading every full thread', () => {
+    expect(familyDb).toContain('export async function getAnnouncementCommentSummaries(roomId: number, announcementIds: number[])');
+    expect(familyDb).toContain('inArray(announcementComments.announcementId, ids)');
+    expect(familyRouter).toContain('getAnnouncementCommentSummaries(input.roomId, rows.map(row => row.id))');
+    expect(familyRouter).toContain('commentCount: summary?.commentCount ?? 0');
+    expect(familyRouter).toContain('latestComment: latestComment ? {');
+    expect(storage).toContain('commentCount?: number;');
+    expect(storage).toContain('latestComment?: AnnouncementCommentPreview | null;');
   });
 
   it('uses a room-scoped cache and never lets cached delete permission cross accounts', () => {
@@ -941,6 +955,8 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
     expect(storage).toContain('roomKey(KEYS.ANNOUNCEMENT_COMMENTS, roomId)');
     expect(comments).toContain('canDelete is tied to the authenticated user and must be refreshed from the server');
     expect(comments).toContain('canDelete: false');
+    expect(comments).toContain('const commentsRef = useRef<AnnouncementComment[]>([])');
+    expect(comments).toContain('onCommentsUpdated?.(next)');
     expect(cloudSync).toContain('cloudGetAnnouncementComments(announcementId: number, roomId: number)');
   });
 
