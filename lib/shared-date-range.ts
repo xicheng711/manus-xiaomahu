@@ -2,6 +2,38 @@ export function localDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Announcements are point-in-time events. Unlike a caregiver's daily check-in,
+ * they should appear under the calendar day of the person currently viewing them.
+ * Prefer the absolute creation time and retain the author-entered date only as a
+ * safe legacy fallback for old records without a valid timestamp.
+ */
+/**
+ * A care day closes at 05:00 rather than 00:00. This lets a caregiver finish an
+ * evening check-in shortly after midnight without splitting one day's morning
+ * and evening records into separate calendar entries.
+ */
+export function getCareDayKey(now = new Date(), rolloverHour = 5): string {
+  const careDay = new Date(now);
+  if (careDay.getHours() < rolloverHour) careDay.setDate(careDay.getDate() - 1);
+  return localDateKey(careDay);
+}
+
+export function getAnnouncementViewerDateKey(
+  announcement: { createdAt?: string | Date | null; date?: string | null },
+  now = new Date(),
+): string {
+  const createdAt = announcement.createdAt;
+  const timestamp = createdAt instanceof Date
+    ? createdAt
+    : typeof createdAt === 'string'
+      ? new Date(createdAt)
+      : null;
+  if (timestamp && Number.isFinite(timestamp.getTime())) return localDateKey(timestamp);
+  const legacyDate = announcement.date ?? '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(legacyDate) ? legacyDate : localDateKey(now);
+}
+
 export function parseDateKeyAtNoon(key: string): Date | null {
   const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;

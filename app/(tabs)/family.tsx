@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Animated, Platform, Alert, Share, Modal, Easing,
+  StyleSheet, Animated, Platform, Alert, Share, Modal,
   Keyboard, TouchableWithoutFeedback, Clipboard, KeyboardAvoidingView, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import {
   FamilyAnnouncement, AnnouncementComment, AnnouncementReaction, FamilyMember, FamilyRoom, DailyCheckIn,
   updateFamilyMemberPhoto, getCurrentUserIsCreator, todayStr,
   getActiveRoomIdCache, getActiveMembership, removeCachedAnnouncementComments,
+  toggleAnnouncementReaction, setAnnouncementReactionSnapshot,
 } from '@/lib/storage';
 import { cloudDeleteAnnouncement, cloudToggleReaction, cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from '@/lib/family-context';
@@ -38,7 +39,7 @@ import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiac } from '@/lib/zodiac';
 import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
-import { findCurrentSharedRecord } from '@/lib/shared-date-range';
+import { findCurrentSharedRecord, getAnnouncementViewerDateKey } from '@/lib/shared-date-range';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -460,7 +461,7 @@ function buildFamilyBriefingHistory(
       label,
       checkIn: checkInMap.get(dateKey) ?? null,
       diary: diaryEntries.find(entry => entry.date === dateKey),
-      announcements: announcements.filter(announcement => announcement.date === dateKey),
+      announcements: announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === dateKey),
     });
   }
   return history;
@@ -496,11 +497,8 @@ export default function FamilyScreen() {
   const [elderEmoji, setElderEmoji] = useState('🐯');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const fabBreath = useRef(new Animated.Value(1)).current;
   const {
     scrollRef,
-    keyboardVisible,
-    inputFocused: commentInputFocused,
     revealInput: revealCommentInput,
     blurInput: handleCommentInputBlur,
     onScrollLayout: handleCommentScrollLayout,
@@ -575,15 +573,6 @@ export default function FamilyScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.refresh]);
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(fabBreath, { toValue: 1.07, duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(fabBreath, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-
   async function loadData(forceCloudRefresh = false) {
     const requestedMembership = activeMembership;
     const requestedFamilyId = requestedMembership?.familyId;
@@ -628,7 +617,7 @@ export default function FamilyScreen() {
     setBriefingData({
       checkIn: cachedToday,
       profile: cachedProfile,
-      todayAnnouncements: localAnns.filter(announcement => announcement.date === todayStr()),
+      todayAnnouncements: localAnns.filter(announcement => getAnnouncementViewerDateKey(announcement) === todayStr()),
     });
     setBriefingHistory(cachedHistory);
     const cachedLatestWithData = cachedHistory.find(item => item.checkIn) ?? cachedHistory[0];
@@ -812,8 +801,12 @@ export default function FamilyScreen() {
         : allowLegacyProfileFallback ? localProfile : null;
     }
     if (!isCurrentFamily()) return;
-    const today = todayStr();
-    setBriefingData({ checkIn: todayCheckIn, profile, todayAnnouncements: a.filter(ann => ann.date === today) });
+    const viewerToday = todayStr();
+    setBriefingData({
+      checkIn: todayCheckIn,
+      profile,
+      todayAnnouncements: a.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday),
+    });
     setElderNickname(profile?.nickname || profile?.name || r?.elderName || '家人');
     setElderEmoji(profile?.zodiacEmoji || '🐯');
 
@@ -895,6 +888,63 @@ export default function FamilyScreen() {
     await loadData();
   }
 
+  const handleAnnouncementReaction = useCallback(async (announcement: FamilyAnnouncement, emoji: string) => {
+    const requestedFamilyId = familyId;
+    const reactingMember = currentMember;
+    const numericRoomId = requestedFamilyId ? Number(requestedFamilyId) : NaN;
+    const numericAnnouncementId = announcement.serverAnnouncementId
+      ?? (/^\d+$/.test(String(announcement.id)) ? Number(announcement.id) : NaN);
+    if (!reactingMember || !Number.isFinite(numericRoomId) || !Number.isFinite(numericAnnouncementId)) {
+      Alert.alert('公告正在同步', '公告同步完成后就可以添加表情回应。');
+      return;
+    }
+
+    // Render and persist the local response first; the server response below remains authoritative.
+    const optimistic = await toggleAnnouncementReaction(
+      announcement.id,
+      emoji,
+      {
+        memberId: reactingMember.id,
+        memberName: reactingMember.name,
+        memberEmoji: getMemberDisplayEmoji(reactingMember),
+      },
+      requestedFamilyId,
+    );
+    if (!optimistic || activeFamilyRef.current !== requestedFamilyId) return;
+    setAnnouncements(current => current.map(item => item.id === announcement.id ? optimistic : item));
+
+    const result = await cloudToggleReaction(numericAnnouncementId, emoji, numericRoomId);
+    if (activeFamilyRef.current !== requestedFamilyId) return;
+    if (result?.success && Array.isArray(result.reactions)) {
+      const confirmed = await setAnnouncementReactionSnapshot(
+        announcement.id,
+        result.reactions as AnnouncementReaction[],
+        requestedFamilyId,
+      );
+      if (confirmed && activeFamilyRef.current === requestedFamilyId) {
+        setAnnouncements(current => current.map(item => item.id === announcement.id ? confirmed : item));
+      }
+      return;
+    }
+
+    // The server did not confirm the action. Revert the optimistic state so the UI never claims
+    // a reaction was shared when it may not have reached the rest of the family.
+    const reverted = await toggleAnnouncementReaction(
+      announcement.id,
+      emoji,
+      {
+        memberId: reactingMember.id,
+        memberName: reactingMember.name,
+        memberEmoji: getMemberDisplayEmoji(reactingMember),
+      },
+      requestedFamilyId,
+    );
+    if (reverted && activeFamilyRef.current === requestedFamilyId) {
+      setAnnouncements(current => current.map(item => item.id === announcement.id ? reverted : item));
+    }
+    Alert.alert('表情回应未同步', '网络暂时不可用，请稍后再试。');
+  }, [currentMember, familyId]);
+
   async function handleShareBriefing() {
     // Get the selected date's briefing item
     const selectedItem = briefingHistory.find(item => item.date === selectedBriefingDate);
@@ -970,8 +1020,9 @@ export default function FamilyScreen() {
     ANNOUNCEMENT_TYPES.find(t => t.type === type) ?? ANNOUNCEMENT_TYPES[0];
   const memberEmojiById = getMemberEmojiById(room.members);
 
-  const todayAnnouncements = announcements.filter(a => a.date === todayStr());
-  const olderAnnouncements = announcements.filter(a => a.date !== todayStr());
+  const viewerToday = todayStr();
+  const todayAnnouncements = announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday);
+  const olderAnnouncements = announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) !== viewerToday);
   const targetAnnouncementId = params.openComments === '1' && params.announcementId
     ? Number(params.announcementId)
     : null;
@@ -1081,7 +1132,7 @@ export default function FamilyScreen() {
         onLayout={handleCommentScrollLayout}
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(120, insets.bottom + 110) }}
+        contentContainerStyle={{ paddingBottom: Math.max(140, insets.bottom + 110) }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#B07858" colors={['#B07858']} />}
@@ -1093,7 +1144,12 @@ export default function FamilyScreen() {
             {/* Today's announcements */}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>今日公告</Text>
-              <Text style={styles.sectionCount}>{todayAnnouncements.length} 条</Text>
+              <View style={styles.sectionHeaderActions}>
+                <Text style={styles.sectionCount}>{todayAnnouncements.length} 条</Text>
+                <TouchableOpacity style={styles.inlinePostButton} onPress={() => setShowCompose(true)} activeOpacity={0.8}>
+                  <Text style={styles.inlinePostButtonText}>＋ 发布</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {todayAnnouncements.length === 0 ? (
@@ -1118,23 +1174,7 @@ export default function FamilyScreen() {
                   onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
                   onCommentInputFocus={revealCommentInput}
                   onCommentInputBlur={handleCommentInputBlur}
-                  onReactionToggle={async (emoji) => {
-                    if (!currentMember) return;
-                    // Server-first: toggle reaction on server, then refresh from cloud
-                    const numericAnnId = ann.serverAnnouncementId ?? (/^\d+$/.test(String(ann.id)) ? Number(ann.id) : null);
-                    const numericRoomId = familyId ? parseInt(familyId) : undefined;
-                    if (!numericAnnId) {
-                      Alert.alert('公告正在同步', '请稍后再添加表情回应。');
-                      return;
-                    }
-                    const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
-                    if (result === null) {
-                      Alert.alert('操作失败', '无法同步表情，请稍后重试');
-                      return;
-                    }
-                    // User-triggered mutation must bypass the short tab-focus refresh throttle.
-                    await loadData(true);
-                  }}
+                  onReactionToggle={(emoji) => handleAnnouncementReaction(ann, emoji)}
                 />
               ))
             )}
@@ -1159,21 +1199,7 @@ export default function FamilyScreen() {
                     onLayoutY={(y) => handleAnnouncementLayout(ann, y)}
                     onCommentInputFocus={revealCommentInput}
                     onCommentInputBlur={handleCommentInputBlur}
-                    onReactionToggle={async (emoji) => {
-                      if (!currentMember) return;
-                      // Server-first: toggle reaction on server, then refresh from cloud
-                      const numericAnnId = ann.serverAnnouncementId ?? parseInt(String(ann.id));
-                      const numericRoomId = familyId ? parseInt(familyId) : undefined;
-                      if (!isNaN(numericAnnId)) {
-                        const result = await cloudToggleReaction(numericAnnId, emoji, numericRoomId);
-                        if (result === null) {
-                          Alert.alert('操作失败', '无法同步表情，请稍后重试');
-                          return;
-                        }
-                      }
-                      // Reload from cloud so both creator and joiner see updated reactions
-                      await loadData();
-                    }}
+                  onReactionToggle={(emoji) => handleAnnouncementReaction(ann, emoji)}
                   />
                 ))}
               </>
@@ -1335,19 +1361,6 @@ export default function FamilyScreen() {
         )}
       </ScrollView>
 
-      {/* Compose FAB — round circle, bottom-right, anyone can post */}
-      {activeSection === 'broadcast' && !keyboardVisible && !commentInputFocused && (
-        <Animated.View style={[styles.fabWrap, { bottom: insets.bottom + 16, transform: [{ scale: fabBreath }] }]}>
-          <TouchableOpacity
-            style={styles.fabBtn}
-            onPress={() => setShowCompose(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.fabIcon}>📢</Text>
-            <Text style={styles.fabLabel}>发布公告</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
 
       {/* Compose Modal */}
       <Modal visible={showCompose} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => !isPostingAnnouncement && setShowCompose(false)}>
@@ -1614,6 +1627,7 @@ function AnnouncementCard({
   const [showPicker, setShowPicker] = useState(false);
   const [showReactorsFor, setShowReactorsFor] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [reactionPending, setReactionPending] = useState(false);
   const [liveCommentSummary, setLiveCommentSummary] = useState<{
     commentCount: number;
     latestComment: FamilyAnnouncement['latestComment'];
@@ -1693,34 +1707,36 @@ function AnnouncementCard({
     }
   }
 
-  // 优先使用 localTimeStr（发布者本地时间），避免服务端时区导致的时间偏差
-  // fallback 到 createdAt（兼容旧公告）
-  let time: string;
-  if ((ann as any).localTimeStr) {
-    time = (ann as any).localTimeStr;
-  } else {
-    const _annDate = new Date(String(ann.createdAt));
-    time = isNaN(_annDate.getTime())
-      ? '--:--'
-      : `${String(_annDate.getHours()).padStart(2, '0')}:${String(_annDate.getMinutes()).padStart(2, '0')}`;
-  }
-  // ann.date 是发布者设备保存的日历日期，不能用 new Date('YYYY-MM-DD') 按 UTC 解析。
+  // 公告是即时事件：所有人按自己设备所在时区查看发布时间和“今日”归属。
+  // date/localTimeStr 只用于没有有效 createdAt 的历史记录兜底。
+  const publishedAt = new Date(String(ann.createdAt));
+  const hasPublishedAt = Number.isFinite(publishedAt.getTime());
   const dateMatch = ann.date?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const currentYear = String(new Date().getFullYear());
-  const date = dateMatch
-    ? `${dateMatch[1] === currentYear ? '' : `${dateMatch[1]}/`}${Number(dateMatch[2])}/${Number(dateMatch[3])} `
-    : `${ann.date || ''}${ann.date ? ' ' : ''}`;
+  const date = hasPublishedAt
+    ? `${publishedAt.getFullYear() === Number(currentYear) ? '' : `${publishedAt.getFullYear()}/`}${publishedAt.getMonth() + 1}/${publishedAt.getDate()} `
+    : dateMatch
+      ? `${dateMatch[1] === currentYear ? '' : `${dateMatch[1]}/`}${Number(dateMatch[2])}/${Number(dateMatch[3])} `
+      : `${ann.date || ''}${ann.date ? ' ' : ''}`;
+  const time = hasPublishedAt
+    ? `${String(publishedAt.getHours()).padStart(2, '0')}:${String(publishedAt.getMinutes()).padStart(2, '0')}`
+    : (ann.localTimeStr || '--:--');
 
   const reactions = ann.reactions ?? [];
   const myId = currentMember?.id ?? '';
   const authorEmoji = memberEmojiById.get(String(ann.authorId)) ?? ann.authorEmoji ?? '👤';
 
   async function handleReact(emoji: string) {
-    if (!onReactionToggle) return;
+    if (!onReactionToggle || reactionPending) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowPicker(false);
     setShowReactorsFor(null);
-    await onReactionToggle(emoji);
+    setReactionPending(true);
+    try {
+      await onReactionToggle(emoji);
+    } finally {
+      setReactionPending(false);
+    }
   }
 
   return (
@@ -1801,8 +1817,9 @@ function AnnouncementCard({
                 return (
                   <TouchableOpacity
                     key={e}
-                    style={[card.pickerBtn, alreadyMine && card.pickerBtnActive]}
-                    onPress={() => handleReact(e)}
+                    style={[card.pickerBtn, alreadyMine && card.pickerBtnActive, reactionPending && card.pickerBtnPending]}
+                    onPress={() => void handleReact(e)}
+                    disabled={reactionPending}
                     activeOpacity={0.7}
                   >
                     <Text style={card.pickerEmoji}>{e}</Text>
@@ -1911,7 +1928,10 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 20, paddingTop: 8 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: AppColors.text.primary },
+  sectionHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionCount: { fontSize: 13, color: AppColors.text.secondary, backgroundColor: AppColors.bg.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  inlinePostButton: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 12, backgroundColor: '#B8426A', shadowColor: '#B8426A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
+  inlinePostButtonText: { fontSize: 12, fontWeight: '800', color: '#FFFFFF' },
   emptyCard: { alignItems: 'center', padding: 36, backgroundColor: '#FEF0F4', borderRadius: 24, gap: 8, borderWidth: 1.5, borderColor: '#EDAABB' },
   emptyEmoji: { fontSize: 44 },
   emptyText: { fontSize: 16, fontWeight: '800', color: '#B8426A' },
@@ -1962,20 +1982,6 @@ const styles = StyleSheet.create({
   exportBtnText: { fontSize: 14, fontWeight: '700', color: '#B8426A' },
   goCheckinBtn: { backgroundColor: '#B8426A', borderRadius: 14, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
   goCheckinBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
-  fabWrap: { position: 'absolute', right: 20 },
-  fabBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 30,
-    backgroundColor: '#B8426A',
-    shadowColor: '#B8426A', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
-  },
-  fabIcon: { fontSize: 22 },
-  fabLabel: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
   modal: { flex: 1, backgroundColor: AppColors.bg.warmCream, paddingHorizontal: 20, paddingTop: 16 },
   modalCancelBtn: { alignSelf: 'flex-start', paddingVertical: 4, paddingRight: 12, marginBottom: 8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -2108,6 +2114,7 @@ const card = StyleSheet.create({
     borderWidth: 1.5, borderColor: 'transparent',
   },
   pickerBtnActive: { borderColor: '#EDAABB', backgroundColor: '#FEF0F4' },
+  pickerBtnPending: { opacity: 0.5 },
   pickerEmoji: { fontSize: 20 },
   reactorsList: {
     marginTop: 8, backgroundColor: AppColors.bg.secondary,

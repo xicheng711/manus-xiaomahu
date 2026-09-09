@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getAnnouncementViewerDateKey } from './shared-date-range';
+
 import {
   cloudSyncCheckIn,
   cloudSyncDiary,
@@ -2096,7 +2098,8 @@ export async function getFamilyAnnouncements(days = 30, roomId?: string): Promis
 
 export async function getTodayAnnouncements(roomId?: string): Promise<FamilyAnnouncement[]> {
   const all = await getFamilyAnnouncements(1, roomId);
-  return all.filter(a => a.date === todayStr());
+  const viewerToday = todayStr();
+  return all.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday);
 }
 
 function normalizeCloudAnnouncement(raw: any, local?: FamilyAnnouncement): FamilyAnnouncement {
@@ -2291,29 +2294,62 @@ export async function toggleAnnouncementReaction(
   emoji: string,
   member: { memberId: string; memberName: string; memberEmoji: string },
   roomId?: string,
-): Promise<void> {
+): Promise<FamilyAnnouncement | null> {
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
   const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
-  const ann = all.find(a => a.id === announcementId);
-  if (!ann) return;
-  if (!ann.reactions) ann.reactions = [];
-  const group = ann.reactions.find(r => r.emoji === emoji);
+  const index = all.findIndex(announcement => announcement.id === announcementId);
+  if (index < 0) return null;
+
+  const current = all[index];
+  const reactions = (current.reactions ?? []).map(reaction => ({
+    ...reaction,
+    members: [...reaction.members],
+  }));
+  const group = reactions.find(reaction => reaction.emoji === emoji);
   if (group) {
-    const hasMe = group.members.some(m => m.memberId === member.memberId);
+    const hasMe = group.members.some(item => item.memberId === member.memberId);
     if (hasMe) {
-      group.members = group.members.filter(m => m.memberId !== member.memberId);
+      group.members = group.members.filter(item => item.memberId !== member.memberId);
       if (group.members.length === 0) {
-        ann.reactions = ann.reactions.filter(r => r.emoji !== emoji);
+        reactions.splice(reactions.indexOf(group), 1);
       }
     } else {
       group.members.push(member);
     }
   } else {
-    ann.reactions.push({ emoji, members: [member] });
+    reactions.push({ emoji, members: [member] });
   }
+
+  const updated = { ...current, reactions };
+  all[index] = updated;
   await AsyncStorage.setItem(key, JSON.stringify(all));
+  return updated;
+}
+
+/** Replace a locally optimistic reaction list with the server-authoritative snapshot. */
+export async function setAnnouncementReactionSnapshot(
+  announcementId: string,
+  reactions: AnnouncementReaction[],
+  roomId?: string,
+): Promise<FamilyAnnouncement | null> {
+  const rid = roomId ?? _activeRoomIdCache;
+  const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
+  const raw = await AsyncStorage.getItem(key);
+  const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+  const index = all.findIndex(announcement => announcement.id === announcementId);
+  if (index < 0) return null;
+  const updated = {
+    ...all[index],
+    reactions: reactions.map(reaction => ({
+      ...reaction,
+      members: [...reaction.members],
+    })),
+  };
+  all[index] = updated;
+  await AsyncStorage.setItem(key, JSON.stringify(all));
+  return updated;
 }
 
 // ─── Multi-Family Support ─────────────────────────────────────────────────────

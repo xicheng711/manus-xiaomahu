@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
+import { getCareDayKey } from '@/lib/shared-date-range';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
@@ -832,10 +833,10 @@ function CheckinScreenContent() {
 
     void (async () => {
       const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
-      const targetDate = backfillDate || null;
-      const existing = targetDate
-        ? await getCheckInByDate(targetDate, requestedFamilyId)
-        : await getTodayCheckIn(requestedFamilyId);
+      // 凌晨 00:00–04:59 仍属于前一护理日，让刚过午夜的晚间记录
+      // 合并回同一日的早间打卡，而不是错误创建“明天”的空记录。
+      const targetDate = backfillDate || getCareDayKey();
+      const existing = await getCheckInByDate(targetDate, requestedFamilyId);
       if (!isCurrentFamily()) return;
       setCheckIn(existing);
 
@@ -869,7 +870,7 @@ function CheckinScreenContent() {
         const recent = await getAllCheckIns(requestedFamilyId);
         if (!isCurrentFamily()) return;
         const lastMorning = recent
-          .filter(r => r.date !== todayStr() && r.morningDone)
+          .filter(r => r.date !== targetDate && r.morningDone)
           .sort((a, b) => b.date.localeCompare(a.date))[0];
         if (lastMorning) restoreSleepFields(lastMorning);
       }
@@ -883,7 +884,7 @@ function CheckinScreenContent() {
       let prev: string | null = null;
       for (const d of doneDates) {
         if (prev === null) {
-          const diffFromToday = (new Date(todayStr()).getTime() - new Date(d).getTime()) / 86400000;
+          const diffFromToday = (new Date(getCareDayKey()).getTime() - new Date(d).getTime()) / 86400000;
           if (diffFromToday <= 1) { count = 1; prev = d; } else break;
         } else {
           const diff = (new Date(prev).getTime() - new Date(d).getTime()) / 86400000;
@@ -961,7 +962,8 @@ function CheckinScreenContent() {
     }
     setSaving(true);
     try {
-    const data: Partial<DailyCheckIn> & { date: string } = { date: backfillDate || todayStr() };
+    const effectiveDate = backfillDate || (mode === 'evening' ? getCareDayKey() : todayStr());
+    const data: Partial<DailyCheckIn> & { date: string } = { date: effectiveDate };
     if (mode === 'morning') {
       // ── 构建结构化 SleepInput（v4.1 评分引擎输入）────────────────────────
       const sleepInput: SleepInput = {
@@ -1018,7 +1020,7 @@ function CheckinScreenContent() {
       await AsyncStorage.removeItem(cacheKey);
     } catch { /* 静默失败 */ }
     // 立即刷新 checkIn 状态，确保返回 landing 时显示最新状态
-    const refreshed = backfillDate ? await getCheckInByDate(backfillDate, familyId) : await getTodayCheckIn(familyId);
+    const refreshed = await getCheckInByDate(effectiveDate, familyId);
     if (refreshed) setCheckIn(refreshed);
     if (mode === 'morning') {
       if (Platform.OS !== 'web') {
@@ -1046,7 +1048,7 @@ function CheckinScreenContent() {
       let prevDate: string | null = null;
       for (const d of doneDates) {
         if (prevDate === null) {
-          const diffFromToday = (new Date(todayStr()).getTime() - new Date(d).getTime()) / 86400000;
+          const diffFromToday = (new Date(getCareDayKey()).getTime() - new Date(d).getTime()) / 86400000;
           if (diffFromToday <= 1) { newCount = 1; prevDate = d; }
           else break;
         } else {

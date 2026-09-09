@@ -25,6 +25,7 @@ import { SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { useFamilyContext } from '@/lib/family-context';
 import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
+import { getAnnouncementViewerDateKey } from '@/lib/shared-date-range';
 
 type FeedItem = {
   id: string;
@@ -59,21 +60,24 @@ function getTimeDisplay(entry: DiaryEntry): string {
   return entry.localTimeStr || (entry.createdAt ? timeStr(entry.createdAt) : entry.date);
 }
 
-/** 首页公告始终显示发布者记录的日期和时间，避免跨天、跨时区混淆。 */
+/** 公告是即时事件，日期和时间均按当前查看者设备所在时区展示。 */
 function getAnnouncementDateTime(announcement: FamilyAnnouncement): string {
-  const time = announcement.localTimeStr || timeStr(announcement.createdAt);
+  const created = new Date(announcement.createdAt);
+  if (Number.isFinite(created.getTime())) {
+    const thisYear = new Date().getFullYear();
+    const datePrefix = created.getFullYear() === thisYear
+      ? `${created.getMonth() + 1}/${created.getDate()}`
+      : `${created.getFullYear()}/${created.getMonth() + 1}/${created.getDate()}`;
+    return `${datePrefix} ${timeStr(announcement.createdAt)}`;
+  }
   const rawDate = announcement.date || '';
   const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match) {
     const [, year, month, day] = match;
     const thisYear = String(new Date().getFullYear());
-    return `${year === thisYear ? '' : `${year}/`}${Number(month)}/${Number(day)} ${time}`;
+    return `${year === thisYear ? '' : `${year}/`}${Number(month)}/${Number(day)} ${announcement.localTimeStr || '--:--'}`;
   }
-  const created = new Date(announcement.createdAt);
-  if (!Number.isNaN(created.getTime())) {
-    return `${created.getMonth() + 1}/${created.getDate()} ${time}`;
-  }
-  return time;
+  return announcement.localTimeStr || '--:--';
 }
 
 function buildFeed(
@@ -144,8 +148,9 @@ function buildFeed(
   });
 
   announcements.slice(0, 3).forEach(a => {
-    // 优先用 localTimeStr（发布者本地时间），避免服务端 UTC 时间导致的时间偏差
-    const annTime = (a as any).localTimeStr || timeStr(a.createdAt);
+    // 公告按查看者设备时区显示时间；旧数据没有绝对时间时才回退到作者保存的时间。
+    const created = new Date(a.createdAt);
+    const annTime = Number.isFinite(created.getTime()) ? timeStr(a.createdAt) : ((a as any).localTimeStr || '--:--');
     items.push({
       id: `ann-${a.id}`, type: 'announce',
       time: annTime,
@@ -550,11 +555,10 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       authorEmoji: memberEmojiById.get(String(announcement.authorId)) ?? announcement.authorEmoji,
     }));
     setLatestAnnounce(announcements[0] ?? null);
-    // 「今日活动记录」必须只显示今天，不再混入昨天或明天的记录。
-    // 所有共享记录都已经保存发布者写入的 YYYY-MM-DD date，因此统一按 date 精确匹配。
+    // 打卡和日记属于记录者的护理日；公告是即时事件，应以查看者当地日历归属。
     const todayCheckIns = checkIns.filter(c => c.date === _todayKey).slice(0, 2);
     const todayDiaries = cleanDiaries.filter(d => d.date === _todayKey).slice(0, 3);
-    const todayAnnouncements = announcements.filter(a => a.date === _todayKey).slice(0, 2);
+    const todayAnnouncements = announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === _todayKey).slice(0, 2);
     setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));
     // 读取今日简报缓存
     try {

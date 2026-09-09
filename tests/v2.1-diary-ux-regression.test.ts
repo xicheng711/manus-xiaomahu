@@ -25,10 +25,10 @@ describe('Diary publication date and return experience', () => {
 describe('Today activity feed', () => {
   const joinerHome = read('components/joiner-home.tsx');
 
-  it('filters check-ins, diaries, and announcements to the exact local date', () => {
+  it('keeps check-ins and diaries on their recorded dates, while placing announcements on the viewer-local date', () => {
     expect(joinerHome).toContain('checkIns.filter(c => c.date === _todayKey)');
     expect(joinerHome).toContain('cleanDiaries.filter(d => d.date === _todayKey)');
-    expect(joinerHome).toContain('announcements.filter(a => a.date === _todayKey)');
+    expect(joinerHome).toContain('getAnnouncementViewerDateKey(announcement) === _todayKey');
   });
 
   it('shows the date even when empty and orders newest activity first', () => {
@@ -624,9 +624,10 @@ describe('Daytime nap compatibility and homepage announcement date', () => {
     expect(share).toContain('napMinutes: getNapMinutes(ci)');
   });
 
-  it('shows the announcement publisher date and time together on the homepage card', () => {
+  it('shows announcement date and time in the viewer’s local timezone on the homepage card', () => {
     expect(joinerHome).toContain('function getAnnouncementDateTime(announcement: FamilyAnnouncement)');
-    expect(joinerHome).toContain('announcement.localTimeStr || timeStr(announcement.createdAt)');
+    expect(joinerHome).toContain('公告是即时事件，日期和时间均按当前查看者设备所在时区展示');
+    expect(joinerHome).toContain('return `${datePrefix} ${timeStr(announcement.createdAt)}`;');
     expect(joinerHome).toContain('· {getAnnouncementDateTime(latest)}');
   });
 
@@ -981,8 +982,9 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
     expect(comments).toContain('setCommentText(\'\')');
   });
 
-  it('hides the floating publish button throughout comment editing and restores it only after the keyboard closes', () => {
-    expect(familyPage).toContain("activeSection === 'broadcast' && !keyboardVisible && !commentInputFocused");
+  it('uses a page-flow publish entry so long announcements and comment editing are never covered by a floating action button', () => {
+    expect(familyPage).toContain('inlinePostButton');
+    expect(familyPage).not.toContain("activeSection === 'broadcast' && !keyboardVisible && !commentInputFocused");
     expect(comments).toContain('onBlur={onInputBlur}');
     expect(keyboardScroll).toContain("const keyboardHideEvent = 'keyboardDidHide'");
     expect(keyboardScroll).toContain('setKeyboardVisible(false)');
