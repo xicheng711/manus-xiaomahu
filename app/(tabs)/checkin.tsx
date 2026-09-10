@@ -732,14 +732,15 @@ function CheckinScreenContent() {
   activeFamilyRef.current = familyId;
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [mode, setMode] = useState<'landing' | 'morning' | 'evening'>('landing');
-  // A form session is bound to the record selected when the user enters it. The server
-  // identifies a check-in by roomId + date (with serverCheckInId retained for diagnostics),
-  // so crossing midnight while typing must never move the save to a different record.
+  // A form session is bound to the record selected when the user enters it. Stable
+  // client/server IDs identify that record; date is retained for care-day display and
+  // legacy compatibility. Crossing midnight while typing never changes the target.
   const formTargetRef = useRef<{
     familyId: string;
     date: string;
     mode: 'morning' | 'evening';
     recordId?: string;
+    clientId?: string;
     serverCheckInId?: number;
   } | null>(null);
   const [step, setStep] = useState(0);
@@ -873,6 +874,7 @@ function CheckinScreenContent() {
           date: targetDate,
           mode: 'evening',
           recordId: existing?.id,
+          clientId: existing?.clientId,
           serverCheckInId: existing?.serverCheckInId,
         };
       }
@@ -960,6 +962,7 @@ function CheckinScreenContent() {
       date: targetDate,
       mode: nextMode,
       recordId: checkIn?.date === targetDate ? checkIn.id : undefined,
+      clientId: checkIn?.date === targetDate ? checkIn.clientId : undefined,
       serverCheckInId: checkIn?.date === targetDate ? checkIn.serverCheckInId : undefined,
     };
     setStep(0);
@@ -1034,7 +1037,11 @@ function CheckinScreenContent() {
     try {
     // Never recalculate from the save time: this is the exact record selected on entry.
     const effectiveDate = formTarget.date;
-    const data: Partial<DailyCheckIn> & { date: string } = { date: effectiveDate };
+    const data: Partial<DailyCheckIn> & { date: string } = {
+      date: effectiveDate,
+      clientId: formTarget.clientId,
+      serverCheckInId: formTarget.serverCheckInId,
+    };
     if (mode === 'morning') {
       // ── 构建结构化 SleepInput（v4.1 评分引擎输入）────────────────────────
       const sleepInput: SleepInput = {

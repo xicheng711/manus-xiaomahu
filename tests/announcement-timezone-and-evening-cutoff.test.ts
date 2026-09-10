@@ -119,7 +119,10 @@ describe('announcement viewer-time and care-day boundaries', () => {
     expect(checkin).toContain('// Never recalculate from the save time: this is the exact record selected on entry.');
     expect(checkin).toContain('const effectiveDate = formTarget.date;');
     expect(checkin).not.toContain("const effectiveDate = backfillDate || (mode === 'evening' ? getCareDayKey() : todayStr());");
-    expect(checkin).toContain('const data: Partial<DailyCheckIn> & { date: string } = { date: effectiveDate };');
+    expect(checkin).toContain('const data: Partial<DailyCheckIn> & { date: string } = {');
+    expect(checkin).toContain('date: effectiveDate,');
+    expect(checkin).toContain('clientId: formTarget.clientId,');
+    expect(checkin).toContain('serverCheckInId: formTarget.serverCheckInId,');
     expect(checkin).toContain('const refreshed = await getCheckInByDate(effectiveDate, familyId);');
     expect(checkin).toContain('<Text style={styles.date}>{formDateLabel}</Text>');
     expect(checkin).toContain('lateNightCareWindow={!backfillDate && isLateNightCareWindow()}');

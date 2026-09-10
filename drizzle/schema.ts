@@ -84,6 +84,8 @@ export const checkIns = mysqlTable("check_ins", {
   id: int("id").autoincrement().primaryKey(),
   roomId: int("roomId").notNull(),
   authorUserId: int("authorUserId").notNull(),
+  /** Stable business identity generated before the first offline save. */
+  clientId: varchar("clientId", { length: 100 }),
   date: varchar("date", { length: 10 }).notNull(),         // YYYY-MM-DD
   // Morning check-in
   sleepHours: float("sleepHours"),
@@ -116,6 +118,8 @@ export const checkIns = mysqlTable("check_ins", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   uniqueIndex("uq_check_ins_room_date").on(table.roomId, table.date),
+  // Historical rows may keep NULL; every new daily record is idempotent by room/client identity.
+  uniqueIndex("uq_check_ins_room_client").on(table.roomId, table.clientId),
 ]);
 
 export type CheckIn = typeof checkIns.$inferSelect;

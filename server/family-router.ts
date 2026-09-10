@@ -10,7 +10,7 @@ import {
   addFamilyMember, getRoomMembers, getMemberByUserId, updateFamilyMember,
   removeFamilyMember, deleteFamilyRoom,
   upsertElderProfile, getElderProfile,
-  upsertCheckIn, getCheckInsByRoom, getCheckInByDate,
+  upsertCheckIn, getCheckInsByRoom, getCheckInByDate, getCheckInById, getCheckInByClientId,
   createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
   getDiaryEntryByClientId, getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
   deleteDiaryCommentByAuthor, getDiaryInteractionSummaries,
@@ -24,6 +24,7 @@ import {
 import { updatePushToken, getUsersByIds } from "./db";
 import { ossUploadAvatar, storagePut } from "./storage";
 import { resolveDiarySyncIdentity } from "./diary-sync-identity";
+import { resolveCheckInSyncIdentity } from "./checkin-sync-identity";
 import { getMemberDisplayEmoji } from "../lib/member-avatar";
 
 // ─── Expo Push Notification Helper ──────────────────────────────────────────
@@ -357,10 +358,12 @@ export const familyRouter = router({
 
   // ─── Check-ins ───────────────────────────────────────────────────────────
 
-  /** Sync a check-in to the cloud (upsert by roomId + date) */
+  /** Sync one daily care record by stable ID; room/date remains the legacy uniqueness fallback. */
   syncCheckIn: protectedProcedure
     .input(z.object({
       roomId: z.number(),
+      clientId: z.string().min(1).max(100).optional(),
+      serverCheckInId: z.number().int().positive().optional(),
       date: z.string(),
       sleepHours: z.number().optional(),
       sleepQuality: z.enum(["poor", "fair", "good"]).optional(),
@@ -391,13 +394,36 @@ export const familyRouter = router({
       const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
       if (!member.isCreator) throw new Error("只有主照顾者可以新增或修改打卡记录");
-      const previous = await getCheckInByDate(input.roomId, input.date);
+
+      const [clientMatch, requestedMatch, dateMatch] = await Promise.all([
+        input.clientId ? getCheckInByClientId(input.roomId, input.clientId) : Promise.resolve(null),
+        input.serverCheckInId ? getCheckInById(input.roomId, input.serverCheckInId) : Promise.resolve(null),
+        getCheckInByDate(input.roomId, input.date),
+      ]);
+      const previous = resolveCheckInSyncIdentity({
+        roomId: input.roomId,
+        clientId: input.clientId,
+        requestedServerCheckInId: input.serverCheckInId,
+        expectedDate: input.date,
+        clientMatch,
+        requestedMatch,
+        dateMatch,
+      });
+
       // completedAt is generated on every local save. A delayed morning request must not
       // arrive after a completed evening save and replace the newer full-day snapshot.
       if (previous?.completedAt && input.completedAt && input.completedAt < previous.completedAt) {
         return { success: true, checkIn: previous, staleIgnored: true };
       }
-      const safeInput = { ...input };
+
+      const { serverCheckInId: _serverCheckInId, clientId: requestedClientId, ...checkInFields } = input;
+      const safeInput = {
+        ...checkInFields,
+        // Once a record exists, its identity and care date are immutable. If another
+        // device created the same date first, adopt that canonical ID instead.
+        clientId: previous?.clientId || requestedClientId,
+        date: previous?.date || input.date,
+      };
       // Completion is monotonic. Older clients may send defaults for the other phase;
       // preserve an already completed phase unless this snapshot also completed it.
       if (previous?.morningDone === true && input.morningDone !== true) {
@@ -431,7 +457,10 @@ export const familyRouter = router({
           careScore: previous.careScore ?? undefined,
         });
       }
-      const result = await upsertCheckIn({ ...safeInput, authorUserId: userId });
+      const result = await upsertCheckIn(
+        { ...safeInput, authorUserId: userId },
+        previous?.id,
+      );
 
       // 只在完成状态首次 false→true 时通知。断网重试或资料补写不会重复打扰家人。
       const newlyFinishedEvening = safeInput.eveningDone === true && previous?.eveningDone !== true;
@@ -861,20 +890,12 @@ export const familyRouter = router({
       return rows.map(row => {
         const author = memberByUserId.get(row.authorUserId);
         const summary = commentSummaryByAnnouncementId.get(row.id);
-        const latestComment = summary?.latestComment;
         return {
           ...row,
           authorId: author ? String(author.id) : String(row.authorUserId),
           // 历史公告按当前家庭成员资料显示，避免旧女性/默认 Emoji 固化在界面上。
           authorEmoji: getMemberDisplayEmoji(author, row.authorEmoji || '👤'),
           commentCount: summary?.commentCount ?? 0,
-          latestComment: latestComment ? {
-            ...latestComment,
-            authorEmoji: getMemberDisplayEmoji(
-              memberByUserId.get(latestComment.authorUserId),
-              latestComment.authorEmoji || '👤',
-            ),
-          } : null,
         };
       });
     }),

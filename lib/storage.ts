@@ -107,7 +107,10 @@ export interface SleepSegment {
 }
 
 export interface DailyCheckIn {
+  /** Stable local render/storage key; never changes after the record is created. */
   id: string;
+  /** Stable business identity shared with the server and all family devices. */
+  clientId?: string;
   date: string;            // YYYY-MM-DD
   // 早上打卡
   sleepHours: number;
@@ -298,17 +301,6 @@ export interface AnnouncementComment {
   canDelete?: boolean;
 }
 
-export interface AnnouncementCommentPreview {
-  id: number;
-  authorUserId: number;
-  authorName: string;
-  authorEmoji: string;
-  content: string;
-  date: string;
-  localTimeStr: string;
-  createdAt: string | Date;
-}
-
 export interface FamilyAnnouncement {
   id: string;
   /** 云端公告主键；本地 id 保持稳定，避免同步后列表 key 跳变。 */
@@ -326,9 +318,8 @@ export interface FamilyAnnouncement {
   date: string;        // YYYY-MM-DD
   localTimeStr?: string; // HH:MM — 发布者本地时间，避免时区偏差
   reactions?: AnnouncementReaction[];
-  /** 评论摘要随当前家庭的公告列表一并加载，避免每张卡片单独请求完整评论。 */
+  /** 评论数量随当前家庭的公告列表一并加载；正文仅在用户点击后按需获取。 */
   commentCount?: number;
-  latestComment?: AnnouncementCommentPreview | null;
 }
 
 export interface FamilyRoom {
@@ -579,8 +570,20 @@ export function getNapMinutes(c?: Partial<DailyCheckIn> | null): number {
   return c.daytimeNap ? 30 : 0;
 }
 
+export function getStableCheckInClientId(c: Pick<DailyCheckIn, 'id' | 'clientId' | 'serverCheckInId'>): string {
+  const explicit = typeof c.clientId === 'string' ? c.clientId.trim() : '';
+  if (explicit) return explicit;
+  const serverId = Number(c.serverCheckInId ?? (/^\d+$/.test(String(c.id ?? '')) ? c.id : NaN));
+  if (Number.isFinite(serverId) && serverId > 0) return `checkin_server_${serverId}`;
+  const localId = String(c.id ?? '').trim();
+  return `checkin_local_${localId || generateId()}`;
+}
+
 function normalizeCheckIn(c: DailyCheckIn): DailyCheckIn {
-  const normalized = normalizeMoodScore(c);
+  const normalized = {
+    ...normalizeMoodScore(c),
+    clientId: getStableCheckInClientId(c),
+  };
   if (!hasRecordedNap(normalized)) return normalized;
   const napMinutes = getNapMinutes(normalized);
   return { ...normalized, napMinutes, daytimeNap: napMinutes > 0 };
@@ -644,7 +647,14 @@ export async function mergeCloudCheckInsIntoLocal(
   const localEntries: DailyCheckIn[] = localRaw
     ? (JSON.parse(localRaw) as DailyCheckIn[]).map(normalizeCheckIn)
     : [];
+  const localByClientId = new Map(localEntries.map(entry => [getStableCheckInClientId(entry), entry]));
+  const localByServerId = new Map(
+    localEntries
+      .filter(entry => Number.isFinite(Number(entry.serverCheckInId)))
+      .map(entry => [Number(entry.serverCheckInId), entry]),
+  );
   const localByDate = new Map(localEntries.map(entry => [entry.date, entry]));
+  const matchedLocalIds = new Set<string>();
 
   const historyFields: Array<keyof DailyCheckIn> = [
     'sleepInput', 'sleepScore', 'sleepProblems', 'sleepType', 'sleepSegments',
@@ -661,11 +671,15 @@ export async function mergeCloudCheckInsIntoLocal(
     const cloud = normalizeCheckIn({
       ...raw,
       id: String(raw.id),
+      clientId: raw.clientId || undefined,
       serverCheckInId: Number(raw.id),
       syncPending: false,
     } as DailyCheckIn);
-    const local = localByDate.get(cloud.date);
+    const local = localByClientId.get(getStableCheckInClientId(cloud))
+      ?? localByServerId.get(Number(cloud.serverCheckInId))
+      ?? localByDate.get(cloud.date); // Legacy fallback until every historical row has a clientId.
     if (!local) return cloud;
+    matchedLocalIds.add(local.id);
 
     // 本地仍在等待上传时，不能让较旧的服务器快照覆盖刚保存的小睡或晚间记录。
     if (local.syncPending) {
@@ -673,6 +687,7 @@ export async function mergeCloudCheckInsIntoLocal(
         ...cloud,
         ...local,
         id: local.id,
+        clientId: cloud.clientId || local.clientId,
         serverCheckInId: cloud.serverCheckInId,
         syncPending: true,
       });
@@ -682,6 +697,7 @@ export async function mergeCloudCheckInsIntoLocal(
       ...local,
       ...cloud,
       id: local.id || cloud.id,
+      clientId: cloud.clientId || local.clientId,
       serverCheckInId: cloud.serverCheckInId,
       syncPending: false,
     };
@@ -697,7 +713,8 @@ export async function mergeCloudCheckInsIntoLocal(
 
   const cloudDates = new Set(mergedCloud.map(entry => entry.date));
   // cloudGetCheckIns 有分页限制，超出本次响应范围的老记录不能被删除。
-  const localOnly = localEntries.filter(entry => !cloudDates.has(entry.date));
+  // Date remains only a legacy duplicate guard; stable IDs decide normal matches.
+  const localOnly = localEntries.filter(entry => !matchedLocalIds.has(entry.id) && !cloudDates.has(entry.date));
   const result = [...mergedCloud, ...localOnly]
     .sort((a, b) => b.date.localeCompare(a.date));
   await AsyncStorage.setItem(key, JSON.stringify(result));
@@ -746,16 +763,16 @@ export async function getYesterdayCheckIn(roomId?: string): Promise<DailyCheckIn
   return all.find(c => c.date === yStr) ?? null;
 }
 
-// 同一家庭同一天的云端打卡必须严格按本地保存顺序发送。
-// 否则较慢返回的早间请求可能在晚间请求之后覆盖服务器完整记录。
+// The same daily record must sync in local-save order. A stable client identity keeps
+// morning/evening updates serialized even if date presentation rules or time zones differ.
 const checkInSyncQueue = new Map<string, Promise<void>>();
 
-function checkInQueueKey(roomId: string | null | undefined, date: string): string {
-  return `${roomId || 'default'}:${date}`;
+function checkInQueueKey(roomId: string | null | undefined, identity: string): string {
+  return `${roomId || 'default'}:${identity}`;
 }
 
-function enqueueCheckInSync(roomId: string | null | undefined, date: string, task: () => Promise<void>): Promise<void> {
-  const queueKey = checkInQueueKey(roomId, date);
+function enqueueCheckInSync(roomId: string | null | undefined, identity: string, task: () => Promise<void>): Promise<void> {
+  const queueKey = checkInQueueKey(roomId, identity);
   const previous = checkInSyncQueue.get(queueKey) ?? Promise.resolve();
   const next = previous
     .catch(() => {})
@@ -772,17 +789,29 @@ async function syncCheckInSnapshot(checkIn: DailyCheckIn, roomId: string | null 
   const result = await cloudSyncCheckIn(checkIn, roomId);
   if (!result?.success) return;
   const latestRaw = await AsyncStorage.getItem(key);
-  const latest: DailyCheckIn[] = latestRaw ? JSON.parse(latestRaw) : [];
-  const latestIdx = latest.findIndex(item => item.date === checkIn.date);
-  if (latestIdx < 0) return;
+  const latest: DailyCheckIn[] = latestRaw
+    ? (JSON.parse(latestRaw) as DailyCheckIn[]).map(normalizeCheckIn)
+    : [];
+  const sentClientId = getStableCheckInClientId(checkIn);
+  const returnedServerId = Number(result.checkIn?.id);
+  const latestIdx = latest.findIndex(item => getStableCheckInClientId(item) === sentClientId)
+    ?? -1;
+  const compatibleIdx = latestIdx >= 0
+    ? latestIdx
+    : latest.findIndex(item => (
+        (Number.isFinite(returnedServerId) && Number(item.serverCheckInId) === returnedServerId)
+        || item.date === checkIn.date
+      ));
+  if (compatibleIdx < 0) return;
   // completedAt changes on every local save. An older request must never mark a newer
   // morning/evening snapshot as synced when that newer request may still fail.
-  const latestVersion = latest[latestIdx].syncVersion ?? latest[latestIdx].completedAt;
+  const latestVersion = latest[compatibleIdx].syncVersion ?? latest[compatibleIdx].completedAt;
   const sentVersion = checkIn.syncVersion ?? checkIn.completedAt;
   if (latestVersion !== sentVersion) return;
-  latest[latestIdx] = {
-    ...latest[latestIdx],
-    serverCheckInId: Number(result.checkIn?.id) || latest[latestIdx].serverCheckInId,
+  latest[compatibleIdx] = {
+    ...latest[compatibleIdx],
+    clientId: result.checkIn?.clientId || sentClientId,
+    serverCheckInId: returnedServerId || latest[compatibleIdx].serverCheckInId,
     syncPending: false,
   };
   await AsyncStorage.setItem(key, JSON.stringify(latest));
@@ -792,9 +821,26 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
   const rid = roomId ?? _activeRoomIdCache;
   const key = roomKey(KEYS.CHECK_INS, rid);
   const all = await getAllCheckIns(rid ?? undefined);
-  const idx = all.findIndex(c => c.date === data.date);
+  const requestedClientId = typeof data.clientId === 'string' ? data.clientId.trim() : '';
+  const requestedServerId = Number(data.serverCheckInId);
+  const idxByClientId = requestedClientId
+    ? all.findIndex(c => getStableCheckInClientId(c) === requestedClientId)
+    : -1;
+  const idxByServerId = Number.isFinite(requestedServerId) && requestedServerId > 0
+    ? all.findIndex(c => Number(c.serverCheckInId) === requestedServerId)
+    : -1;
+  const idx = idxByClientId >= 0
+    ? idxByClientId
+    : idxByServerId >= 0
+      ? idxByServerId
+      : all.findIndex(c => c.date === data.date); // Legacy compatibility only.
+  const localId = idx >= 0 ? all[idx].id : generateId();
+  const stableClientId = idx >= 0
+    ? getStableCheckInClientId(all[idx])
+    : requestedClientId || `checkin_local_${localId}`;
   const defaults: DailyCheckIn = {
-    id: generateId(),
+    id: localId,
+    clientId: stableClientId,
     date: data.date,
     sleepHours: 7,
     sleepQuality: 'fair',
@@ -812,15 +858,15 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     completedAt: new Date().toISOString(),
   };
   const syncVersion = generateId();
-  const checkIn: DailyCheckIn = idx >= 0
-    ? { ...all[idx], ...data, completedAt: new Date().toISOString(), syncPending: true, syncVersion }
-    : { ...defaults, ...data, syncPending: true, syncVersion };
+  const checkIn: DailyCheckIn = normalizeCheckIn(idx >= 0
+    ? { ...all[idx], ...data, id: localId, clientId: stableClientId, completedAt: new Date().toISOString(), syncPending: true, syncVersion }
+    : { ...defaults, ...data, id: localId, clientId: stableClientId, syncPending: true, syncVersion });
   if (idx >= 0) all[idx] = checkIn;
   else all.unshift(checkIn);
   await AsyncStorage.setItem(key, JSON.stringify(all));
-  // 本地写入完成即返回；云端按 room/date 串行同步。失败时保留 syncPending，
-  // 后续进入首页或打卡页自动重试，且旧请求不能清除新版本的待同步状态。
-  void enqueueCheckInSync(rid, checkIn.date, () => syncCheckInSnapshot(checkIn, rid, key));
+  // Local persistence returns immediately. Cloud sync is serialized by stable record ID;
+  // date is metadata and never changes the identity of an in-progress morning/evening record.
+  void enqueueCheckInSync(rid, getStableCheckInClientId(checkIn), () => syncCheckInSnapshot(checkIn, rid, key));
   return checkIn;
 }
 
@@ -829,7 +875,7 @@ export async function syncPendingCheckIns(roomId: string): Promise<void> {
   const key = roomKey(KEYS.CHECK_INS, roomId);
   const entries = await getAllCheckIns(roomId);
   for (const entry of entries.filter(item => item.syncPending)) {
-    await enqueueCheckInSync(roomId, entry.date, () => syncCheckInSnapshot(entry, roomId, key));
+    await enqueueCheckInSync(roomId, getStableCheckInClientId(entry), () => syncCheckInSnapshot(entry, roomId, key));
   }
 }
 
@@ -2125,11 +2171,6 @@ function normalizeCloudAnnouncement(raw: any, local?: FamilyAnnouncement): Famil
     commentCount: typeof raw.commentCount === 'number'
       ? Math.max(0, Math.floor(raw.commentCount))
       : (local?.commentCount ?? 0),
-    latestComment: raw.latestComment
-      ? raw.latestComment
-      : raw.commentCount === 0
-        ? null
-        : (local?.latestComment ?? null),
   };
 }
 

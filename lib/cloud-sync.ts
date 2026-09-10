@@ -313,6 +313,8 @@ export async function cloudSyncCheckIn(checkIn: any, explicitRoomId?: number | s
     const client = getClient();
     return await client.family.syncCheckIn.mutate({
       roomId,
+      clientId: checkIn.clientId,
+      serverCheckInId: Number.isFinite(Number(checkIn.serverCheckInId)) ? Number(checkIn.serverCheckInId) : undefined,
       date: checkIn.date,
       sleepHours: checkIn.sleepHours,
       sleepQuality: checkIn.sleepQuality,

@@ -130,17 +130,29 @@ export async function getElderProfile(roomId: number) {
 
 // ─── Check-ins ───────────────────────────────────────────────────────────────
 
-export async function upsertCheckIn(data: InsertCheckIn) {
+export async function upsertCheckIn(data: InsertCheckIn, existingId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  // uq_check_ins_room_date guarantees one row per family/day. The atomic upsert
-  // also removes the select-then-insert race when morning/evening sync overlap.
+
+  if (existingId) {
+    await db.update(checkIns).set(data).where(and(
+      eq(checkIns.id, existingId),
+      eq(checkIns.roomId, data.roomId!),
+    ));
+    const updated = await getCheckInById(data.roomId!, existingId);
+    if (!updated) throw new Error("Check-in update failed");
+    return updated;
+  }
+
+  // Both unique identities are retained: room/clientId makes retries idempotent;
+  // room/date prevents legacy clients from creating a second row for the same care day.
   await db.insert(checkIns).values(data).onDuplicateKeyUpdate({ set: data });
-  const rows = await db.select().from(checkIns)
-    .where(and(eq(checkIns.roomId, data.roomId!), eq(checkIns.date, data.date!)))
-    .limit(1);
-  if (!rows[0]) throw new Error("Check-in upsert failed");
-  return rows[0];
+  const byClientId = data.clientId
+    ? await getCheckInByClientId(data.roomId!, data.clientId)
+    : null;
+  const row = byClientId ?? await getCheckInByDate(data.roomId!, data.date!);
+  if (!row) throw new Error("Check-in upsert failed");
+  return row;
 }
 
 export async function getCheckInsByRoom(roomId: number, limit = 30) {
@@ -150,6 +162,24 @@ export async function getCheckInsByRoom(roomId: number, limit = 30) {
     .where(eq(checkIns.roomId, roomId))
     .orderBy(desc(checkIns.date))
     .limit(limit);
+}
+
+export async function getCheckInById(roomId: number, id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(checkIns)
+    .where(and(eq(checkIns.roomId, roomId), eq(checkIns.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getCheckInByClientId(roomId: number, clientId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(checkIns)
+    .where(and(eq(checkIns.roomId, roomId), eq(checkIns.clientId, clientId)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function getCheckInByDate(roomId: number, date: string) {
@@ -392,37 +422,29 @@ export async function getAnnouncementsByRoom(roomId: number, limit = 50) {
 }
 
 /**
- * Load compact comment metadata for a set of visible announcements in one room-scoped query.
- * Full comment threads remain on-demand; this only powers the card-level count and newest preview.
+ * Load comment counts for visible announcements in one room-scoped grouped query.
+ * Full comment threads remain on-demand after the user taps the count.
  */
 export async function getAnnouncementCommentSummaries(roomId: number, announcementIds: number[]) {
   const db = await getDb();
   const ids = [...new Set(announcementIds.filter(id => Number.isFinite(id)))];
   if (!db || ids.length === 0) return [];
-  const comments = await db.select().from(announcementComments)
+  const rows = await db.select({
+    announcementId: announcementComments.announcementId,
+    commentCount: sql<number>`count(*)`.mapWith(Number),
+  }).from(announcementComments)
     .where(and(
       eq(announcementComments.roomId, roomId),
       inArray(announcementComments.announcementId, ids),
     ))
-    .orderBy(desc(announcementComments.createdAt), desc(announcementComments.id));
+    .groupBy(announcementComments.announcementId);
 
-  const countByAnnouncementId = new Map<number, number>();
-  const newestByAnnouncementId = new Map<number, typeof comments[number]>();
-  for (const comment of comments) {
-    countByAnnouncementId.set(
-      comment.announcementId,
-      (countByAnnouncementId.get(comment.announcementId) ?? 0) + 1,
-    );
-    // Rows are newest-first, so retain the first comment for the compact preview.
-    if (!newestByAnnouncementId.has(comment.announcementId)) {
-      newestByAnnouncementId.set(comment.announcementId, comment);
-    }
-  }
-
+  const countByAnnouncementId = new Map(
+    rows.map(row => [row.announcementId, Number(row.commentCount) || 0]),
+  );
   return ids.map(announcementId => ({
     announcementId,
     commentCount: countByAnnouncementId.get(announcementId) ?? 0,
-    latestComment: newestByAnnouncementId.get(announcementId) ?? null,
   }));
 }
 

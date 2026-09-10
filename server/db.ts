@@ -20,6 +20,7 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     { table: 'diary_entries',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'diary_entries',  column: 'clientId',     definition: 'varchar(100)' },
     { table: 'family_members', column: 'birthYear',    definition: 'int' },
+    { table: 'check_ins',      column: 'clientId',     definition: 'varchar(100)' },
     { table: 'check_ins',      column: 'daytimeNap',   definition: 'tinyint(1) NULL' },
     { table: 'check_ins',      column: 'napMinutes',   definition: 'int NULL' },
     { table: 'medications',    column: 'clientId',     definition: 'varchar(100)' },
@@ -111,6 +112,26 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     }
   } catch (e: any) {
     console.warn('[Database] Migration warning (uq_check_ins_room_date):', e?.message ?? e);
+  }
+
+  // 打卡稳定身份：历史记录 clientId 为空不受影响；新记录按 roomId + clientId 严格幂等。
+  try {
+    const rows: any[] = await (db as any).execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'check_ins'
+         AND INDEX_NAME = 'uq_check_ins_room_client'
+       LIMIT 1`
+    );
+    const exists = Array.isArray(rows[0]) ? rows[0].length > 0 : rows.length > 0;
+    if (!exists) {
+      await (db as any).execute(
+        'ALTER TABLE check_ins ADD UNIQUE KEY uq_check_ins_room_client (roomId, clientId)'
+      );
+      console.log('[Database] Migration: added check-ins room/client idempotency index');
+    }
+  } catch (e: any) {
+    console.warn('[Database] Migration warning (uq_check_ins_room_client):', e?.message ?? e);
   }
 
   // 用药幂等索引：现有记录 clientId 均为空，不影响历史数据；新客户端按 roomId + clientId 去重。

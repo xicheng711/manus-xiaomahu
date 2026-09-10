@@ -238,7 +238,7 @@ describe('Check-in resilience, permissions, and cross-timezone viewing', () => {
     expect(router).toContain('只有主照顾者可以新增或修改打卡记录');
     expect(checkin).toContain("activeMembership.role !== 'creator'");
     expect(storage).toContain('cloudSyncCheckIn(checkIn, roomId)');
-    expect(storage).toContain('enqueueCheckInSync(rid, checkIn.date');
+    expect(storage).toContain('enqueueCheckInSync(rid, getStableCheckInClientId(checkIn)');
   });
 
   it('shows Joiners the caregiver latest record rather than filtering by viewer timezone', () => {
@@ -852,10 +852,10 @@ describe('Evening check-in durability and instant family-tab loading', () => {
 
   it('serializes same-day check-in sync and only acknowledges the exact latest local version', () => {
     expect(storage).toContain('const checkInSyncQueue = new Map<string, Promise<void>>()');
-    expect(storage).toContain('enqueueCheckInSync(rid, checkIn.date');
+    expect(storage).toContain('enqueueCheckInSync(rid, getStableCheckInClientId(checkIn)');
     expect(storage).toContain('const syncVersion = generateId()');
     expect(storage).toContain('if (latestVersion !== sentVersion) return');
-    expect(storage).toContain('await enqueueCheckInSync(roomId, entry.date');
+    expect(storage).toContain('await enqueueCheckInSync(roomId, getStableCheckInClientId(entry)');
   });
 
   it('deduplicates existing same-day cloud rows and preserves both completed phases', () => {
@@ -927,13 +927,13 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
     expect(familyDb).toContain('Announcement comment clientId belongs to another user');
   });
 
-  it('keeps the plus reaction picker while showing a compact comment count and newest preview before expansion', () => {
+  it('keeps the plus reaction picker while showing an always-visible comment count before expansion', () => {
     expect(familyPage).toContain("const REACTION_EMOJIS = ['👍', '❤️', '👏', '🙏', '😢', '✨']");
     expect(familyPage).toContain("{showPicker ? '✕' : '＋'}");
-    expect(familyPage).toContain("commentCount > 0 ? `${commentCount} 条评论` : '评论'");
-    expect(familyPage).toContain('commentCount > 0 && !commentsOpen ? (');
-    expect(familyPage).toContain('latestComment.authorName || \'家人\'');
-    expect(familyPage).toContain('查看全部 ›');
+    expect(familyPage).toContain("`${commentCount} 条评论${commentsOpen ? ' · 收起' : ''}`");
+    expect(familyPage).not.toContain('commentCount > 0 && !commentsOpen ? (');
+    expect(familyPage).not.toContain('latestComment');
+    expect(familyPage).not.toContain('commentPreview');
     expect(familyPage).toContain('commentsOpen && roomId && announcementId ? (');
     expect(familyPage).toContain('<AnnouncementComments');
     expect(familyPage).toContain('onCommentsUpdated={handleCommentsUpdated}');
@@ -941,14 +941,14 @@ describe('Announcement comments remain family-scoped, fast, and keyboard-safe', 
     expect(comments).toContain('cloudGetAnnouncementComments(announcementId, roomId)');
   });
 
-  it('returns room-scoped announcement comment summaries in the list response without loading every full thread', () => {
+  it('returns room-scoped announcement comment counts without loading comment bodies', () => {
     expect(familyDb).toContain('export async function getAnnouncementCommentSummaries(roomId: number, announcementIds: number[])');
     expect(familyDb).toContain('inArray(announcementComments.announcementId, ids)');
+    expect(familyDb).toContain('.groupBy(announcementComments.announcementId)');
     expect(familyRouter).toContain('getAnnouncementCommentSummaries(input.roomId, rows.map(row => row.id))');
     expect(familyRouter).toContain('commentCount: summary?.commentCount ?? 0');
-    expect(familyRouter).toContain('latestComment: latestComment ? {');
     expect(storage).toContain('commentCount?: number;');
-    expect(storage).toContain('latestComment?: AnnouncementCommentPreview | null;');
+    expect(storage).not.toContain('AnnouncementCommentPreview');
   });
 
   it('uses a room-scoped cache and never lets cached delete permission cross accounts', () => {
