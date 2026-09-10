@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
-import { getCareDayKey } from '@/lib/shared-date-range';
+import { CARE_DAY_ROLLOVER_HOUR, getCareDayKey, isLateNightCareWindow } from '@/lib/shared-date-range';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
@@ -472,6 +472,7 @@ function CheckinLanding({
   onViewMorning,
   onRefresh,
   refreshing = false,
+  lateNightCareWindow = false,
 }: {
   checkIn: DailyCheckIn | null;
   familyId?: string;
@@ -482,6 +483,7 @@ function CheckinLanding({
   onViewMorning: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
+  lateNightCareWindow?: boolean;
 }) {
   const morningDone = checkIn?.morningDone ?? false;
   const eveningDone = checkIn?.eveningDone ?? false;
@@ -496,9 +498,14 @@ function CheckinLanding({
     return () => { cancelled = true; };
   }, [checkIn, familyId]);
 
-  const morningTime = morningDone && checkIn?.completedAt
+  // completedAt is updated again when the evening entry is saved, so it is only an
+  // exact morning timestamp before the evening record has been completed.
+  const morningTime = morningDone && !eveningDone && checkIn?.completedAt
     ? new Date(checkIn.completedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     : null;
+  const careDayLabel = checkIn?.date?.match(/^\d{4}-(\d{2})-(\d{2})$/)
+    ? `${Number(checkIn.date.slice(5, 7))}月${Number(checkIn.date.slice(8, 10))}日`
+    : '前一天';
 
   return (
     <ScrollView contentContainerStyle={styles.landingContainer} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B07858" colors={['#B07858']} />}>
@@ -520,6 +527,15 @@ function CheckinLanding({
           </View>
         }
       />
+
+      {lateNightCareWindow && (
+        <View style={styles.lateNightCareNotice}>
+          <Text style={styles.lateNightCareNoticeIcon}>🌙</Text>
+          <Text style={styles.lateNightCareNoticeText}>
+            当前为凌晨时段，{String(CARE_DAY_ROLLOVER_HOUR).padStart(2, '0')}:00 前完成的晚间记录仍计入{careDayLabel}护理日
+          </Text>
+        </View>
+      )}
 
       {/* Morning Card */}
       <TouchableOpacity
@@ -1239,6 +1255,7 @@ function CheckinScreenContent() {
           onViewMorning={() => { setStep(0); setMode('morning'); }}
           onRefresh={handleRefresh}
           refreshing={refreshing}
+          lateNightCareWindow={!backfillDate && isLateNightCareWindow()}
         />
       </ScreenContainer>
     );
@@ -1895,7 +1912,10 @@ const styles = StyleSheet.create({
   doneCheckText: { fontSize: 14, color: '#fff', fontWeight: '700' },
 
   // Tip
-  landingTip: { marginBottom: 4, marginTop: 2 },
+  lateNightCareNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: '#F1EDFA', borderWidth: 1, borderColor: '#DDD4F3' },
+  lateNightCareNoticeIcon: { fontSize: 16 },
+  lateNightCareNoticeText: { flex: 1, fontSize: 12, lineHeight: 18, color: '#665A9C', fontWeight: '600' },
+  landingTip: { marginTop: 4, marginBottom: 24 },
   landingTipGradient: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     borderRadius: 16, padding: 14,

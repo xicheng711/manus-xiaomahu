@@ -2,23 +2,35 @@ export function localDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+/** A care day closes at 05:00 instead of midnight. */
+export const CARE_DAY_ROLLOVER_HOUR = 5;
+
+export function isLateNightCareWindow(
+  now = new Date(),
+  rolloverHour = CARE_DAY_ROLLOVER_HOUR,
+): boolean {
+  return now.getHours() < rolloverHour;
+}
+
+/**
+ * This lets a caregiver finish an evening check-in shortly after midnight
+ * without splitting one day's morning and evening records into separate entries.
+ */
+export function getCareDayKey(
+  now = new Date(),
+  rolloverHour = CARE_DAY_ROLLOVER_HOUR,
+): string {
+  const careDay = new Date(now);
+  if (isLateNightCareWindow(careDay, rolloverHour)) careDay.setDate(careDay.getDate() - 1);
+  return localDateKey(careDay);
+}
+
 /**
  * Announcements are point-in-time events. Unlike a caregiver's daily check-in,
  * they should appear under the calendar day of the person currently viewing them.
  * Prefer the absolute creation time and retain the author-entered date only as a
  * safe legacy fallback for old records without a valid timestamp.
  */
-/**
- * A care day closes at 05:00 rather than 00:00. This lets a caregiver finish an
- * evening check-in shortly after midnight without splitting one day's morning
- * and evening records into separate calendar entries.
- */
-export function getCareDayKey(now = new Date(), rolloverHour = 5): string {
-  const careDay = new Date(now);
-  if (careDay.getHours() < rolloverHour) careDay.setDate(careDay.getDate() - 1);
-  return localDateKey(careDay);
-}
-
 export function getAnnouncementViewerDateKey(
   announcement: { createdAt?: string | Date | null; date?: string | null },
   now = new Date(),

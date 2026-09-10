@@ -910,11 +910,14 @@ export default function FamilyScreen() {
       },
       requestedFamilyId,
     );
-    if (!optimistic || activeFamilyRef.current !== requestedFamilyId) return;
-    setAnnouncements(current => current.map(item => item.id === announcement.id ? optimistic : item));
+    if (!optimistic) return;
+    if (activeFamilyRef.current === requestedFamilyId) {
+      setAnnouncements(current => current.map(item => item.id === announcement.id ? optimistic : item));
+    }
 
+    // Complete the operation against the family captured at tap time even if the user switches
+    // profiles while the request is in flight; only visible state updates are gated by the active room.
     const result = await cloudToggleReaction(numericAnnouncementId, emoji, numericRoomId);
-    if (activeFamilyRef.current !== requestedFamilyId) return;
     if (result?.success && Array.isArray(result.reactions)) {
       const confirmed = await setAnnouncementReactionSnapshot(
         announcement.id,
@@ -942,7 +945,9 @@ export default function FamilyScreen() {
     if (reverted && activeFamilyRef.current === requestedFamilyId) {
       setAnnouncements(current => current.map(item => item.id === announcement.id ? reverted : item));
     }
-    Alert.alert('表情回应未同步', '网络暂时不可用，请稍后再试。');
+    if (activeFamilyRef.current === requestedFamilyId) {
+      Alert.alert('表情回应未同步', '网络暂时不可用，请稍后再试。');
+    }
   }, [currentMember, familyId]);
 
   async function handleShareBriefing() {
@@ -1156,7 +1161,7 @@ export default function FamilyScreen() {
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyEmoji}>📭</Text>
                 <Text style={styles.emptyText}>今天还没有公告</Text>
-                <Text style={styles.emptySubText}>点击下方按钮发布第一条公告吧！</Text>
+                <Text style={styles.emptySubText}>点击右上角“发布”分享第一条公告吧！</Text>
               </View>
             ) : (
               todayAnnouncements.map(ann => (

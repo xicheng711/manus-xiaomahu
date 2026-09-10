@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  CARE_DAY_ROLLOVER_HOUR,
   getAnnouncementViewerDateKey,
   getCareDayKey,
+  isLateNightCareWindow,
   localDateKey,
 } from '../lib/shared-date-range';
 
@@ -20,6 +22,19 @@ describe('announcement viewer-time and care-day boundaries', () => {
     })).toBe(localDateKey(viewedAt));
   });
 
+  it('places the same Beijing-midnight publication into the correct local day for Beijing and New York viewers', () => {
+    const originalTimezone = process.env.TZ;
+    const createdAt = '2026-09-09T16:17:00.000Z'; // 9/10 00:17 in Beijing; 9/9 12:17 in New York.
+    try {
+      process.env.TZ = 'Asia/Shanghai';
+      expect(getAnnouncementViewerDateKey({ createdAt, date: '2026-09-10' })).toBe('2026-09-10');
+      process.env.TZ = 'America/New_York';
+      expect(getAnnouncementViewerDateKey({ createdAt, date: '2026-09-10' })).toBe('2026-09-09');
+    } finally {
+      process.env.TZ = originalTimezone;
+    }
+  });
+
   it('retains legacy date only when an old announcement has no valid absolute publication timestamp', () => {
     expect(getAnnouncementViewerDateKey({
       date: '2026-09-09',
@@ -28,6 +43,9 @@ describe('announcement viewer-time and care-day boundaries', () => {
   });
 
   it('keeps 00:00–04:59 evening saves in the previous care day and starts a new care day at 05:00', () => {
+    expect(CARE_DAY_ROLLOVER_HOUR).toBe(5);
+    expect(isLateNightCareWindow(new Date(2026, 8, 10, 4, 59))).toBe(true);
+    expect(isLateNightCareWindow(new Date(2026, 8, 10, 5, 0))).toBe(false);
     expect(getCareDayKey(new Date(2026, 8, 10, 0, 17))).toBe('2026-09-09');
     expect(getCareDayKey(new Date(2026, 8, 10, 4, 59))).toBe('2026-09-09');
     expect(getCareDayKey(new Date(2026, 8, 10, 5, 0))).toBe('2026-09-10');
@@ -48,10 +66,18 @@ describe('announcement viewer-time and care-day boundaries', () => {
 
     expect(family).toContain('inlinePostButton');
     expect(family).not.toContain('Compose FAB — round circle');
+    expect(family).toContain("{ann.emoji ? ann.emoji + ' ' : ''}{ann.content}");
+    expect(family).not.toContain('<Text style={card.content} numberOfLines');
     expect(family).toContain('const optimistic = await toggleAnnouncementReaction(');
     expect(family).toContain('const result = await cloudToggleReaction(');
     expect(family).toContain('setAnnouncementReactionSnapshot(');
     expect(family).not.toContain('await loadData(true);\n                  }}');
+    expect(family).not.toContain('if (!optimistic || activeFamilyRef.current !== requestedFamilyId) return;');
+    expect(family).toContain('Complete the operation against the family captured at tap time');
+
+    const storage = read('lib/storage.ts');
+    expect(storage).toContain('const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);');
+    expect(storage).toContain('Promise<FamilyAnnouncement | null>');
   });
 
   it('saves an after-midnight evening check-in under the previous care-day key and reloads that same key', () => {
@@ -60,5 +86,8 @@ describe('announcement viewer-time and care-day boundaries', () => {
     expect(checkin).toContain("const effectiveDate = backfillDate || (mode === 'evening' ? getCareDayKey() : todayStr());");
     expect(checkin).toContain('const data: Partial<DailyCheckIn> & { date: string } = { date: effectiveDate };');
     expect(checkin).toContain('const refreshed = await getCheckInByDate(effectiveDate, familyId);');
+    expect(checkin).toContain('lateNightCareWindow={!backfillDate && isLateNightCareWindow()}');
+    expect(checkin).toContain('前完成的晚间记录仍计入{careDayLabel}护理日');
+    expect(checkin).toContain('const morningTime = morningDone && !eveningDone && checkIn?.completedAt');
   });
 });
