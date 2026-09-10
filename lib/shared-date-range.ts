@@ -25,6 +25,21 @@ export function getCareDayKey(
   return localDateKey(careDay);
 }
 
+export function resolveCheckInFormTargetDate(options: {
+  mode: 'morning' | 'evening';
+  backfillDate?: string | null;
+  loadedRecordDate?: string | null;
+  useLoadedRecord?: boolean;
+  openedAt?: Date;
+}): string {
+  const { mode, backfillDate, loadedRecordDate, useLoadedRecord = false, openedAt = new Date() } = options;
+  if (backfillDate && /^\d{4}-\d{2}-\d{2}$/.test(backfillDate)) return backfillDate;
+  if (useLoadedRecord && loadedRecordDate && /^\d{4}-\d{2}-\d{2}$/.test(loadedRecordDate)) {
+    return loadedRecordDate;
+  }
+  return mode === 'evening' ? getCareDayKey(openedAt) : localDateKey(openedAt);
+}
+
 /**
  * Announcements are point-in-time events. Unlike a caregiver's daily check-in,
  * they should appear under the calendar day of the person currently viewing them.

@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
-import { CARE_DAY_ROLLOVER_HOUR, getCareDayKey, isLateNightCareWindow } from '@/lib/shared-date-range';
+import { CARE_DAY_ROLLOVER_HOUR, getCareDayKey, isLateNightCareWindow, resolveCheckInFormTargetDate } from '@/lib/shared-date-range';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
@@ -732,6 +732,16 @@ function CheckinScreenContent() {
   activeFamilyRef.current = familyId;
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [mode, setMode] = useState<'landing' | 'morning' | 'evening'>('landing');
+  // A form session is bound to the record selected when the user enters it. The server
+  // identifies a check-in by roomId + date (with serverCheckInId retained for diagnostics),
+  // so crossing midnight while typing must never move the save to a different record.
+  const formTargetRef = useRef<{
+    familyId: string;
+    date: string;
+    mode: 'morning' | 'evening';
+    recordId?: string;
+    serverCheckInId?: number;
+  } | null>(null);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -841,9 +851,11 @@ function CheckinScreenContent() {
   useFocusEffect(useCallback(() => {
     const requestedFamilyId = familyId;
     if (!familyReady || !requestedFamilyId) {
+      formTargetRef.current = null;
       setCheckIn(null);
       return;
     }
+    formTargetRef.current = null;
     loadCheckInData().catch(() => {});
     syncPendingCheckIns(requestedFamilyId).catch(() => {});
 
@@ -855,6 +867,15 @@ function CheckinScreenContent() {
       const existing = await getCheckInByDate(targetDate, requestedFamilyId);
       if (!isCurrentFamily()) return;
       setCheckIn(existing);
+      if (backfillDate) {
+        formTargetRef.current = {
+          familyId: requestedFamilyId,
+          date: targetDate,
+          mode: 'evening',
+          recordId: existing?.id,
+          serverCheckInId: existing?.serverCheckInId,
+        };
+      }
 
       // 先清理上一家庭的表单数据，当前家庭有记录时再逐项恢复。
       setMorningNotes('');
@@ -922,6 +943,34 @@ function CheckinScreenContent() {
 
   const selectedMood = MOODS[moodIdx];
 
+  function openCheckInForm(nextMode: 'morning' | 'evening', useLoadedRecord = false) {
+    if (!familyId) {
+      Alert.alert('家庭信息尚未准备好', '请稍后重试。');
+      return;
+    }
+    const targetDate = resolveCheckInFormTargetDate({
+      mode: nextMode,
+      backfillDate,
+      loadedRecordDate: checkIn?.date,
+      useLoadedRecord,
+      openedAt: new Date(),
+    });
+    formTargetRef.current = {
+      familyId,
+      date: targetDate,
+      mode: nextMode,
+      recordId: checkIn?.date === targetDate ? checkIn.id : undefined,
+      serverCheckInId: checkIn?.date === targetDate ? checkIn.serverCheckInId : undefined,
+    };
+    setStep(0);
+    setMode(nextMode);
+  }
+
+  function closeCheckInForm() {
+    formTargetRef.current = null;
+    setMode('landing');
+  }
+
   function animateStep(next: () => void) {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
@@ -954,7 +1003,7 @@ function CheckinScreenContent() {
       animateStep(() => setStep(s => s - 1));
     } else {
       // Go back to landing
-      setMode('landing');
+      closeCheckInForm();
     }
   }
 
@@ -976,9 +1025,15 @@ function CheckinScreenContent() {
       Alert.alert('家庭信息尚未准备好', '请稍后重试。');
       return;
     }
+    const formTarget = formTargetRef.current;
+    if (!formTarget || formTarget.familyId !== familyId || formTarget.mode !== mode) {
+      Alert.alert('打卡目标已变化', '为了避免保存到错误的家庭或日期，请返回打卡首页后重新进入。');
+      return;
+    }
     setSaving(true);
     try {
-    const effectiveDate = backfillDate || (mode === 'evening' ? getCareDayKey() : todayStr());
+    // Never recalculate from the save time: this is the exact record selected on entry.
+    const effectiveDate = formTarget.date;
     const data: Partial<DailyCheckIn> & { date: string } = { date: effectiveDate };
     if (mode === 'morning') {
       // ── 构建结构化 SleepInput（v4.1 评分引擎输入）────────────────────────
@@ -1230,7 +1285,7 @@ function CheckinScreenContent() {
 
             <TouchableOpacity
               style={styles.morningDoneSecondaryBtn}
-              onPress={() => { setDone(false); setMode('landing'); }}
+              onPress={() => { setDone(false); closeCheckInForm(); }}
               activeOpacity={0.8}
             >
               <Text style={styles.morningDoneSecondaryBtnText}>查看打卡状态</Text>
@@ -1250,9 +1305,9 @@ function CheckinScreenContent() {
           familyId={familyId}
           elderNickname={elderNickname}
           caregiverName={caregiverName}
-          onStartMorning={() => { setStep(0); setMode('morning'); }}
-          onStartEvening={() => { setStep(0); setMode('evening'); }}
-          onViewMorning={() => { setStep(0); setMode('morning'); }}
+          onStartMorning={() => openCheckInForm('morning')}
+          onStartEvening={() => openCheckInForm('evening', true)}
+          onViewMorning={() => openCheckInForm('morning', true)}
           onRefresh={handleRefresh}
           refreshing={refreshing}
           lateNightCareWindow={!backfillDate && isLateNightCareWindow()}
@@ -1746,6 +1801,11 @@ function CheckinScreenContent() {
   const currentSteps = mode === 'morning' ? morningSteps : eveningSteps;
   const currentStep = currentSteps[step];
   const isLast = step === currentSteps.length - 1;
+  const formDateKey = formTargetRef.current?.date || backfillDate || todayStr();
+  const formDate = new Date(`${formDateKey}T12:00:00`);
+  const formDateLabel = Number.isFinite(formDate.getTime())
+    ? formDate.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
+    : formDateKey;
 
   const roleBadgeProps = (currentStep as any).role === 'elder'
     ? { label: currentStep.roleLabel, color: '#2563EB', bgColor: '#EFF6FF' }
@@ -1759,9 +1819,10 @@ function CheckinScreenContent() {
     .onEnd((e) => {
       if (e.translationX > 60 && Math.abs(e.translationY) < 80) {
         if (backfillDate) {
+          formTargetRef.current = null;
           router.back();
         } else {
-          setMode('landing');
+          closeCheckInForm();
         }
       }
     })
@@ -1788,9 +1849,13 @@ function CheckinScreenContent() {
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
           <View>
             <Text style={styles.appName}>{mode === 'morning' ? '早间打卡' : backfillDate ? '补昨晚记录' : '晚间记录'}</Text>
-            <Text style={styles.date}>{backfillDate ? new Date(backfillDate + 'T12:00:00').toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' }) : new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</Text>
+            <Text style={styles.date}>{formDateLabel}</Text>
           </View>
-          <TouchableOpacity style={styles.backToLanding} onPress={() => backfillDate ? router.back() : setMode('landing')}>
+          <TouchableOpacity style={styles.backToLanding} onPress={() => {
+            formTargetRef.current = null;
+            if (backfillDate) router.back();
+            else closeCheckInForm();
+          }}>
             <Text style={styles.backToLandingText}>← 返回</Text>
           </TouchableOpacity>
         </Animated.View>

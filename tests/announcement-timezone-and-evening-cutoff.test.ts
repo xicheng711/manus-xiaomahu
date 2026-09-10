@@ -7,6 +7,7 @@ import {
   getCareDayKey,
   isLateNightCareWindow,
   localDateKey,
+  resolveCheckInFormTargetDate,
 } from '../lib/shared-date-range';
 
 const root = path.resolve(__dirname, '..');
@@ -51,6 +52,36 @@ describe('announcement viewer-time and care-day boundaries', () => {
     expect(getCareDayKey(new Date(2026, 8, 10, 5, 0))).toBe('2026-09-10');
   });
 
+  it('locks the selected evening record when entering the form instead of recalculating at save time', () => {
+    // The 9/9 record is visible and selected. It remains the target even if entry begins or ends after 05:00 on 9/10.
+    const selectedDate = resolveCheckInFormTargetDate({
+      mode: 'evening',
+      loadedRecordDate: '2026-09-09',
+      useLoadedRecord: true,
+      openedAt: new Date(2026, 8, 10, 5, 30),
+    });
+    expect(selectedDate).toBe('2026-09-09');
+
+    // If no record has been selected, the entry-time care-day rule supplies the initial target.
+    expect(resolveCheckInFormTargetDate({
+      mode: 'evening',
+      openedAt: new Date(2026, 8, 10, 0, 17),
+    })).toBe('2026-09-09');
+    expect(resolveCheckInFormTargetDate({
+      mode: 'evening',
+      openedAt: new Date(2026, 8, 10, 5, 0),
+    })).toBe('2026-09-10');
+
+    // An explicit history/backfill selection always wins.
+    expect(resolveCheckInFormTargetDate({
+      mode: 'evening',
+      backfillDate: '2026-09-07',
+      loadedRecordDate: '2026-09-09',
+      useLoadedRecord: true,
+      openedAt: new Date(2026, 8, 10, 20, 0),
+    })).toBe('2026-09-07');
+  });
+
   it('uses viewer-local announcement buckets in the family list, briefing and joiner activity feed', () => {
     const family = read('app/(tabs)/family.tsx');
     const joinerHome = read('components/joiner-home.tsx');
@@ -80,12 +111,17 @@ describe('announcement viewer-time and care-day boundaries', () => {
     expect(storage).toContain('Promise<FamilyAnnouncement | null>');
   });
 
-  it('saves an after-midnight evening check-in under the previous care-day key and reloads that same key', () => {
+  it('saves to the record selected on entry, reloads that same record and shows its date in the form', () => {
     const checkin = read('app/(tabs)/checkin.tsx');
 
-    expect(checkin).toContain("const effectiveDate = backfillDate || (mode === 'evening' ? getCareDayKey() : todayStr());");
+    expect(checkin).toContain('const formTargetRef = useRef<{');
+    expect(checkin).toContain('const targetDate = resolveCheckInFormTargetDate({');
+    expect(checkin).toContain('// Never recalculate from the save time: this is the exact record selected on entry.');
+    expect(checkin).toContain('const effectiveDate = formTarget.date;');
+    expect(checkin).not.toContain("const effectiveDate = backfillDate || (mode === 'evening' ? getCareDayKey() : todayStr());");
     expect(checkin).toContain('const data: Partial<DailyCheckIn> & { date: string } = { date: effectiveDate };');
     expect(checkin).toContain('const refreshed = await getCheckInByDate(effectiveDate, familyId);');
+    expect(checkin).toContain('<Text style={styles.date}>{formDateLabel}</Text>');
     expect(checkin).toContain('lateNightCareWindow={!backfillDate && isLateNightCareWindow()}');
     expect(checkin).toContain('前完成的晚间记录仍计入{careDayLabel}护理日');
     expect(checkin).toContain('const morningTime = morningDone && !eveningDone && checkIn?.completedAt');
