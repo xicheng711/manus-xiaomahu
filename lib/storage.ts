@@ -589,18 +589,46 @@ function normalizeCheckIn(c: DailyCheckIn): DailyCheckIn {
   return { ...normalized, napMinutes, daytimeNap: napMinutes > 0 };
 }
 
+const CHECK_IN_MORNING_FIELDS: Array<keyof DailyCheckIn> = [
+  'sleepHours', 'sleepQuality', 'sleepInput', 'sleepScore', 'sleepProblems',
+  'sleepType', 'sleepSegments', 'awakeHours', 'nightWakings', 'sleepRange',
+  'nightAwakenings', 'nightAwakeTime', 'napDuration', 'morningNotes', 'morningDone',
+];
+const CHECK_IN_EVENING_FIELDS: Array<keyof DailyCheckIn> = [
+  'daytimeNap', 'napMinutes', 'moodEmoji', 'moodScore', 'medicationTaken',
+  'medicationNotes', 'mealNotes', 'mealOption', 'eveningNotes', 'eveningDone',
+  'aiMessage', 'careScore',
+];
+
+function copyCheckInFields(
+  target: DailyCheckIn,
+  source: DailyCheckIn,
+  fields: Array<keyof DailyCheckIn>,
+): void {
+  for (const field of fields) (target as any)[field] = source[field];
+}
+
+/**
+ * A pending local snapshot stays authoritative for fields the user just edited,
+ * but it must absorb a phase that another device has already completed. This
+ * prevents a local morning retry from hiding a cloud evening (or vice versa).
+ */
+function mergePendingCheckInWithCloud(local: DailyCheckIn, cloud: DailyCheckIn): DailyCheckIn {
+  const merged = { ...cloud, ...local } as DailyCheckIn;
+  if (local.morningDone !== true && cloud.morningDone === true) {
+    copyCheckInFields(merged, cloud, CHECK_IN_MORNING_FIELDS);
+  }
+  if (local.eveningDone !== true && cloud.eveningDone === true) {
+    copyCheckInFields(merged, cloud, CHECK_IN_EVENING_FIELDS);
+  }
+  merged.morningDone = local.morningDone === true || cloud.morningDone === true;
+  merged.eveningDone = local.eveningDone === true || cloud.eveningDone === true;
+  return merged;
+}
+
 function mergeDuplicateCloudCheckIns(entries: any[]): any[] {
   const byDate = new Map<string, any>();
-  const morningFields = [
-    'sleepHours', 'sleepQuality', 'sleepInput', 'sleepScore', 'sleepProblems',
-    'sleepType', 'sleepSegments', 'awakeHours', 'nightWakings', 'sleepRange',
-    'nightAwakenings', 'nightAwakeTime', 'napDuration', 'morningNotes', 'morningDone',
-  ];
-  const eveningFields = [
-    'daytimeNap', 'napMinutes', 'moodEmoji', 'moodScore', 'medicationTaken',
-    'medicationNotes', 'mealNotes', 'mealOption', 'eveningNotes', 'eveningDone',
-    'aiMessage', 'careScore',
-  ];
+
   const timestamp = (entry: any) => String(entry?.completedAt ?? entry?.updatedAt ?? entry?.createdAt ?? '');
 
   for (const entry of entries) {
@@ -620,10 +648,10 @@ function mergeDuplicateCloudCheckIns(entries: any[]): any[] {
       .filter(item => item?.eveningDone === true)
       .sort((left, right) => timestamp(right).localeCompare(timestamp(left)))[0];
     if (morningSource) {
-      for (const field of morningFields) merged[field] = morningSource[field];
+      for (const field of CHECK_IN_MORNING_FIELDS) merged[field] = morningSource[field];
     }
     if (eveningSource) {
-      for (const field of eveningFields) merged[field] = eveningSource[field];
+      for (const field of CHECK_IN_EVENING_FIELDS) merged[field] = eveningSource[field];
     }
     merged.morningDone = existing?.morningDone === true || entry?.morningDone === true;
     merged.eveningDone = existing?.eveningDone === true || entry?.eveningDone === true;
@@ -683,9 +711,9 @@ export async function mergeCloudCheckInsIntoLocal(
 
     // 本地仍在等待上传时，不能让较旧的服务器快照覆盖刚保存的小睡或晚间记录。
     if (local.syncPending) {
+      const pendingMerged = mergePendingCheckInWithCloud(local, cloud);
       return normalizeCheckIn({
-        ...cloud,
-        ...local,
+        ...pendingMerged,
         id: local.id,
         clientId: cloud.clientId || local.clientId,
         serverCheckInId: cloud.serverCheckInId,
@@ -834,10 +862,16 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     : idxByServerId >= 0
       ? idxByServerId
       : all.findIndex(c => c.date === data.date); // Legacy compatibility only.
-  const localId = idx >= 0 ? all[idx].id : generateId();
-  const stableClientId = idx >= 0
-    ? getStableCheckInClientId(all[idx])
+  const existing = idx >= 0 ? all[idx] : undefined;
+  const localId = existing?.id ?? generateId();
+  const stableClientId = existing
+    ? getStableCheckInClientId(existing)
     : requestedClientId || `checkin_local_${localId}`;
+  const validRequestedServerId = Number.isFinite(requestedServerId) && requestedServerId > 0
+    ? requestedServerId
+    : undefined;
+  const stableServerCheckInId = existing?.serverCheckInId ?? validRequestedServerId;
+  const stableDate = existing?.date ?? data.date;
   const defaults: DailyCheckIn = {
     id: localId,
     clientId: stableClientId,
@@ -858,9 +892,28 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     completedAt: new Date().toISOString(),
   };
   const syncVersion = generateId();
-  const checkIn: DailyCheckIn = normalizeCheckIn(idx >= 0
-    ? { ...all[idx], ...data, id: localId, clientId: stableClientId, completedAt: new Date().toISOString(), syncPending: true, syncVersion }
-    : { ...defaults, ...data, id: localId, clientId: stableClientId, syncPending: true, syncVersion });
+  const checkIn: DailyCheckIn = normalizeCheckIn(existing
+    ? {
+        ...existing,
+        ...data,
+        id: localId,
+        clientId: stableClientId,
+        serverCheckInId: stableServerCheckInId,
+        date: stableDate,
+        completedAt: new Date().toISOString(),
+        syncPending: true,
+        syncVersion,
+      }
+    : {
+        ...defaults,
+        ...data,
+        id: localId,
+        clientId: stableClientId,
+        serverCheckInId: stableServerCheckInId,
+        date: stableDate,
+        syncPending: true,
+        syncVersion,
+      });
   if (idx >= 0) all[idx] = checkIn;
   else all.unshift(checkIn);
   await AsyncStorage.setItem(key, JSON.stringify(all));

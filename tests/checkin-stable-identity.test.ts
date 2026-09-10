@@ -46,8 +46,10 @@ vi.mock('../lib/cloud-sync', () => ({
 
 import {
   getAllCheckIns,
+  getCheckInByDate,
   getStableCheckInClientId,
   mergeCloudCheckInsIntoLocal,
+  syncPendingCheckIns,
   upsertCheckIn,
 } from '../lib/storage';
 import { resolveCheckInSyncIdentity } from '../server/checkin-sync-identity';
@@ -171,6 +173,166 @@ describe('每日打卡稳定记录身份', () => {
       requestedMatch: staleSameRoomServerMatch,
       dateMatch,
     })?.id).toBe(502);
+  });
+
+  it('模拟用户从早间到晚间的完整一天，始终更新同一条本地和云端记录', async () => {
+    cloudSyncCheckInMock.mockImplementation(async checkIn => ({
+      success: true,
+      checkIn: { ...checkIn, id: 701, clientId: checkIn.clientId },
+    }));
+
+    const morning = await upsertCheckIn({
+      date: '2026-09-10',
+      sleepHours: 7.5,
+      morningNotes: '昨晚睡得不错',
+      morningDone: true,
+    }, ROOM_ID);
+    await vi.waitFor(async () => {
+      expect((await getCheckInByDate('2026-09-10', ROOM_ID))?.syncPending).toBe(false);
+    });
+    const syncedMorning = await getCheckInByDate('2026-09-10', ROOM_ID);
+    expect(syncedMorning?.serverCheckInId).toBe(701);
+
+    const evening = await upsertCheckIn({
+      date: '2026-09-10',
+      clientId: syncedMorning?.clientId,
+      serverCheckInId: syncedMorning?.serverCheckInId,
+      moodEmoji: '😊',
+      moodScore: 9,
+      mealNotes: '晚饭正常',
+      eveningNotes: '晚间状态稳定',
+      eveningDone: true,
+    }, ROOM_ID);
+    await vi.waitFor(async () => {
+      expect((await getCheckInByDate('2026-09-10', ROOM_ID))?.syncPending).toBe(false);
+    });
+
+    const [finalRecord] = await getAllCheckIns(ROOM_ID);
+    expect(finalRecord.id).toBe(morning.id);
+    expect(finalRecord.clientId).toBe(morning.clientId);
+    expect(finalRecord.serverCheckInId).toBe(701);
+    expect(finalRecord).toMatchObject({
+      morningDone: true,
+      morningNotes: '昨晚睡得不错',
+      eveningDone: true,
+      eveningNotes: '晚间状态稳定',
+    });
+    expect(cloudSyncCheckInMock.mock.calls[1][0]).toMatchObject({
+      clientId: morning.clientId,
+      serverCheckInId: 701,
+      morningDone: true,
+      eveningDone: true,
+    });
+  });
+
+  it('模拟断网后退出再打开，完整记录留在本地并在恢复网络后以同一 ID 重试', async () => {
+    cloudSyncCheckInMock.mockResolvedValueOnce(null);
+    const local = await upsertCheckIn({
+      date: '2026-09-11',
+      morningDone: true,
+      morningNotes: '断网时填写',
+    }, ROOM_ID);
+    await vi.waitFor(() => expect(cloudSyncCheckInMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(async () => {
+      expect((await getCheckInByDate('2026-09-11', ROOM_ID))?.syncPending).toBe(true);
+    });
+
+    cloudSyncCheckInMock.mockImplementation(async checkIn => ({
+      success: true,
+      checkIn: { ...checkIn, id: 702, clientId: checkIn.clientId },
+    }));
+    await syncPendingCheckIns(ROOM_ID);
+
+    const recovered = await getCheckInByDate('2026-09-11', ROOM_ID);
+    expect(recovered).toMatchObject({
+      id: local.id,
+      clientId: local.clientId,
+      serverCheckInId: 702,
+      morningDone: true,
+      morningNotes: '断网时填写',
+      syncPending: false,
+    });
+  });
+
+  it('模拟另一台设备先建立同一护理日，当前设备采用云端 canonical ID 而不产生第二条', async () => {
+    const local = await upsertCheckIn({
+      date: '2026-09-12',
+      morningDone: true,
+      morningNotes: '设备 A 的早间内容',
+    }, ROOM_ID);
+    const merged = await mergeCloudCheckInsIntoLocal([serverRow({
+      id: 703,
+      clientId: 'checkin_device_b_canonical',
+      date: '2026-09-12',
+      morningDone: true,
+      eveningDone: true,
+      eveningNotes: '设备 B 的晚间内容',
+    })], ROOM_ID);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe(local.id);
+    expect(merged[0].clientId).toBe('checkin_device_b_canonical');
+    expect(merged[0].serverCheckInId).toBe(703);
+    expect(merged[0].morningDone).toBe(true);
+    expect(merged[0].eveningDone).toBe(true);
+  });
+
+  it('同一天在两个家庭分别产生不同稳定 ID，读取时不会跨家庭命中', async () => {
+    const roomA = await upsertCheckIn({ date: '2026-09-13', morningDone: true }, 'room-A');
+    const roomB = await upsertCheckIn({ date: '2026-09-13', morningDone: true }, 'room-B');
+
+    expect(roomA.clientId).not.toBe(roomB.clientId);
+    expect((await getAllCheckIns('room-A'))).toHaveLength(1);
+    expect((await getAllCheckIns('room-B'))).toHaveLength(1);
+    expect((await getAllCheckIns('room-A'))[0].clientId).toBe(roomA.clientId);
+    expect((await getAllCheckIns('room-B'))[0].clientId).toBe(roomB.clientId);
+  });
+
+  it('稳定 ID 已锁定记录后，即使保存 payload 跨午夜带入次日日期也不能移动记录', async () => {
+    cloudSyncCheckInMock.mockImplementation(async checkIn => ({
+      success: true,
+      checkIn: { ...checkIn, id: 704, clientId: checkIn.clientId },
+    }));
+    const morning = await upsertCheckIn({
+      date: '2026-09-14',
+      morningDone: true,
+    }, ROOM_ID);
+    await vi.waitFor(async () => {
+      expect((await getCheckInByDate('2026-09-14', ROOM_ID))?.serverCheckInId).toBe(704);
+    });
+    const synced = await getCheckInByDate('2026-09-14', ROOM_ID);
+
+    const afterMidnight = await upsertCheckIn({
+      date: '2026-09-15',
+      clientId: morning.clientId,
+      serverCheckInId: synced?.serverCheckInId,
+      eveningDone: true,
+      eveningNotes: '跨午夜后完成',
+    }, ROOM_ID);
+
+    expect(afterMidnight.date).toBe('2026-09-14');
+    expect((await getAllCheckIns(ROOM_ID))).toHaveLength(1);
+    expect(await getCheckInByDate('2026-09-15', ROOM_ID)).toBeNull();
+  });
+
+  it('晚间保存未携带 serverCheckInId 时，也不能清除本地已经确认的云端身份', async () => {
+    cloudSyncCheckInMock.mockImplementation(async checkIn => ({
+      success: true,
+      checkIn: { ...checkIn, id: 705, clientId: checkIn.clientId },
+    }));
+    await upsertCheckIn({ date: '2026-09-16', morningDone: true }, ROOM_ID);
+    await vi.waitFor(async () => {
+      expect((await getCheckInByDate('2026-09-16', ROOM_ID))?.serverCheckInId).toBe(705);
+    });
+
+    const beforeEvening = await getCheckInByDate('2026-09-16', ROOM_ID);
+    const evening = await upsertCheckIn({
+      date: '2026-09-16',
+      clientId: beforeEvening?.clientId,
+      serverCheckInId: undefined,
+      eveningDone: true,
+    }, ROOM_ID);
+    expect(evening.serverCheckInId).toBe(705);
   });
 
   it('数据库、客户端 payload 与表单目标均持久化稳定身份', () => {
