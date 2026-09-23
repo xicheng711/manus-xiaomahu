@@ -428,15 +428,24 @@ function buildFamilyBriefingHistory(
 ): BriefingHistoryItem[] {
   const checkInMap = new Map<string, DailyCheckIn>();
   for (const checkIn of allCheckIns) checkInMap.set(checkIn.date, checkIn);
+  // 日记按日期建索引：之前对简报里的每一天都做一次全量 find。
+  const diaryMap = new Map<string, any>();
+  for (const entry of diaryEntries) {
+    if (entry?.date && !diaryMap.has(entry.date)) diaryMap.set(entry.date, entry);
+  }
 
   const viewerTodayKey = todayStr();
   const viewerTomorrow = new Date();
   viewerTomorrow.setDate(viewerTomorrow.getDate() + 1);
   const viewerTomorrowKey = `${viewerTomorrow.getFullYear()}-${String(viewerTomorrow.getMonth() + 1).padStart(2, '0')}-${String(viewerTomorrow.getDate()).padStart(2, '0')}`;
-  const latestRecordedDate = allCheckIns
-    .map(checkIn => checkIn.date)
-    .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
-    .sort((left, right) => right.localeCompare(left))[0];
+  // 单次遍历取最大日期：之前对全量日期做全排序，只是为了取最大值。
+  let latestRecordedDate: string | undefined;
+  for (const checkIn of allCheckIns) {
+    const date = checkIn.date;
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && (latestRecordedDate === undefined || date > latestRecordedDate)) {
+      latestRecordedDate = date;
+    }
+  }
   const anchorDateKey = latestRecordedDate && latestRecordedDate > viewerTodayKey && latestRecordedDate <= viewerTomorrowKey
     ? latestRecordedDate
     : viewerTodayKey;
@@ -461,7 +470,7 @@ function buildFamilyBriefingHistory(
       date: dateKey,
       label,
       checkIn: checkInMap.get(dateKey) ?? null,
-      diary: diaryEntries.find(entry => entry.date === dateKey),
+      diary: diaryMap.get(dateKey) ?? null,
       announcements: announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === dateKey),
     });
   }
@@ -763,16 +772,12 @@ export default function FamilyScreen() {
       const scopedProfile = await getFamilyProfile(requestedFamilyId);
       profile = cloudProfile ?? scopedProfile ?? { nickname: requestedMembership.room.elderName };
     } else {
-      // Creator: read local first, then sync from cloud in background
-      const [localAll, localDiaries, localFp, localProfile] = await Promise.all([
-        getAllCheckIns(requestedFamilyId),
-        getDiaryEntries(requestedFamilyId),
-        getFamilyProfile(requestedFamilyId),
-        getProfile(),
-      ]);
-      allCheckIns = localAll;
-      todayCheckIn = findCurrentSharedRecord(localAll);
-      diaryEntries = localDiaries;
+      // Creator: 直接复用第一阶段已读到的本地数据。第二阶段的同步
+      // （待同步公告/简报、云端公告合并、房间详情）不会改动本地打卡、
+      // 日记与档案，因此不需要再做一次全量 JSON 解析。
+      allCheckIns = cachedCheckIns;
+      todayCheckIn = cachedToday;
+      diaryEntries = cachedDiaries;
       // 如果本地缓存为空（如退出登录后），立即从云端拉取数据
       if (allCheckIns.length === 0 && diaryEntries.length === 0) {
         try {
@@ -791,15 +796,8 @@ export default function FamilyScreen() {
           console.warn('[Family] cloud fallback failed:', e);
         }
       }
-      // Prefer FamilyProfile (family-scoped) for elder data; global legacy profile is safe only for a single-family account.
-      profile = localFp
-        ? {
-            ...(allowLegacyProfileFallback ? localProfile : null),
-            ...localFp,
-            name: localFp.name || (allowLegacyProfileFallback ? localProfile?.name : undefined),
-            nickname: localFp.nickname || (allowLegacyProfileFallback ? localProfile?.nickname : undefined),
-          } as any
-        : allowLegacyProfileFallback ? localProfile : null;
+      // 与第一阶段完全相同的档案合并逻辑，直接复用已算好的结果。
+      profile = cachedProfile;
     }
     if (!isCurrentFamily()) return;
     const viewerToday = todayStr();
