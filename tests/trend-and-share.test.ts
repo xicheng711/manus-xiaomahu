@@ -148,7 +148,8 @@ describe("Cross-timezone shared record range", () => {
     const familyScreen = readFileSync(resolve(__dirname, "../app/(tabs)/family.tsx"), "utf8");
     expect(familyScreen).toContain("const cachedToday = findCurrentSharedRecord(cachedCheckIns)");
     expect(familyScreen).toContain("todayCheckIn = findCurrentSharedRecord(allCheckIns)");
-    expect(familyScreen).toContain("todayCheckIn = findCurrentSharedRecord(localAll)");
+    // 性能第一批后，主照顾者路径直接复用第一阶段的 cachedToday（= findCurrentSharedRecord(cachedCheckIns)）
+    expect(familyScreen).toContain("todayCheckIn = cachedToday");
     expect(familyScreen).not.toContain("todayCheckIn = allCheckIns.find((ci: any) => ci.date === todayDate)");
   });
 
