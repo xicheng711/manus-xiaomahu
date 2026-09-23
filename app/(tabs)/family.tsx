@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Animated, Platform, Alert, Share, Modal,
-  Keyboard, TouchableWithoutFeedback, Clipboard, KeyboardAvoidingView, RefreshControl,
+  Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, RefreshControl,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
@@ -1496,16 +1497,16 @@ export default function FamilyScreen() {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                   <View style={{ flex: 1, minWidth: 140, backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 12 }}>
                     <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>💤 睡眠</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.sleepHours} 小时</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.sleepHours != null ? `${selectedItem.checkIn.sleepHours} 小时` : '未记录'}</Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 140, backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 12 }}>
-                    <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>{selectedItem.checkIn.moodEmoji} 心情</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.moodScore} / 10</Text>
+                    <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>{selectedItem.checkIn.moodEmoji || '🙂'} 心情</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.moodScore != null ? `${selectedItem.checkIn.moodScore} / 10` : '未记录'}</Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 140, backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 12 }}>
                     <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>💊 用药</Text>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: selectedItem.checkIn.medicationTaken ? '#16A34A' : '#DC2626' }}>
-                      {selectedItem.checkIn.medicationTaken ? '✅ 按时' : '⚠️ 未服'}
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: selectedItem.checkIn.medicationTaken != null ? (selectedItem.checkIn.medicationTaken ? '#16A34A' : '#DC2626') : AppColors.text.tertiary }}>
+                      {selectedItem.checkIn.medicationTaken != null ? (selectedItem.checkIn.medicationTaken ? '✅ 按时' : '⚠️ 未服') : '未记录'}
                     </Text>
                   </View>
                 </View>
@@ -1570,8 +1571,8 @@ export default function FamilyScreen() {
             <TouchableOpacity
               style={styles.inviteCodeBox}
               activeOpacity={0.7}
-              onPress={() => {
-                Clipboard.setString(room.roomCode);
+              onPress={async () => {
+                await Clipboard.setStringAsync(room.roomCode);
                 if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 setCodeCopied(true);
                 setTimeout(() => setCodeCopied(false), 2000);
@@ -1585,9 +1586,9 @@ export default function FamilyScreen() {
             <TouchableOpacity
               style={styles.inviteShareBtn}
               activeOpacity={0.85}
-              onPress={() => {
+              onPress={async () => {
                 const text = `🐾 我在用「小马虎」记录${room.elderName}的护理日常，邀请你加入！\n\n邀请码：${room.roomCode}\n链接：https://xtdtinthemorning.cn/join?code=${room.roomCode}`;
-                Clipboard.setString(text );
+                await Clipboard.setStringAsync(text);
                 if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 alert('已复制！去微信粘贴发给家人即可 🎉');
               }}
