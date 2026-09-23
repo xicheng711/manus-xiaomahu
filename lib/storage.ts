@@ -2558,6 +2558,43 @@ export async function clearScopedFamilyData(roomId: string): Promise<void> {
   await AsyncStorage.multiRemove(keys);
 }
 
+// ─── 打卡草稿（游客未登录时暂存，登录后恢复） ─────────────────────────────
+// 场景：游客填完打卡表点保存才被要求登录。之前是内容直接作废；
+// 现在提供"存草稿并去登录"，登录后自动把填过的内容填回去。
+const CHECKIN_DRAFT_KEY = '@xiaomahuCheckinDraft';
+const CHECKIN_DRAFT_TTL_MS = 48 * 3600 * 1000; // 草稿保留 48 小时
+
+export interface CheckInDraft {
+  targetDate: string; // 打卡目标日期（护理日 key）
+  mode: 'morning' | 'evening';
+  fields: Record<string, any>; // 表单字段快照（与 serializeFormFields 对应）
+  savedAt: number;
+}
+
+export async function saveCheckInDraft(draft: CheckInDraft): Promise<void> {
+  await AsyncStorage.setItem(CHECKIN_DRAFT_KEY, JSON.stringify(draft));
+}
+
+export async function readCheckInDraft(): Promise<CheckInDraft | null> {
+  const raw = await AsyncStorage.getItem(CHECKIN_DRAFT_KEY);
+  if (!raw) return null;
+  try {
+    const d = JSON.parse(raw);
+    if (!d || typeof d.targetDate !== 'string' || !d.fields || typeof d.fields !== 'object') return null;
+    if (typeof d.savedAt === 'number' && Date.now() - d.savedAt > CHECKIN_DRAFT_TTL_MS) {
+      await AsyncStorage.removeItem(CHECKIN_DRAFT_KEY).catch(() => {});
+      return null;
+    }
+    return d as CheckInDraft;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearCheckInDraft(): Promise<void> {
+  await AsyncStorage.removeItem(CHECKIN_DRAFT_KEY);
+}
+
 // Delete a family and all associated data (creator only)
 export async function deleteFamilyAndData(familyId: string): Promise<void> {
   // Clear all room-scoped data first

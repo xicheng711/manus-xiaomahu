@@ -243,9 +243,10 @@ function EnhancedCheckinBanner({
 
 // ─── 智能卡片：增强版 ────────────────────────────────────────────────
 function EnhancedSmartCard({
-  morningDone, eveningDone, encouragement, motivation, onPress, onCheckinPress,
+  morningDone, eveningDone, encouragement, motivation, showDisclaimer, onPress, onCheckinPress,
 }: {
   morningDone: boolean; eveningDone: boolean; encouragement: string; motivation: string;
+  showDisclaimer: boolean;
   onPress: () => void; onCheckinPress: () => void;
 }) {
   const iconScale = useRef(new Animated.Value(1)).current;
@@ -305,6 +306,15 @@ function EnhancedSmartCard({
             </View>
 
             <Text style={styles.aiMessage} numberOfLines={2}>{encouragement}</Text>
+
+            {/* 个性化照护建议：之前版本曾显示，改版时渲染被遗漏、只剩传参；恢复显示 */}
+            {!!motivation && (
+              <Text style={styles.aiMotivation} numberOfLines={3}>{motivation}</Text>
+            )}
+            {/* 收费级合规：建议仅供日常照护参考，不构成医疗建议 */}
+            {showDisclaimer && (
+              <Text style={styles.aiDisclaimer}>以上建议仅供日常照护参考，不构成医疗建议；如有不适请及时就医。</Text>
+            )}
 
             {morningDone && eveningDone ? (
               <TouchableOpacity onPress={onPress} style={[styles.aiDetailLink, { backgroundColor: AppColors.purple.strong }]}>
@@ -847,6 +857,7 @@ function CreatorHomeScreen() {
           eveningDone={eveningDone}
           encouragement={encouragement}
           motivation={getDailyStatusHint(todayCheckIn)}
+          showDisclaimer={!!todayCheckIn}
           onPress={() => {
             if (!morningDone || !eveningDone) {
               router.push('/(tabs)/checkin' as any);
@@ -1030,6 +1041,8 @@ const styles = StyleSheet.create({
   aiLabel: { fontSize: 14, fontWeight: '800', color: AppColors.purple.strong, letterSpacing: -0.2 },
   aiSubLabel: { fontSize: 10, color: AppColors.text.tertiary },
   aiMessage: { fontSize: 13, color: AppColors.text.secondary, lineHeight: 19, marginTop: 4 },
+  aiMotivation: { fontSize: 13, color: AppColors.text.primary, lineHeight: 19, marginTop: 6, fontWeight: '600' },
+  aiDisclaimer: { fontSize: 10.5, color: AppColors.text.tertiary, lineHeight: 15, marginTop: 6 },
   aiDetailLink: {
     marginTop: 10, alignSelf: 'flex-start',
     backgroundColor: AppColors.purple.strong,

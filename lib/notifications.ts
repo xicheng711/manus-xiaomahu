@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCurrentUserIsCreator, getFamilyProfile } from "./storage";
 import Constants from "expo-constants";
+import { cloudUpdatePushToken } from "./cloud-sync";
 
 const NOTIFICATION_PERM_KEY = "@xiaomahuNotifPerm";
 const MORNING_NOTIF_ID_KEY = "@xiaomahuMorningNotifId";
@@ -49,31 +50,52 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * Get Expo push token and register it to the server for cross-device push notifications
+ * Get Expo push token and register it to the server for cross-device push notifications.
+ * 会在未授权时主动弹窗申请权限——调用前请先用应用内文案解释用途（见 onboarding 完成页），
+ * 不要在 App 启动等无上下文的时机直接调用。
  */
 export async function registerPushToken(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
     const hasPermission = await requestNotificationPermissions();
     if (!hasPermission) return null;
-    // 明确传入 projectId，避免 undefined 导致 Expo push token 获取失败
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId ??
-      '36e30bf8-6e6c-4359-a1ce-fac45d5d24c6';
-    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-    const token = tokenData.data;
-    if (token) {
-      // Lazy import to avoid circular dependency
-      const { cloudUpdatePushToken } = require('./cloud-sync');
-      await cloudUpdatePushToken(token);
-      console.log('[Notifications] Push token registered:', token.slice(0, 30) + '...');
-    }
-    return token;
+    return await fetchAndUploadPushToken();
   } catch (e) {
     console.warn('[Notifications] Failed to register push token:', e);
     return null;
   }
+}
+
+/**
+ * 静默同步 push token：仅在系统权限已授予时注册，未授权/被拒绝时直接返回 null，
+ * 绝不主动弹窗。用于 App 启动时的后台尝试，避免用户还没看懂 app 就被系统弹窗打断；
+ * 拒绝后也不会反复打扰，用户可在设置页手动开启。
+ */
+export async function syncPushTokenSilently(): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return null;
+    return await fetchAndUploadPushToken();
+  } catch (e) {
+    console.warn('[Notifications] Failed to sync push token silently:', e);
+    return null;
+  }
+}
+
+async function fetchAndUploadPushToken(): Promise<string | null> {
+  // 明确传入 projectId，避免 undefined 导致 Expo push token 获取失败
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    Constants.easConfig?.projectId ??
+    '36e30bf8-6e6c-4359-a1ce-fac45d5d24c6';
+  const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+  const token = tokenData.data;
+  if (token) {
+    await cloudUpdatePushToken(token);
+    console.log('[Notifications] Push token registered:', token.slice(0, 30) + '...');
+  }
+  return token;
 }
 
 /**

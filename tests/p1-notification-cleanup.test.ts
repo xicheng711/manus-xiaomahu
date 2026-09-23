@@ -32,6 +32,12 @@ vi.mock("../lib/storage", () => ({
 
 vi.mock("expo-constants", () => ({ default: {} }));
 
+// notifications.ts 顶层 import 了 cloud-sync（之前是函数内 lazy require）；
+// 本测试不涉及云同步，直接 mock 掉，避免把 @/lib/_core/auth 整条链拖进来。
+vi.mock("../lib/cloud-sync", () => ({
+  cloudUpdatePushToken: vi.fn(async () => {}),
+}));
+
 import { cancelAllMedicationReminders } from "../lib/notifications";
 
 const MED1 = "@xiaomahuMedNotif_med1_morning";

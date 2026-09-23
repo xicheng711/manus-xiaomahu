@@ -12,6 +12,25 @@ import { AppColors, Gradients } from '@/lib/design-tokens';
 import { saveProfile, saveUserProfile, getUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
 import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
 import { scheduleAllReminders, registerPushToken } from '@/lib/notifications';
+
+/**
+ * 通知权限预提示：先用一句话讲清用途，用户点了"开启提醒"才返回 true，
+ * 调用方再申请系统权限。点"以后再说"直接返回 false，随时可在「我的」设置里打开。
+ * 不要在用户还没明白用途时直接弹系统权限弹窗。
+ */
+function askNotificationPermission(): Promise<boolean> {
+  if (Platform.OS === 'web') return Promise.resolve(false);
+  return new Promise(resolve => {
+    Alert.alert(
+      '开启每日提醒吗？',
+      '需要提醒你的时候（比如每日打卡、用药时间），我们会发通知告诉你。随时可以在「我的」→设置里关闭。',
+      [
+        { text: '以后再说', style: 'cancel', onPress: () => resolve(false) },
+        { text: '开启提醒', onPress: () => resolve(true) },
+      ],
+    );
+  });
+}
 import { cloudUploadPhoto } from '@/lib/cloud-sync';
 import { useFamilyContext } from "../lib/family-context";
 import { getZodiac } from '@/lib/zodiac';
@@ -464,8 +483,8 @@ export default function OnboardingScreen() {
         ? { selectedNeeds: selectedCareNeeds as any[] }
         : undefined,
     });
-    // Schedule daily check-in reminders
-    scheduleAllReminders(elderNickname || elderName || undefined).catch(() => {});
+    // 打卡/用药提醒的排期移到完成页：先向用户讲清通知用途并征得同意，
+    // 再申请系统权限、排提醒（见本函数末尾的 askNotificationPermission）。
     // Save medications — 明确传入 roomId 避免依赖 _activeRoomIdCache
     const newRoomId = newRoom?.id ?? undefined;
     for (const med of medications) {
@@ -482,8 +501,14 @@ export default function OnboardingScreen() {
       }, newRoomId);
     }
     await refresh();
-    // 新用户注册完成后立即注册 push token，确保不需退出再登录就能收到推送通知
-    registerPushToken().catch(() => {});
+    // 完成页先讲清通知用途、征得同意，再申请系统权限 + 排每日提醒 + 注册 push token。
+    // 用户拒绝也不影响使用，可在「我的」设置里随时打开。
+    const enableNotif = await askNotificationPermission();
+    if (enableNotif) {
+      await scheduleAllReminders(elderNickname || elderName || undefined).catch(() => {});
+      // 注册 push token，确保不需退出再登录就能收到推送通知
+      registerPushToken().catch(() => {});
+    }
     // fromProfile 时（从设置页创建家庭）：返回设置页，而不是跳到首页
     // 这样用户可以在设置页看到新建家庭并切换
     if (fromProfile) {
@@ -526,8 +551,10 @@ export default function OnboardingScreen() {
     });
     setIsSubmitting(false);
     await refresh();
-    // Joiner 加入家庭完成后立即注册 push token
-    registerPushToken().catch(() => {});
+    // 加入完成后同样先讲清用途再申请权限（joiner 只注册 push token，不排本地打卡提醒）
+    if (await askNotificationPermission()) {
+      registerPushToken().catch(() => {});
+    }
     router.replace('/(tabs)/family');
   }
 
@@ -1272,7 +1299,7 @@ export default function OnboardingScreen() {
               </View>
               {medications.length > 0 && (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>被照顾者</Text>
+                  <Text style={styles.summaryLabel}>用药</Text>
                   <Text style={styles.summaryValue}>
                     {medications.map(m => m.icon + m.name).join('、')}
                   </Text>

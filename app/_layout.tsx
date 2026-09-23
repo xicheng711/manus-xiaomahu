@@ -118,16 +118,26 @@ export default function RootLayout() {
     initManusRuntime();
   }, []);
 
-  // Register push token for cross-device notifications (after cloud sync is ready)
+  // Register push token for cross-device notifications (after cloud sync is ready).
+  // 注意：这里只做静默同步——仅当用户已经授予通知权限时才注册，
+  // 绝不在启动时主动弹窗要权限。权限申请必须带应用内解释、
+  // 在有上下文的时机触发（见 onboarding 完成页的预提示）。
   useEffect(() => {
-    // App 启动时延迟注册 push token：
-    // - 2s: 第一次尝试（大多数情况下 session token 已就绪）
-    // - 6s: 备用重试（防止网络慢导致首次失败）
-    // - 15s: 最后一次保障（覆盖异常慢启动场景）
-    const timer1 = setTimeout(() => { registerPushToken().catch(() => {}); }, 2000);
-    const timer2 = setTimeout(() => { registerPushToken().catch(() => {}); }, 6000);
-    const timer3 = setTimeout(() => { registerPushToken().catch(() => {}); }, 15000);
-    return () => { clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3); };
+    let cancelled = false;
+    const trySync = () => {
+      if (cancelled) return;
+      import('@/lib/notifications').then(({ syncPushTokenSilently }) =>
+        syncPushTokenSilently().catch(() => {}),
+      );
+    };
+    // 2s: 大多数情况下 session token 已就绪；15s: 覆盖异常慢启动
+    const timer1 = setTimeout(trySync, 2000);
+    const timer2 = setTimeout(trySync, 15000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
   }, []);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {

@@ -1,12 +1,10 @@
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
-import { Platform, View, Text, StyleSheet, Animated } from "react-native";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
+import { Platform, View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { AppColors, Gradients } from "@/lib/design-tokens";
 import { useFamilyContext } from "@/lib/family-context";
-import { useRef, useState, useCallback } from "react";
 
 const TAB_CONFIG: Record<string, {
   emoji: string;
@@ -20,7 +18,9 @@ const TAB_CONFIG: Record<string, {
   family:     { emoji: "👥", gradient: Gradients.navActive,   label: "家人共享" },
 };
 
-const JOINER_TABS = new Set(["index", "family", "diary", "medication"]);
+// Joiner 可见的 Tab：首页 / 每日打卡（只读） / 用药记录 / 日记 / 家人共享。
+// 打卡页对 joiner 渲染 JoinerCheckinView 只读视图（见 checkin.tsx），不再拦截。
+const JOINER_TABS = new Set(["index", "checkin", "family", "diary", "medication"]);
 
 function TabIcon({
   route,
@@ -66,56 +66,6 @@ function TabIcon({
   );
 }
 
-// ─── 禁用 Tab 按钮（joiner 视角，点击时弹出提示） ────────────────────
-function DisabledTabButton({
-  onShowToast,
-  ...buttonProps
-}: BottomTabBarButtonProps & {
-  onShowToast: () => void;
-}) {
-  // 复用与其他 Tab 完全相同的导航按钮容器、children 和布局属性；仅替换点击行为。
-  // 不再自定义固定高度，否则会绕过 tabBarItemStyle 并在带安全区的设备上产生垂直偏移。
-  return (
-    <HapticTab
-      {...buttonProps}
-      onPress={onShowToast}
-      accessibilityRole="button"
-      accessibilityLabel="每日打卡，仅主照顾者可操作"
-    />
-  );
-}
-
-// ─── 浮动 Toast 提示 ──────────────────────────────────────────────────
-function JoinerToast({ visible }: { visible: boolean }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(8)).current;
-
-  // 当 visible 变化时触发动画
-  if (visible) {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start();
-  } else {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 8, duration: 300, useNativeDriver: true }),
-    ]).start();
-  }
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.toast,
-        { opacity, transform: [{ translateY }] },
-      ]}
-    >
-      <Text style={styles.toastText}>🔒 仅主照顾者可操作</Text>
-    </Animated.View>
-  );
-}
-
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const safeBottom = Platform.OS === "web" ? 0 : insets.bottom;
@@ -126,16 +76,6 @@ export default function TabLayout() {
 
   const { activeMembership } = useFamilyContext();
   const isJoiner = activeMembership?.role === "joiner";
-
-  // Toast 状态
-  const [toastVisible, setToastVisible] = useState(false);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = useCallback(() => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToastVisible(true);
-    toastTimer.current = setTimeout(() => setToastVisible(false), 2000);
-  }, []);
 
   return (
     <View style={{ flex: 1 }}>
@@ -171,16 +111,11 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen name="index"      options={{ title: "首页",    tabBarIcon: ({ focused }) => <TabIcon route="index"      focused={focused} isJoiner={isJoiner} /> }} />
-        <Tabs.Screen name="checkin"    options={{ title: "每日打卡", tabBarIcon: ({ focused }) => <TabIcon route="checkin"    focused={focused} isJoiner={isJoiner} />, ...(isJoiner ? { tabBarButton: (props) => <DisabledTabButton {...props} onShowToast={showToast} /> } : {}) }} />
+        <Tabs.Screen name="checkin"    options={{ title: "每日打卡", tabBarIcon: ({ focused }) => <TabIcon route="checkin"    focused={focused} isJoiner={isJoiner} /> }} />
         <Tabs.Screen name="medication" options={{ title: "用药记录", tabBarIcon: ({ focused }) => <TabIcon route="medication" focused={focused} isJoiner={isJoiner} /> }} />
         <Tabs.Screen name="diary"      options={{ title: "日记",    tabBarIcon: ({ focused }) => <TabIcon route="diary"      focused={focused} isJoiner={isJoiner} /> }} />
         <Tabs.Screen name="family"     options={{ title: "家人共享", tabBarIcon: ({ focused }) => <TabIcon route="family"     focused={focused} isJoiner={isJoiner} /> }} />
       </Tabs>
-
-      {/* Joiner 操作提示 Toast（浮在 TabBar 上方） */}
-      {isJoiner && (
-        <JoinerToast visible={toastVisible} />
-      )}
     </View>
   );
 }
@@ -225,26 +160,5 @@ const styles = StyleSheet.create({
   },
   tabLabelFaded: {
     color: AppColors.text.tertiary,
-  },
-  // Toast 样式
-  toast: {
-    position: 'absolute',
-    bottom: 80,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(40, 32, 28, 0.88)',
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  toastText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
   },
 });

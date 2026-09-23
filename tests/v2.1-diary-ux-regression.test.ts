@@ -797,11 +797,12 @@ describe('Final end-to-end audit safeguards', () => {
 describe('Joiner tab bar alignment regression', () => {
   const tabsLayout = read('app/(tabs)/_layout.tsx');
 
-  it('reuses the standard navigation button props for the disabled check-in tab', () => {
-    expect(tabsLayout).toContain('}: BottomTabBarButtonProps & {');
-    expect(tabsLayout).toContain('<HapticTab');
-    expect(tabsLayout).toContain('{...buttonProps}');
-    expect(tabsLayout).toContain('tabBarButton: (props) => <DisabledTabButton {...props}');
+  it('lets joiners open the check-in tab (read-only JoinerCheckinView) instead of blocking with a toast', () => {
+    // 2026-09-23 UX 修复：joiner 点"每日打卡"不再被 DisabledTabButton 拦掉，
+    // checkin.tsx 会按角色渲染 JoinerCheckinView 只读页。
+    expect(tabsLayout).not.toContain('DisabledTabButton');
+    expect(tabsLayout).not.toContain('tabBarButton: (props) =>');
+    expect(tabsLayout).toContain('"checkin"');
   });
 
   it('does not give the Joiner-only check-in button an independent fixed height', () => {

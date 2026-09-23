@@ -10,7 +10,7 @@ import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, nightWakingsToKey } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, nightWakingsToKey, saveCheckInDraft, readCheckInDraft, clearCheckInDraft } from '@/lib/storage';
 import { computeStreak } from '@/lib/night-wakings';
 import { getSessionToken } from '@/lib/_core/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -737,6 +737,8 @@ function CheckinScreenContent() {
   activeFamilyRef.current = familyId;
   const [checkIn, setCheckIn] = useState<DailyCheckIn | null>(null);
   const [mode, setMode] = useState<'landing' | 'morning' | 'evening'>('landing');
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   // A form session is bound to the record selected when the user enters it. Stable
   // client/server IDs identify that record; date is retained for care-day display and
   // legacy compatibility. Crossing midnight while typing never changes the target.
@@ -783,7 +785,68 @@ function CheckinScreenContent() {
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const headerFade = useRef(new Animated.Value(0)).current;
+
+  // ── 表单防丢：打开表单时记录初始值快照，右滑/返回时对比 ──────────
+  // 快照在数据初始化完成后打（needsSnapshotRef 由初始化流程置位），
+  // 避免把"恢复旧记录"误判成用户填写。
+  const formSnapshotRef = useRef<string | null>(null);
+  const needsSnapshotRef = useRef(false);
+  function serializeFormFields(): string {
+    return JSON.stringify({
+      sleepType, sleepRangeIdx, sleepSegments, awakeningsIdx, awakeTimeIdx,
+      napIdx, nightWakings, morningNotes,
+      moodIdx, medicationTaken, mealOptionIdx, mealCustom, napMinutes, eveningNotes,
+    });
+  }
+  function isFormDirty(): boolean {
+    const snap = formSnapshotRef.current;
+    return snap != null && snap !== serializeFormFields();
+  }
+  // 每 render 检查：初始化完成后打一次快照
+  useEffect(() => {
+    if (needsSnapshotRef.current) {
+      needsSnapshotRef.current = false;
+      formSnapshotRef.current = serializeFormFields();
+    }
+  });
+  // 表单关闭时清除快照
+  useEffect(() => {
+    if (mode === 'landing') formSnapshotRef.current = null;
+  }, [mode]);
+  function confirmDiscardChanges(onDiscard: () => void) {
+    if (!isFormDirty()) {
+      onDiscard();
+      return;
+    }
+    Alert.alert(
+      '放弃填写？',
+      '已填写的内容还没有保存，返回后将丢失。',
+      [
+        { text: '继续填写', style: 'cancel' },
+        { text: '放弃', style: 'destructive', onPress: onDiscard },
+      ],
+    );
+  }
+
+  // ── 游客草稿：登录后恢复 ─────────────────────────────────────────────
+  // 用户选了"存草稿并去登录"后，下次初始化时把填过的内容填回去。
+  const [draftRestoredNote, setDraftRestoredNote] = useState(false);
+  function applyDraftFields(f: Record<string, any>) {
+    if (f.sleepType === 'quick' || f.sleepType === 'detailed') setSleepType(f.sleepType);
+    if (typeof f.sleepRangeIdx === 'number') setSleepRangeIdx(f.sleepRangeIdx);
+    if (Array.isArray(f.sleepSegments)) setSleepSegments(f.sleepSegments);
+    if (typeof f.awakeningsIdx === 'number') setAwakeningsIdx(f.awakeningsIdx);
+    if (typeof f.awakeTimeIdx === 'number') setAwakeTimeIdx(f.awakeTimeIdx);
+    if (typeof f.napIdx === 'number') setNapIdx(f.napIdx);
+    if (typeof f.nightWakings === 'number') setNightWakings(f.nightWakings);
+    if (typeof f.morningNotes === 'string') setMorningNotes(f.morningNotes);
+    if (typeof f.moodIdx === 'number') setMoodIdx(f.moodIdx);
+    if (typeof f.medicationTaken === 'boolean') setMedicationTaken(f.medicationTaken);
+    if (typeof f.mealOptionIdx === 'number') setMealOptionIdx(f.mealOptionIdx);
+    if (typeof f.mealCustom === 'string') setMealCustom(f.mealCustom);
+    if (typeof f.napMinutes === 'number') setNapMinutes(f.napMinutes);
+    if (typeof f.eveningNotes === 'string') setEveningNotes(f.eveningNotes);
+  }  const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const doneFade = useRef(new Animated.Value(0)).current;
   const doneScale = useRef(new Animated.Value(0.8)).current;
@@ -886,6 +949,10 @@ function CheckinScreenContent() {
         };
       }
 
+      // 表单已打开且用户填了未保存的内容时：不要重置字段。
+      // 切 tab / 去登录页再回来会触发 refocus，之前这里会无条件清空，把用户填一半的内容吃掉。
+      const keepUserInput = modeRef.current !== 'landing' && isFormDirty();
+      if (!keepUserInput) {
       // 先清理上一家庭的表单数据，当前家庭有记录时再逐项恢复。
       setMorningNotes('');
       setMealCustom('');
@@ -920,6 +987,29 @@ function CheckinScreenContent() {
           .sort((a, b) => b.date.localeCompare(a.date))[0];
         if (lastMorning) restoreSleepFields(lastMorning);
       }
+      } // end if (!keepUserInput)
+
+      // 游客草稿恢复：之前选了"存草稿并去登录"的用户，登录回来后把填过的内容填回去。
+      // 按草稿的早/晚模式判断冲突：只有该部分还没有正式记录时才恢复，
+      // 避免"早间已保存、晚间草稿"被误删，也避免覆盖已保存的数据。
+      let restoredDraftMode: 'morning' | 'evening' | null = null;
+      if (!keepUserInput) {
+        const draft = await readCheckInDraft().catch(() => null);
+        if (draft && draft.targetDate !== targetDate) {
+          await clearCheckInDraft().catch(() => {}); // 非当天草稿：直接清理
+        } else if (draft) {
+          const modeDone = draft.mode === 'evening' ? existing?.eveningDone : existing?.morningDone;
+          if (modeDone) {
+            await clearCheckInDraft().catch(() => {}); // 该部分已有正式记录：草稿作废
+          } else {
+            applyDraftFields(draft.fields);
+            // 恢复后不立即清除草稿：正式保存成功后才清（见 handleSave）。
+            // 用户中途退出也不丢，下次进来还能恢复。
+            restoredDraftMode = draft.mode;
+            setDraftRestoredNote(true);
+          }
+        }
+      }
 
       const all = await getAllCheckIns(requestedFamilyId);
       if (!isCurrentFamily()) return;
@@ -927,9 +1017,15 @@ function CheckinScreenContent() {
         all.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
       )].sort().reverse();
       setStreak(computeStreak(doneDates, getCareDayKey()));
-      setMode(backfillDate ? 'evening' : 'landing');
-      setStep(0);
-      setDone(false);
+      if (!keepUserInput) {
+        // 恢复了草稿：直接打开对应早/晚表单，让用户继续填；
+        // 否则走原来的 landing / 补录逻辑。
+        setMode(restoredDraftMode ?? (backfillDate ? 'evening' : 'landing'));
+        setStep(0);
+        setDone(false);
+        // 数据初始化完成：打一次字段快照，用于右滑/返回时的"是否填写过"判断
+        needsSnapshotRef.current = true;
+      }
     })();
   }, [backfillDate, familyId, familyReady, loadCheckInData]));
 
@@ -970,6 +1066,16 @@ function CheckinScreenContent() {
     setMode('landing');
   }
 
+  // 统一的表单退出入口：填过未保存的内容先弹窗确认，避免右滑/点返回丢数据。
+  // backfill（从通知点进来的补录）退出时 router.back()，否则回落地页。
+  function requestCloseForm() {
+    confirmDiscardChanges(() => {
+      formTargetRef.current = null;
+      if (backfillDate) router.back();
+      else closeCheckInForm();
+    });
+  }
+
   function animateStep(next: () => void) {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
@@ -1001,21 +1107,37 @@ function CheckinScreenContent() {
       if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       animateStep(() => setStep(s => s - 1));
     } else {
-      // Go back to landing
-      closeCheckInForm();
+      // 回到落地页/上一页：填过内容先确认
+      requestCloseForm();
     }
   }
 
   async function handleSave() {
-    // 游客模式检查：打卡记录需要登录才能同步到云端
+    // 未登录检查：打卡记录需要登录才能保存并与家人共享。
+    // 之前是填完才被告知、内容直接作废；现在提供"存草稿并去登录"，
+    // 草稿存本地，登录后自动恢复——把文案的承诺兑现。
     const token = await getSessionToken();
     if (!token) {
+      const formTarget = formTargetRef.current;
       Alert.alert(
         '需要登录',
-        '打卡记录需要登录账号才能保存并与家人共享，登录后数据会自动同步。',
+        '打卡记录需要登录账号才能保存并与家人共享。要把刚填的内容存为草稿、登录后自动恢复吗？',
         [
           { text: '暂不登录', style: 'cancel' },
-          { text: '去登录', onPress: () => router.push('/login' as any) },
+          {
+            text: '存草稿并去登录',
+            onPress: async () => {
+              // 保存按钮只在早间/晚间表单里可点；这里做防御性收窄
+              if (mode === 'landing') return;
+              await saveCheckInDraft({
+                targetDate: formTarget?.date ?? getCareDayKey(),
+                mode,
+                fields: JSON.parse(serializeFormFields()),
+                savedAt: Date.now(),
+              }).catch(() => {});
+              router.push('/login' as any);
+            },
+          },
         ]
       );
       return;
@@ -1090,6 +1212,8 @@ function CheckinScreenContent() {
     }
     await upsertCheckIn(data, familyId);
     // 注意：upsertCheckIn 内部已经调用了 cloudSyncCheckIn，无需重复调用
+    // 正式保存成功：游客草稿使命完成，在这里清除（恢复时不立即清，防止用户中途退出又丢）
+    await clearCheckInDraft().catch(() => {});
     // 打卡修改后清除当天简报缓存，确保首页摘要和简报页都能显示最新数据
     try {
       const cacheKey = familyId ? `share_briefing_cache_v1:${familyId}` : 'share_briefing_cache_v1';
@@ -1806,17 +1930,12 @@ function CheckinScreenContent() {
     ? { label: currentStep.roleLabel, color: AppColors.purple.strong, bgColor: AppColors.purple.soft }
     : { label: currentStep.roleLabel, color: '#059669', bgColor: '#ECFDF5' };
 
-  // 左滑返回手势
+  // 右滑返回手势：填过未保存的内容先确认
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-20, 999])
     .onEnd((e) => {
       if (e.translationX > 60 && Math.abs(e.translationY) < 80) {
-        if (backfillDate) {
-          formTargetRef.current = null;
-          router.back();
-        } else {
-          closeCheckInForm();
-        }
+        requestCloseForm();
       }
     })
     .runOnJS(true);
@@ -1844,14 +1963,22 @@ function CheckinScreenContent() {
             <Text style={styles.appName}>{mode === 'morning' ? '早间打卡' : backfillDate ? '补昨晚记录' : '晚间记录'}</Text>
             <Text style={styles.date}>{formDateLabel}</Text>
           </View>
-          <TouchableOpacity style={styles.backToLanding} onPress={() => {
-            formTargetRef.current = null;
-            if (backfillDate) router.back();
-            else closeCheckInForm();
-          }}>
+          <TouchableOpacity style={styles.backToLanding} onPress={requestCloseForm}>
             <Text style={styles.backToLandingText}>← 返回</Text>
           </TouchableOpacity>
         </Animated.View>
+
+        {/* 草稿恢复提示：登录前填的内容已填回，直接继续即可 */}
+        {draftRestoredNote && (
+          <TouchableOpacity
+            style={styles.draftBanner}
+            onPress={() => setDraftRestoredNote(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.draftBannerText}>📝 已恢复你登录前填写的内容，继续完成打卡吧</Text>
+            <Text style={styles.draftBannerClose}>✕</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Animated Progress Bar — hide when single step */}
         {currentSteps.length > 1 && <AnimatedProgress current={step} total={currentSteps.length} />}
@@ -1995,6 +2122,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#EBEBEB',
   },
   backToLandingText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+
+  // 游客草稿恢复提示横幅
+  draftBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    backgroundColor: '#FFF7E6', borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 11,
+    borderWidth: 1, borderColor: '#F5D9A0',
+  },
+  draftBannerText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#8A5A00', lineHeight: 18 },
+  draftBannerClose: { fontSize: 13, color: '#B98A2F', marginLeft: 8 },
 
   // Role badge
   roleBadge: {

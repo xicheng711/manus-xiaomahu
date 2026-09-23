@@ -65,7 +65,7 @@ export default function LoginScreen() {
 
   async function handleAppleLogin() {
     if (!agreed) {
-      showTip('请先阅读并勾选下方协议');
+      showTip('请先阅读并勾选上方协议');
       return;
     }
     if (loading) return;
@@ -125,6 +125,25 @@ export default function LoginScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.buttonSection, { opacity: contentFade, transform: [{ translateY: contentSlide }] }]}>
+          {/* 协议勾选在前：先同意，再点登录，避免点了按钮才被提示回头勾选 */}
+          <View style={styles.agreementRow}>
+            <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+              <TouchableOpacity
+                style={[styles.checkbox, agreed && styles.checkboxChecked]}
+                onPress={handleCheckToggle}
+                activeOpacity={0.7}
+              >
+                {agreed && <Text style={styles.checkMark}>✓</Text>}
+              </TouchableOpacity>
+            </Animated.View>
+            <Text style={styles.agreementText}>
+              我已阅读并同意
+              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/terms.html')}>《用户协议》</Text>
+              和
+              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/privacy.html')}>《隐私政策》</Text>
+            </Text>
+          </View>
+
           {Platform.OS === 'ios' ? (
             <View
               style={[styles.appleButtonContainer, loading === 'apple' && styles.btnLoading]}
@@ -147,24 +166,6 @@ export default function LoginScreen() {
               <Text style={styles.appleUnavailableText}>Apple 登录仅支持 iOS 设备</Text>
             </TouchableOpacity>
           )}
-
-          <View style={styles.agreementRow}>
-            <Animated.View style={{ transform: [{ scale: checkScale }] }}>
-              <TouchableOpacity
-                style={[styles.checkbox, agreed && styles.checkboxChecked]}
-                onPress={handleCheckToggle}
-                activeOpacity={0.7}
-              >
-                {agreed && <Text style={styles.checkMark}>✓</Text>}
-              </TouchableOpacity>
-            </Animated.View>
-            <Text style={styles.agreementText}>
-              我已阅读并同意
-              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/terms.html')}>《用户协议》</Text>
-              和
-              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/privacy.html')}>《隐私政策》</Text>
-            </Text>
-          </View>
         </Animated.View>
 
         <Animated.View style={[styles.guestSection, { opacity: contentFade }]}>

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Alert, Platform, Animated, Easing, RefreshControl,
-  KeyboardAvoidingView, Modal,
+  KeyboardAvoidingView, Modal, Linking,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
@@ -20,7 +20,7 @@ import { useFamilyContext } from '@/lib/family-context';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
-import { scheduleMedicationReminder, cancelMedicationReminder } from '@/lib/notifications';
+import { scheduleMedicationReminder, cancelMedicationReminder, requestNotificationPermissions } from '@/lib/notifications';
 
 const TIMES = ['06:00','07:00','07:30','08:00','08:30','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
 const FREQUENCIES = ['每天一次', '每天两次', '每天三次', '每隔一天', '每周一次', '需要时服用'];
@@ -210,6 +210,55 @@ function MedicationScreenContent() {
     setName(''); setDosage(''); setFreqIdx(0); setSelectedTimes(['08:00']); setNotes(''); setChangeReason(''); setIcon('💊'); setReminderEnabled(false);
   }
 
+  // 提醒开关：打开时先确认通知权限。之前是开关照开、排期静默失败，
+  // 界面却显示"将发送可爱提醒 ✨"——开了个空头支票。
+  async function handleToggleReminder() {
+    if (!reminderEnabled) {
+      if (Platform.OS === 'web') {
+        Alert.alert('用药提醒', '用药时间提醒需要在手机 App 上开启，网页版暂不支持。');
+        return;
+      }
+      const granted = await requestNotificationPermissions();
+      if (!granted) {
+        Alert.alert(
+          '需要通知权限',
+          '请在系统设置中允许小马虎发送通知，才能开启用药时间提醒。',
+          [
+            { text: '知道了', style: 'cancel' },
+            {
+              text: '去设置',
+              onPress: () => {
+                if (Platform.OS === 'ios') Linking.openURL('app-settings:');
+                else Linking.openSettings().catch(() => {});
+              },
+            },
+          ],
+        );
+        return;
+      }
+    }
+    setReminderEnabled(v => !v);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
+  // 为选中的时间逐一排提醒，返回是否至少排上了一个。
+  // 如实返回结果：调用方负责在全部失败时告诉用户，而不是显示"✨"。
+  async function scheduleSelectedReminders(
+    medId: string, medName: string, medIcon: string, nickname: string, times: string[],
+  ): Promise<boolean> {
+    let scheduledAny = false;
+    for (const t of times) {
+      const [h, min] = t.split(':').map(Number);
+      const id = await scheduleMedicationReminder(medId + '_' + t.replace(':', ''), medName, medIcon, nickname, h, min).catch(() => null);
+      if (id) scheduledAny = true;
+    }
+    return scheduledAny;
+  }
+
+  function alertReminderFailed() {
+    Alert.alert('提醒未能开启', '用药记录已保存，但提醒没有排上：请检查通知权限后重试。');
+  }
+
   function openEdit(med: Medication) {
     if (!isCreator) return; // joiner 无权限编辑
     setEditingMed(med);
@@ -291,10 +340,8 @@ function MedicationScreenContent() {
           }
         }
         // 新增或保留的时间（selectedTimes）
-        for (const t of selectedTimes) {
-          const [h, min] = t.split(':').map(Number);
-          scheduleMedicationReminder(editingMed.id + '_' + t.replace(':', ''), name.trim(), icon, nickname, h, min).catch(() => {});
-        }
+        const scheduled = await scheduleSelectedReminders(editingMed.id, name.trim(), icon, nickname, selectedTimes);
+        if (!scheduled) alertReminderFailed();
       } else {
         // 关闭提醒：取消所有旧时间
         for (const t of oldTimes) {
@@ -325,10 +372,8 @@ function MedicationScreenContent() {
       setMedicationChanges(previous => [changeEvent, ...previous.filter(item => item.eventId !== changeEvent.eventId)]);
       setMeds(prev => [...prev, newMed]);
       if (reminderEnabled) {
-        for (const t of selectedTimes) {
-          const [h, min] = t.split(':').map(Number);
-          scheduleMedicationReminder(newMed.id + '_' + t.replace(':', ''), newMed.name, newMed.icon, nickname, h, min).catch(() => {});
-        }
+        const scheduled = await scheduleSelectedReminders(newMed.id, newMed.name, newMed.icon, nickname, selectedTimes);
+        if (!scheduled) alertReminderFailed();
       }
     }
 
@@ -542,10 +587,7 @@ function MedicationScreenContent() {
             {/* Reminder Toggle */}
             <TouchableOpacity
               style={[styles.reminderToggleRow, reminderEnabled && styles.reminderToggleRowActive]}
-              onPress={() => {
-                setReminderEnabled(v => !v);
-                if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
+              onPress={handleToggleReminder}
               activeOpacity={0.85}
             >
               <View style={styles.reminderToggleLeft}>
