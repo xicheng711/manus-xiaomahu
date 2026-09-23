@@ -21,6 +21,7 @@ import {
   areRemindersScheduled,
   scheduleAllReminders,
   cancelAllReminders,
+  cancelAllMedicationReminders,
   requestNotificationPermissions,
   registerPushToken,
 } from '@/lib/notifications';
@@ -86,6 +87,8 @@ export default function ProfileScreen() {
   const [showSignOutModal, setShowSignOutModal] = useState(false);
 
   async function handleSignOut() {
+    // 先取消本账号的用药提醒（必须在清本地数据之前，否则存的通知 ID 就找不到了）
+    await cancelAllMedicationReminders().catch(() => {});
     await clearAllLocalData();
     await removeSessionToken();
     await clearUserInfo();
@@ -106,6 +109,7 @@ export default function ProfileScreen() {
       await deleteAccountMutation.mutateAsync();
       
       // Only clear local data if server deletion succeeded
+      await cancelAllMedicationReminders().catch(() => {});
       await clearAllLocalData();
       await removeSessionToken();
       await clearUserInfo();

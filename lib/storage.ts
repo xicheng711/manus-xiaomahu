@@ -156,6 +156,16 @@ export interface DailyCheckIn {
   syncVersion?: string;
 }
 
+// ─── 夜醒字段统一 ─────────────────────────────────────────────────────────────
+// canonical 字段是 nightWakings（数字）：server / 云端同步 / AI / 评分引擎都只认它。
+// nightAwakenings（'没醒'/'1-2次'/…）是 v4.0 旧展示字段，仅用于兼容历史本地数据。
+// 实现在 lib/night-wakings.ts（纯函数，方便测试），这里 re-export 保持导入路径不变。
+export {
+  nightWakingsToLabel,
+  nightWakingsToKey,
+  getNightWakings,
+} from './night-wakings';
+
 export type MedicationChangeType = 'added' | 'updated' | 'paused' | 'resumed' | 'deleted';
 
 export interface MedicationSnapshot {

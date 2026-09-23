@@ -348,6 +348,34 @@ export async function cancelMedicationReminder(medId: string): Promise<void> {
 }
 
 /**
+ * Cancel ALL medication reminders scheduled during the current login session.
+ *
+ * Called on logout / account deletion so the old account's medication alarms
+ * stop firing after the local data is wiped. Scope is deliberately narrow:
+ * - only keys under MED_NOTIF_PREFIX (this session's medication reminders);
+ * - morning/evening check-in reminders (@xiaomahuMorningNotifId /
+ *   @xiaomahuEveningNotifId) are NOT touched;
+ * - notifications scheduled by other apps are NOT touched (expo only manages
+ *   this app's own anyway).
+ */
+export async function cancelAllMedicationReminders(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const allKeys = await AsyncStorage.getAllKeys();
+  const medKeys = allKeys.filter((k) => k.startsWith(MED_NOTIF_PREFIX));
+  for (const key of medKeys) {
+    try {
+      const id = await AsyncStorage.getItem(key);
+      if (id) {
+        await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+      }
+      await AsyncStorage.removeItem(key);
+    } catch {
+      // keep going: one bad key must not block the rest
+    }
+  }
+}
+
+/**
  * Schedule morning (8:00) and evening (21:00) medication reminders for a medication
  */
 export async function scheduleMedicationMorningEvening(

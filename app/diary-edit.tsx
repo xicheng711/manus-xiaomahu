@@ -17,7 +17,7 @@ import {
   saveDiaryEntry, updateDiaryEntry, getDiaryEntryById, getDiaryEntries,
   deleteDiaryEntry, todayStr, getProfile, getUserProfile, getFamilyProfile, generateId, DiaryEntry, ConversationMessage,
   getTodayCheckIn, DailyCheckIn, getDiaryDraft, saveDiaryDraft, clearDiaryDraft,
-  waitForServerDiaryId, getNapMinutes, hasRecordedNap,
+  waitForServerDiaryId, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, cloudSyncDiary, getCloudSyncState, setCloudSyncState } from '@/lib/cloud-sync';
@@ -656,7 +656,10 @@ export default function DiaryEditScreen() {
           sleepHours: todayCheckIn.sleepHours,
           sleepRange: todayCheckIn.sleepRange,
           sleepQuality: todayCheckIn.sleepQuality,
-          nightAwakenings: todayCheckIn.nightAwakenings,
+          nightAwakenings: (() => {
+            const nw = getNightWakings(todayCheckIn);
+            return nw === undefined ? undefined : nightWakingsToLabel(nw);
+          })(),
           napDuration: hasRecordedNap(todayCheckIn)
             ? (napMinutesForContext > 0
               ? (napMinutesForContext >= 60 ? `${(napMinutesForContext / 60).toFixed(1).replace('.0', '')}小时` : `${Math.round(napMinutesForContext)}分钟`)

@@ -10,7 +10,8 @@ import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
-import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, nightWakingsToKey } from '@/lib/storage';
+import { computeStreak } from '@/lib/night-wakings';
 import { getSessionToken } from '@/lib/_core/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
@@ -414,9 +415,12 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                         💤 睡眠：{selectedDay.sleepHours ? `${selectedDay.sleepHours}小时` : '未记录'}
                         {selectedDay.sleepQuality ? ` · ${selectedDay.sleepQuality === 'good' ? '良好' : selectedDay.sleepQuality === 'fair' ? '一般' : '较差'}` : ''}
                       </Text>
-                      {selectedDay.nightAwakenings ? (
-                        <Text style={calStyles.popupItem}>🌙 夜醒：{selectedDay.nightAwakenings}</Text>
-                      ) : null}
+                      {(() => {
+                        const nw = getNightWakings(selectedDay);
+                        return nw !== undefined ? (
+                          <Text style={calStyles.popupItem}>🌙 夜醒：{nw === 0 ? '没醒' : `${nw}次`}</Text>
+                        ) : null;
+                      })()}
                       {!selectedDay.eveningDone && hasRecordedNap(selectedDay) && (
                         <Text style={calStyles.popupItem}>☀️ 白天小睡：{getNapDisplay(selectedDay)}</Text>
                       )}
@@ -579,11 +583,14 @@ function CheckinLanding({
               <View style={styles.checkinChip}>
                 <Text style={styles.checkinChipText}>💤 {elderNickname}睡了 {checkIn.sleepHours}h</Text>
               </View>
-              {checkIn.nightAwakenings && checkIn.nightAwakenings !== '没醒' && (
-                <View style={styles.checkinChip}>
-                  <Text style={styles.checkinChipText}>🌛 夜醒{checkIn.nightAwakenings}</Text>
-                </View>
-              )}
+              {(() => {
+                const nw = getNightWakings(checkIn);
+                return nw !== undefined && nw > 0 ? (
+                  <View style={styles.checkinChip}>
+                    <Text style={styles.checkinChipText}>🌛 夜醒{nw}次</Text>
+                  </View>
+                ) : null;
+              })()}
               {checkIn.caregiverMoodEmoji && (
                 <View style={styles.checkinChip}>
                   <Text style={styles.checkinChipText}>{checkIn.caregiverMoodEmoji} {caregiverName}心情</Text>
@@ -709,8 +716,6 @@ const SLEEP_RANGE_HOURS = [3.5, 5.0, 6.5, 8.0, 9.5]; // 用于图表的近似值
 const SLEEP_RANGE_ICONS = ['😴', '🌙', '💤', '✨', '🛌'];
 // ─── 枚举键 → index 映射（评分引擎使用）───────────────────────────────────────
 const SLEEP_RANGE_KEYS: SleepInput['nightSleepDuration'][] = ['lt4', '4to6', '6to7', '7to9', 'gt9'];
-const AWAKENINGS = ['没醒', '1-2次', '3-4次', '5次以上'];
-const AWAKENINGS_ICONS = ['😴', '🌛', '😵', '🚨'];
 const AWAKENINGS_KEYS: SleepInput['awakenCount'][] = ['0', '1to2', '3to4', '5plus'];
 const AWAKE_TIMES = ['几乎没有', '10-30分钟', '30-60分钟', '1小时以上'];
 const AWAKE_TIME_ICONS = ['✅', '😐', '😫', '😩'];
@@ -749,7 +754,7 @@ function CheckinScreenContent() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('您');
-  const [streak, setStreak] = useState(1);
+  const [streak, setStreak] = useState<number | null>(null);
   const {
     scrollRef: formScrollRef,
     keyboardVisible: formKeyboardVisible,
@@ -813,8 +818,10 @@ function CheckinScreenContent() {
         else if (h <= 9) setSleepRangeIdx(3);
         else setSleepRangeIdx(4);
       }
-      if (c.nightAwakenings) {
-        const idx = AWAKENINGS.indexOf(c.nightAwakenings);
+      // 降级：用统一读取（兼容 v4.0 旧展示字符串）
+      const legacyWakings = getNightWakings(c);
+      if (legacyWakings !== undefined) {
+        const idx = AWAKENINGS_KEYS.indexOf(nightWakingsToKey(legacyWakings));
         if (idx >= 0) setAwakeningsIdx(idx);
       }
       if (c.nightAwakeTime) {
@@ -919,18 +926,7 @@ function CheckinScreenContent() {
       const doneDates = [...new Set(
         all.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
       )].sort().reverse();
-      let count = 0;
-      let prev: string | null = null;
-      for (const d of doneDates) {
-        if (prev === null) {
-          const diffFromToday = (new Date(getCareDayKey()).getTime() - new Date(d).getTime()) / 86400000;
-          if (diffFromToday <= 1) { count = 1; prev = d; } else break;
-        } else {
-          const diff = (new Date(prev).getTime() - new Date(d).getTime()) / 86400000;
-          if (diff === 1) { count++; prev = d; } else break;
-        }
-      }
-      setStreak(Math.max(count, 1));
+      setStreak(computeStreak(doneDates, getCareDayKey()));
       setMode(backfillDate ? 'evening' : 'landing');
       setStep(0);
       setDone(false);
@@ -1044,9 +1040,11 @@ function CheckinScreenContent() {
     };
     if (mode === 'morning') {
       // ── 构建结构化 SleepInput（v4.1 评分引擎输入）────────────────────────
+      // 夜醒三处写法（nightWakings 数字 / nightAwakenings 展示串 / awakenCount 枚举键）
+      // 统一从计数器 nightWakings 派生，避免互相打架
       const sleepInput: SleepInput = {
         nightSleepDuration: SLEEP_RANGE_KEYS[sleepRangeIdx],
-        awakenCount: AWAKENINGS_KEYS[awakeningsIdx],
+        awakenCount: nightWakingsToKey(nightWakings),
         awakeDuration: AWAKE_TIME_KEYS[awakeTimeIdx],
         napDuration: NAP_KEYS[napIdx],
         notes: morningNotes || undefined,
@@ -1071,7 +1069,7 @@ function CheckinScreenContent() {
         sleepHours: Math.round(effectiveSleepHours * 10) / 10,
         sleepQuality: derivedQuality,
         sleepRange: SLEEP_RANGES[sleepRangeIdx],
-        nightAwakenings: AWAKENINGS[awakeningsIdx],
+        nightAwakenings: nightWakingsToLabel(nightWakings),
         nightAwakeTime: AWAKE_TIMES[awakeTimeIdx],
         napDuration: NAP_DURATIONS[napIdx],
         morningNotes,
@@ -1122,19 +1120,7 @@ function CheckinScreenContent() {
       const doneDates = [...new Set(
         allAfterSave.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
       )].sort().reverse();
-      let newCount = 0;
-      let prevDate: string | null = null;
-      for (const d of doneDates) {
-        if (prevDate === null) {
-          const diffFromToday = (new Date(getCareDayKey()).getTime() - new Date(d).getTime()) / 86400000;
-          if (diffFromToday <= 1) { newCount = 1; prevDate = d; }
-          else break;
-        } else {
-          const diff = (new Date(prevDate).getTime() - new Date(d).getTime()) / 86400000;
-          if (diff === 1) { newCount++; prevDate = d; } else break;
-        }
-      }
-      setStreak(Math.max(newCount, 1));
+      setStreak(computeStreak(doneDates, getCareDayKey()));
     } catch { /* 保持原有天数 */ }
     if (Platform.OS !== 'web') {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1162,7 +1148,7 @@ function CheckinScreenContent() {
     const isMorning = mode === 'morning';
 
     if (!isMorning) {
-      const streakDots = Math.min(streak, 7);
+      const streakDots = Math.min(streak ?? 0, 7);
       return (
         <ScreenContainer containerClassName="bg-[#F5F0FA]">
           {showCelebration && <CelebrationEffect />}
@@ -1209,7 +1195,7 @@ function CheckinScreenContent() {
                   <View key={i} style={styles.nightStreakDotNew} />
                 ))}
               </View>
-              <Text style={styles.nightStreakTextNew}>已连续打卡 {streak} 天</Text>
+              <Text style={styles.nightStreakTextNew}>已连续打卡 {streak ?? '—'} 天</Text>
             </View>
 
             {/* 按钮组 */}

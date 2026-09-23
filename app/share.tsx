@@ -9,7 +9,7 @@ import { BackButton } from '@/components/back-button';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, syncPendingBriefings, getNapMinutes, hasRecordedNap, type DailyCheckIn } from '@/lib/storage';
+import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, syncPendingBriefings, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -1129,7 +1129,11 @@ export default function ShareScreen() {
         napMinutes: today!.napMinutes, // 午休数据来自晚间打卡
         daytimeNap: today!.daytimeNap as boolean,
         sleepRange: (hasTodayMorning ? today!.sleepRange : undefined) as string,
-        nightAwakenings: hasTodayMorning ? today!.nightAwakenings : undefined,
+        nightAwakenings: (() => {
+          if (!hasTodayMorning) return undefined;
+          const nw = getNightWakings(today!);
+          return nw === undefined ? undefined : nightWakingsToLabel(nw);
+        })(),
         nightAwakeTime: hasTodayMorning ? today!.nightAwakeTime : undefined,
         napDuration: hasTodayMorning ? today!.napDuration : undefined,
         morningNotes: (hasTodayMorning ? today!.morningNotes : undefined) as string,
