@@ -316,6 +316,7 @@ export async function cloudSyncCheckIn(checkIn: any, explicitRoomId?: number | s
       clientId: checkIn.clientId,
       serverCheckInId: Number.isFinite(Number(checkIn.serverCheckInId)) ? Number(checkIn.serverCheckInId) : undefined,
       date: checkIn.date,
+      creatorTimeZone: checkIn.creatorTimeZone,
       sleepHours: checkIn.sleepHours,
       sleepQuality: checkIn.sleepQuality,
       sleepInput: checkIn.sleepInput,

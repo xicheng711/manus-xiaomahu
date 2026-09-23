@@ -2684,7 +2684,10 @@ function JoinerCheckinView() {
         {/* Header */}
         <View style={{ marginBottom: 20 }}>
           <Text style={{ fontSize: 22, fontWeight: '800', color: '#2D1B4E', marginBottom: 4 }}>每日打卡</Text>
-          <Text style={{ fontSize: 14, color: '#888' }}>主照顾者记录日期：{checkIn?.date ?? viewerTodayKey}</Text>
+          <Text style={{ fontSize: 14, color: '#888' }}>
+            主照顾者记录日期：{checkIn?.date ?? viewerTodayKey}
+            {checkIn?.date && checkIn.date !== viewerTodayKey ? '（打卡人当地时间）' : ''}
+          </Text>
         </View>
 
         {/* Read-only notice */}

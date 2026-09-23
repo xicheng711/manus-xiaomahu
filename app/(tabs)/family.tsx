@@ -40,7 +40,7 @@ import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiac } from '@/lib/zodiac';
 import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
-import { findCurrentSharedRecord, getAnnouncementViewerDateKey } from '@/lib/shared-date-range';
+import { findCurrentSharedRecord, getAnnouncementViewerDateKey, resolveCareTimeZone } from '@/lib/shared-date-range';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -618,7 +618,9 @@ export default function FamilyScreen() {
           nickname: cachedFamilyProfile.nickname || (allowLegacyProfileFallback ? cachedLegacyProfile?.nickname : undefined),
         }
       : allowLegacyProfileFallback ? cachedLegacyProfile : null;
-    const cachedToday = findCurrentSharedRecord(cachedCheckIns);
+    // 用照护时区（创建者时区）找"今天"的记录：跨时区时不用查看者本地今天去匹配，
+    // 否则创建者在查看者日历的"昨天"打的卡会被误判为未打卡。
+    const cachedToday = findCurrentSharedRecord(cachedCheckIns, undefined, resolveCareTimeZone(cachedCheckIns));
     const cachedHistory = buildFamilyBriefingHistory(cachedCheckIns, cachedDiaries, localAnns);
     setRoom(rLocal);
     setCurrentMemberState(m);
@@ -765,7 +767,7 @@ export default function FamilyScreen() {
       allCheckIns = Array.isArray(cloudCIs)
         ? await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId)
         : await getAllCheckIns(requestedFamilyId);
-      todayCheckIn = findCurrentSharedRecord(allCheckIns);
+      todayCheckIn = findCurrentSharedRecord(allCheckIns, undefined, resolveCareTimeZone(allCheckIns));
       diaryEntries = Array.isArray(cloudDiaries)
         ? await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId)
         : await getDiaryEntries(requestedFamilyId);
@@ -787,7 +789,7 @@ export default function FamilyScreen() {
           ]);
           if (Array.isArray(cloudCIs)) {
             allCheckIns = await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId);
-            todayCheckIn = findCurrentSharedRecord(allCheckIns);
+            todayCheckIn = findCurrentSharedRecord(allCheckIns, undefined, resolveCareTimeZone(allCheckIns));
           }
           if (Array.isArray(cloudDiaries)) {
             diaryEntries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);

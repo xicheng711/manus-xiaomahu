@@ -144,11 +144,12 @@ describe("Cross-timezone shared record range", () => {
     expect(selected).toMatchObject({ date: "2026-08-31", eveningDone: true });
   });
 
-  it("uses the shared date selector for both cached and refreshed family check-ins", () => {
+  it("uses the shared date selector with the caregiver's time zone for both cached and refreshed family check-ins", () => {
     const familyScreen = readFileSync(resolve(__dirname, "../app/(tabs)/family.tsx"), "utf8");
-    expect(familyScreen).toContain("const cachedToday = findCurrentSharedRecord(cachedCheckIns)");
-    expect(familyScreen).toContain("todayCheckIn = findCurrentSharedRecord(allCheckIns)");
-    // 性能第一批后，主照顾者路径直接复用第一阶段的 cachedToday（= findCurrentSharedRecord(cachedCheckIns)）
+    // 跨时区修复：用创建者时区算"照护的今天"再匹配，而不是查看者本地今天
+    expect(familyScreen).toContain("findCurrentSharedRecord(cachedCheckIns, undefined, resolveCareTimeZone(cachedCheckIns))");
+    expect(familyScreen).toContain("todayCheckIn = findCurrentSharedRecord(allCheckIns, undefined, resolveCareTimeZone(allCheckIns))");
+    // 性能第一批后，主照顾者路径直接复用第一阶段的 cachedToday
     expect(familyScreen).toContain("todayCheckIn = cachedToday");
     expect(familyScreen).not.toContain("todayCheckIn = allCheckIns.find((ci: any) => ci.date === todayDate)");
   });

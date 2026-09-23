@@ -3,6 +3,7 @@ export interface CheckInSyncIdentity {
   roomId: number;
   clientId?: string | null;
   date: string;
+  creatorTimeZone?: string | null;
 }
 
 interface ResolveCheckInSyncIdentityInput<T extends CheckInSyncIdentity> {

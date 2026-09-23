@@ -25,8 +25,11 @@ describe('Diary publication date and return experience', () => {
 describe('Today activity feed', () => {
   const joinerHome = read('components/joiner-home.tsx');
 
-  it('keeps check-ins and diaries on their recorded dates, while placing announcements on the viewer-local date', () => {
-    expect(joinerHome).toContain('checkIns.filter(c => c.date === _todayKey)');
+  it('matches check-ins on the caregiver-local care day, while diaries stay on the viewer date and announcements stay viewer-local', () => {
+    // 跨时区修复：打卡用"照护的今天"（创建者时区）过滤，不用 Joiner 手机的本地今天，
+    // 否则跨时区时明明打了卡 feed 里却显示没有。
+    expect(joinerHome).toContain('resolveCareTodayKey(checkIns)');
+    expect(joinerHome).toContain('checkIns.filter(c => c.date === careTodayKey)');
     expect(joinerHome).toContain('cleanDiaries.filter(d => d.date === _todayKey)');
     expect(joinerHome).toContain('getAnnouncementViewerDateKey(announcement) === _todayKey');
   });

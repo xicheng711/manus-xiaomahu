@@ -86,6 +86,8 @@ export const checkIns = mysqlTable("check_ins", {
   authorUserId: int("authorUserId").notNull(),
   /** Stable business identity generated before the first offline save. */
   clientId: varchar("clientId", { length: 100 }),
+  /** 创建记录时设备的 IANA 时区；date 是按该时区的护理日算的。 */
+  creatorTimeZone: varchar("creatorTimeZone", { length: 64 }),
   date: varchar("date", { length: 10 }).notNull(),         // YYYY-MM-DD
   // Morning check-in
   sleepHours: float("sleepHours"),

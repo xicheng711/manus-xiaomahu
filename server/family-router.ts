@@ -365,6 +365,8 @@ export const familyRouter = router({
       clientId: z.string().min(1).max(100).optional(),
       serverCheckInId: z.number().int().positive().optional(),
       date: z.string(),
+      /** 创建记录时设备的 IANA 时区；date 是按该时区算的护理日。 */
+      creatorTimeZone: z.string().max(64).optional(),
       sleepHours: z.number().optional(),
       sleepQuality: z.enum(["poor", "fair", "good"]).optional(),
       sleepInput: z.any().optional(),
@@ -423,6 +425,8 @@ export const familyRouter = router({
         // device created the same date first, adopt that canonical ID instead.
         clientId: previous?.clientId || requestedClientId,
         date: previous?.date || input.date,
+        // 创建者时区与 date 绑定：date 是按该时区算的护理日，一旦写入不再改变。
+        creatorTimeZone: previous?.creatorTimeZone || checkInFields.creatorTimeZone,
       };
       // Completion is monotonic. Older clients may send defaults for the other phase;
       // preserve an already completed phase unless this snapshot also completed it.

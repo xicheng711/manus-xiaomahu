@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAnnouncementViewerDateKey } from './shared-date-range';
+import { getAnnouncementViewerDateKey, deviceTimeZone } from './shared-date-range';
 
 import {
   cloudSyncCheckIn,
@@ -112,6 +112,13 @@ export interface DailyCheckIn {
   /** Stable business identity shared with the server and all family devices. */
   clientId?: string;
   date: string;            // YYYY-MM-DD
+  /**
+   * 创建这条记录时设备所在的 IANA 时区（如 'Asia/Shanghai'）。
+   * `date` 是按该时区的护理日算出来的；其它时区的家人查看时，用它算"照护的今天"，
+   * 而不是用自己手机的本地今天去匹配，否则同一条记录在两边会掉进不同的日子。
+   * 旧记录没有该字段时按未知处理（走原来的 ±1 天容忍逻辑）。
+   */
+  creatorTimeZone?: string;
   // 早上打卡
   sleepHours: number;
   sleepQuality: 'poor' | 'fair' | 'good';
@@ -700,7 +707,7 @@ export async function mergeCloudCheckInsIntoLocal(
     'daytimeNap', 'napMinutes', 'napDuration', 'morningNotes', 'morningDone',
     'moodEmoji', 'moodScore', 'medicationTaken', 'medicationNotes',
     'mealNotes', 'mealOption', 'eveningNotes', 'eveningDone',
-    'aiMessage', 'careScore', 'completedAt',
+    'aiMessage', 'careScore', 'completedAt', 'creatorTimeZone',
   ];
 
   // 旧服务器可能因并发首次写入存在同家庭同日多行；先按日期合并完成阶段，
@@ -886,6 +893,9 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     id: localId,
     clientId: stableClientId,
     date: data.date,
+    // 创建时记录设备时区：date 是按该时区的护理日算的，之后不再改变。
+    // 更新已有记录时保留原值（见下面的 existing 分支，...existing 在前）。
+    creatorTimeZone: deviceTimeZone(),
     sleepHours: 7,
     sleepQuality: 'fair',
     morningNotes: '',
@@ -910,6 +920,8 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
         clientId: stableClientId,
         serverCheckInId: stableServerCheckInId,
         date: stableDate,
+        // 时区只在创建时确定；旧记录没有时，用创建者当前时区回填（只有主照顾者能写打卡）。
+        creatorTimeZone: data.creatorTimeZone || existing.creatorTimeZone || deviceTimeZone(),
         completedAt: new Date().toISOString(),
         syncPending: true,
         syncVersion,

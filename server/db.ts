@@ -21,6 +21,7 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     { table: 'diary_entries',  column: 'clientId',     definition: 'varchar(100)' },
     { table: 'family_members', column: 'birthYear',    definition: 'int' },
     { table: 'check_ins',      column: 'clientId',     definition: 'varchar(100)' },
+    { table: 'check_ins',      column: 'creatorTimeZone', definition: 'varchar(64)' },
     { table: 'check_ins',      column: 'daytimeNap',   definition: 'tinyint(1) NULL' },
     { table: 'check_ins',      column: 'napMinutes',   definition: 'int NULL' },
     { table: 'medications',    column: 'clientId',     definition: 'varchar(100)' },

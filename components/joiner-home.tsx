@@ -25,7 +25,7 @@ import { SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { useFamilyContext } from '@/lib/family-context';
 import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
-import { getAnnouncementViewerDateKey } from '@/lib/shared-date-range';
+import { getAnnouncementViewerDateKey, resolveCareTodayKey } from '@/lib/shared-date-range';
 
 type FeedItem = {
   id: string;
@@ -555,8 +555,11 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
       authorEmoji: memberEmojiById.get(String(announcement.authorId)) ?? announcement.authorEmoji,
     }));
     setLatestAnnounce(announcements[0] ?? null);
-    // 打卡和日记属于记录者的护理日；公告是即时事件，应以查看者当地日历归属。
-    const todayCheckIns = checkIns.filter(c => c.date === _todayKey).slice(0, 2);
+    // 打卡属于记录者的护理日：用"照护的今天"（创建者时区）过滤，
+    // 而不是 Joiner 手机的本地今天，否则跨时区时明明打了卡 feed 里却显示没有。
+    // 公告是即时事件，仍以查看者当地日历归属；日记保持原有逻辑不动。
+    const careTodayKey = resolveCareTodayKey(checkIns);
+    const todayCheckIns = checkIns.filter(c => c.date === careTodayKey).slice(0, 2);
     const todayDiaries = cleanDiaries.filter(d => d.date === _todayKey).slice(0, 3);
     const todayAnnouncements = announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === _todayKey).slice(0, 2);
     setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));
