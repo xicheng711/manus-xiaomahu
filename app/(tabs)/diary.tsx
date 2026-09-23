@@ -12,6 +12,7 @@ import {
   getDiaryEntries, deleteDiaryEntry, DiaryEntry, DiaryDraft, getDiaryDraft, clearDiaryDraft,
   getCurrentUserIsCreator, mergeCloudDiariesIntoLocal, syncPendingDiaries,
 } from '@/lib/storage';
+import { sortDiaryEntriesDesc } from '@/lib/diary-sort';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetDiaries, cloudGetDiaryInteractionSummaries, getCloudSyncState, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
@@ -641,15 +642,7 @@ function DiaryScreenContent() {
       setDeleteTarget(null);
       const updated = await getDiaryEntries(familyId);
       // 删除后重新排序，确保列表顺序正确
-      const sorted = [...updated].sort((a, b) => {
-        const ta = new Date(a.createdAt || a.date).getTime();
-        const tb = new Date(b.createdAt || b.date).getTime();
-        if (tb !== ta) return tb - ta;
-        const lta = a.localTimeStr || '00:00';
-        const ltb = b.localTimeStr || '00:00';
-        return ltb.localeCompare(lta);
-      });
-      const next = sorted.slice(0, 30);
+      const next = sortDiaryEntriesDesc(updated).slice(0, 30);
       setEntries(next);
       if (next.length === 0) setEditMode(false);
     } catch (error: any) {
@@ -657,8 +650,35 @@ function DiaryScreenContent() {
     }
   }
 
-  const conversationDrafts = entries.filter(entry => entry.conversationFinished === false);
-  const publishedEntries = entries.filter(entry => entry.conversationFinished !== false);
+  // 性能（第二批）：过滤只在 entries 变化时做一次，不再每次 render 重跑
+  const { conversationDrafts, publishedEntries } = useMemo(() => ({
+    conversationDrafts: entries.filter(entry => entry.conversationFinished === false),
+    publishedEntries: entries.filter(entry => entry.conversationFinished !== false),
+  }), [entries]);
+  // 性能（第二批）：按月分组 + 组内排序只在 publishedEntries 变化时做一次
+  const groupedMonths = useMemo(() => {
+    // 用 YYYY-MM 作为 key 确保数字排序正确，显示时转为中文
+    const grouped: Record<string, DiaryEntry[]> = {};
+    publishedEntries.slice(3).forEach(e => {
+      const parts = e.date.split('-');
+      if (parts.length === 3) {
+        const key = `${parts[0]}-${parts[1]}`; // YYYY-MM
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(e);
+      }
+    });
+    // 月份分组按时间降序排列（最新月份在最前），组内日记也按时间降序
+    return Object.entries(grouped)
+      .sort(([a], [b]) => b.localeCompare(a)) // YYYY-MM 字符串可直接比较
+      .map(([monthKey, monthEntries]) => {
+        const [yr, mo] = monthKey.split('-');
+        return {
+          monthKey,
+          displayMonth: `${yr}年${parseInt(mo, 10)}月`,
+          entries: sortDiaryEntriesDesc(monthEntries),
+        };
+      });
+  }, [publishedEntries]);
   const hasDrafts = !!textDraft || conversationDrafts.length > 0;
   const hasAnyContent = hasDrafts || publishedEntries.length > 0;
 
@@ -796,56 +816,24 @@ function DiaryScreenContent() {
               )}
 
               {/* 展开：全部日记按月分组 */}
-              {!editMode && showAll && (() => {
-                // 用 YYYY-MM 作为 key 确保数字排序正确，显示时转为中文
-                const grouped: Record<string, DiaryEntry[]> = {};
-                publishedEntries.slice(3).forEach(e => {
-                  const parts = e.date.split('-');
-                  if (parts.length === 3) {
-                    const key = `${parts[0]}-${parts[1]}`; // YYYY-MM
-                    if (!grouped[key]) grouped[key] = [];
-                    grouped[key].push(e);
-                  }
-                });
-                // 月份分组按时间降序排列（最新月份在最前），组内日记也按时间降序
-                return Object.entries(grouped)
-                  .sort(([a], [b]) => b.localeCompare(a)) // YYYY-MM 字符串可直接比较
-                  .map(([monthKey, monthEntries]) => {
-                    const [yr, mo] = monthKey.split('-');
-                    const displayMonth = `${yr}年${parseInt(mo, 10)}月`;
-                    const sortedEntries = [...monthEntries].sort((a, b) => {
-                      // 主排序：按 date（YYYY-MM-DD）降序
-                      const dateCmp = b.date.localeCompare(a.date);
-                      if (dateCmp !== 0) return dateCmp;
-                      // 同一天多条日记：按 createdAt 时间戳降序（用数字比较，避免 Date 对象与字符串混合）
-                      const ta = new Date(a.createdAt || a.date).getTime();
-                      const tb = new Date(b.createdAt || b.date).getTime();
-                      if (tb !== ta) return tb - ta;
-                      // 最后用 localTimeStr 作为备用排序键
-                      const lta = a.localTimeStr || '00:00';
-                      const ltb = b.localTimeStr || '00:00';
-                      return ltb.localeCompare(lta);
-                    });
-                    return (
-                      <View key={monthKey}>
-                        <View style={styles.monthDivider}>
-                          <Text style={styles.monthDividerText}>{displayMonth}</Text>
-                        </View>
-                        {sortedEntries.map((entry, i) => (
-                          <DiaryCard
-                            key={entry.id}
-                            entry={entry}
-                            onPress={() => openDetail(entry.id)}
-                            onDelete={() => confirmDelete(entry.id, entry.date)}
-                            index={i}
-                            editMode={false}
-                            interaction={getServerDiaryId(entry) ? interactionSummaries[getServerDiaryId(entry)!] : undefined}
-                          />
-                        ))}
-                      </View>
-                    );
-                  });
-              })()}
+              {!editMode && showAll && groupedMonths.map(({ monthKey, displayMonth, entries: sortedEntries }) => (
+                <View key={monthKey}>
+                  <View style={styles.monthDivider}>
+                    <Text style={styles.monthDividerText}>{displayMonth}</Text>
+                  </View>
+                  {sortedEntries.map((entry, i) => (
+                    <DiaryCard
+                      key={entry.id}
+                      entry={entry}
+                      onPress={() => openDetail(entry.id)}
+                      onDelete={() => confirmDelete(entry.id, entry.date)}
+                      index={i}
+                      editMode={false}
+                      interaction={getServerDiaryId(entry) ? interactionSummaries[getServerDiaryId(entry)!] : undefined}
+                    />
+                  ))}
+                </View>
+              ))}
             </View>}
 
             {/* ── 日历回顾 ── */}
@@ -1151,13 +1139,7 @@ function JoinerDiaryReadOnly() {
     async function loadJoinerEntries() {
       // 始终只读取当前 active family 的 key，先让页面秒开。
       const local = await getDiaryEntries(familyId);
-      const localSorted = [...local].sort((a, b) => {
-        const ta = new Date(a.createdAt || a.date).getTime();
-        const tb = new Date(b.createdAt || b.date).getTime();
-        if (tb !== ta) return tb - ta;
-        return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
-      });
-      setEntries(localSorted);
+      setEntries(sortDiaryEntriesDesc(local));
 
       const roomId = familyId ? Number(familyId) : NaN;
       if (!Number.isFinite(roomId) || !await shouldRefreshCloudCache(roomId, 'diary')) return;

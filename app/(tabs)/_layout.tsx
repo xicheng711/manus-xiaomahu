@@ -1,3 +1,4 @@
+import { useRef, useEffect } from "react";
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
@@ -90,18 +91,21 @@ function JoinerToast({ visible }: { visible: boolean }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(8)).current;
 
-  // 当 visible 变化时触发动画
-  if (visible) {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start();
-  } else {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 8, duration: 300, useNativeDriver: true }),
-    ]).start();
-  }
+  // 当 visible 变化时触发动画（性能：副作用必须在 useEffect 里，不能写在 render 体里，
+  // 否则每次父组件重渲染都会重启动画，造成闪烁和无效的 native 调用）
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 8, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible, opacity, translateY]);
 
   return (
     <Animated.View
