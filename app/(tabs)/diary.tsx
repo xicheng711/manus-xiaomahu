@@ -110,7 +110,14 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, justifyContent: 'flex-end' }}>
             {editMode && (
               <Animated.View style={{ transform: [{ translateX: deleteShake }] }}>
-                <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={onDelete}
+                  activeOpacity={0.8}
+                  accessibilityLabel="删除这篇日记"
+                  accessibilityRole="button"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
                   <Text style={styles.deleteBtnText}>🗑️</Text>
                 </TouchableOpacity>
               </Animated.View>
@@ -386,18 +393,11 @@ function DiaryScreenContent() {
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const fabScale = useRef(new Animated.Value(1)).current;
-  const fabBreath = useRef(new Animated.Value(1)).current;
   const listScrollRef = useRef<ScrollView>(null);
   const listKey = familyId || 'loading';
 
   useEffect(() => {
     fadeInUp(headerFade, headerSlide, { duration: 500 });
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(fabBreath, { toValue: 1.08, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(fabBreath, { toValue: 1.0, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
   }, []);
 
   const { refresh: refreshParam } = useLocalSearchParams<{ refresh?: string }>();
@@ -865,19 +865,6 @@ function DiaryScreenContent() {
         )}
       </ScrollView>
 
-      {/* FAB */}
-      {hasAnyContent && !editMode && (
-        <Animated.View style={[styles.fab, { transform: [{ scale: fabBreath }] }]}>
-          <TouchableOpacity
-            style={styles.fabBtn}
-            onPress={() => pressAnimation(fabScale, openNewEntry)}
-            activeOpacity={0.85}
-          >
-            <AppIcon name="note" color="#fff" size={24} strokeWidth={1.7} />
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
       {/* Custom delete confirmation modal */}
       <Modal
         visible={!!deleteTarget}
@@ -1071,19 +1058,6 @@ const styles = StyleSheet.create({
   startBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
   // FAB
-  fab: {
-    position: 'absolute', bottom: 28, right: 24,
-  },
-  fabBtn: {
-    width: 58, height: 58, borderRadius: 29,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-  },
   // Delete confirmation modal
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',

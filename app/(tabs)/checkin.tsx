@@ -453,6 +453,26 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                   )}
                 </View>
 
+                {/* ── AI 护理简报 ── */}
+                {briefingLoading ? (
+                  <View style={calStyles.briefingLoadingRow}>
+                    <Text style={calStyles.briefingLoadingText}>简报加载中…</Text>
+                  </View>
+                ) : selectedBriefing ? (
+                  <View style={calStyles.popupSection}>
+                    <Text style={calStyles.popupSectionTitle}>📋 当日简报</Text>
+                    <View style={calStyles.briefingContent}>
+                      <View style={calStyles.briefingSummaryBox}>
+                        <Text style={calStyles.briefingSummaryLabel}>今日小结</Text>
+                        <Text style={calStyles.briefingSummaryText}>{selectedBriefing.summary}</Text>
+                      </View>
+                      <View style={calStyles.briefingEncouragementBox}>
+                        <Text style={calStyles.briefingEncouragementText}>{selectedBriefing.encouragement}</Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+
                 <TouchableOpacity style={calStyles.popupClose} onPress={closeDayDetail}>
                   <Text style={calStyles.popupCloseText}>关闭</Text>
                 </TouchableOpacity>

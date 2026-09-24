@@ -89,7 +89,13 @@ function MedCard({ med, changes, onToggle, onDelete, onEdit, index, isCreator }:
                 {med.active ? '停用' : '启用'}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.deleteBtn} onPress={onDelete}>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={onDelete}
+              accessibilityLabel={`删除用药 ${med.name}`}
+              accessibilityRole="button"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Text style={styles.deleteBtnText}>🗑️</Text>
             </TouchableOpacity>
           </View>
@@ -169,26 +175,31 @@ function MedicationScreenContent() {
       setMedicationChanges(localChanges);
     }
 
-    const [cloudMeds, cloudChanges, fp, lp] = await Promise.all([
-      cloudGetMedications(Number(requestedFamilyId)),
-      cloudGetMedicationChanges(Number(requestedFamilyId)),
-      getFamilyProfile(requestedFamilyId),
-      getProfile(),
-    ]);
-    if (activeFamilyRef.current !== requestedFamilyId) return;
+    // 云端刷新失败不影响本地已显示的数据，只记录日志（页面支持离线使用）。
+    try {
+      const [cloudMeds, cloudChanges, fp, lp] = await Promise.all([
+        cloudGetMedications(Number(requestedFamilyId)),
+        cloudGetMedicationChanges(Number(requestedFamilyId)),
+        getFamilyProfile(requestedFamilyId),
+        getProfile(),
+      ]);
+      if (activeFamilyRef.current !== requestedFamilyId) return;
 
-    if (Array.isArray(cloudChanges)) {
-      const mergedChanges = await mergeCloudMedicationChanges(cloudChanges, requestedFamilyId);
-      if (activeFamilyRef.current === requestedFamilyId) setMedicationChanges(mergedChanges);
+      if (Array.isArray(cloudChanges)) {
+        const mergedChanges = await mergeCloudMedicationChanges(cloudChanges, requestedFamilyId);
+        if (activeFamilyRef.current === requestedFamilyId) setMedicationChanges(mergedChanges);
+      }
+
+      if (Array.isArray(cloudMeds)) {
+        const merged = await mergeCloudMedicationsIntoLocal(cloudMeds, requestedFamilyId);
+        if (activeFamilyRef.current === requestedFamilyId) setMeds(merged);
+      }
+
+      const allowLegacyFallback = memberships.length === 1;
+      setElderNickname(fp?.nickname || fp?.name || activeMembership?.room.elderName || (allowLegacyFallback ? lp?.nickname || lp?.name : undefined) || '家人');
+    } catch (e) {
+      console.warn('[medication] 云端刷新失败，已显示本地数据', e);
     }
-
-    if (Array.isArray(cloudMeds)) {
-      const merged = await mergeCloudMedicationsIntoLocal(cloudMeds, requestedFamilyId);
-      if (activeFamilyRef.current === requestedFamilyId) setMeds(merged);
-    }
-
-    const allowLegacyFallback = memberships.length === 1;
-    setElderNickname(fp?.nickname || fp?.name || activeMembership?.room.elderName || (allowLegacyFallback ? lp?.nickname || lp?.name : undefined) || '家人');
   }, [familyId, familyReady, memberships.length, activeMembership?.room.elderName, isCreator]);
 
   const handleRefresh = useCallback(async () => {

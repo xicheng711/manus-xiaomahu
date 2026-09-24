@@ -28,6 +28,7 @@ import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '@/lib/animations';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
+import { AppIcon } from '@/components/app-icons';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { AnnouncementComments } from '@/components/announcement-comments';
 import { ScreenContainer } from '@/components/screen-container';
@@ -205,14 +206,16 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
   if (mode === 'choose') {
     return (
       <View style={setup.container}>
-        <Text style={setup.emoji}>🏡</Text>
+        <View style={setup.emojiCircle}>
+          <AppIcon name="family" color={AppColors.coral.primary} size={40} strokeWidth={1.5} />
+        </View>
         <Text style={setup.title}>家人共享</Text>
         <Text style={setup.subtitle}>
           创建家庭空间，邀请家人一起{'\n'}
           共同关爱{patientNickname}，分享护理日常
         </Text>
         <TouchableOpacity style={setup.primaryBtn} onPress={() => setMode('create')}>
-          <Text style={setup.primaryBtnText}>✨ 创建家庭空间</Text>
+          <Text style={setup.primaryBtnText}>创建家庭空间</Text>
         </TouchableOpacity>
         <TouchableOpacity style={setup.secondaryBtn} onPress={() => setMode('join')}>
           <Text style={setup.secondaryBtnText}>加入已有空间</Text>
@@ -233,7 +236,9 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-      <Text style={setup.emoji}>{mode === 'create' ? '✨' : '🔗'}</Text>
+      <View style={setup.emojiCircle}>
+        <AppIcon name={mode === 'create' ? 'family' : 'note'} color={AppColors.coral.primary} size={40} strokeWidth={1.5} />
+      </View>
       <Text style={setup.title}>{mode === 'create' ? '创建家庭空间' : '加入家庭空间'}</Text>
 
       {mode === 'join' && (
@@ -1833,6 +1838,8 @@ function AnnouncementCard({
             onPress={handleDeletePress}
             style={[card.deleteBtn, deleteConfirm && card.deleteBtnConfirm]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel={deleteConfirm ? '确认删除这条公告' : '删除这条公告'}
+            accessibilityRole="button"
           >
             <Text style={[card.deleteText, deleteConfirm && card.deleteTextConfirm]}>
               {deleteConfirm ? '确认删除?' : '🗑'}
@@ -2087,7 +2094,16 @@ const card = StyleSheet.create({
 const setup = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   formContainer: { padding: 24, paddingBottom: 80, flexGrow: 1 },
-  emoji: { fontSize: 64, marginBottom: 16, textAlign: 'center' },
+  emojiCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: AppColors.coral.soft,
+    marginBottom: 20,
+    alignSelf: 'center',
+  },
   title: { fontSize: 26, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: 32 },
   primaryBtn: { width: '100%', backgroundColor: AppColors.coral.primary, borderRadius: 20, padding: 16, alignItems: 'center', marginBottom: 12 },

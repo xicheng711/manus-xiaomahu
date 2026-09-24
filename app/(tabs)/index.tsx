@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   ScrollView, View, Text, TouchableOpacity, Modal,
   StyleSheet, Dimensions, Animated, Easing, Platform, Image, Keyboard, Alert,
-  RefreshControl,
+  RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -466,7 +466,14 @@ export default function HomeScreen() {
   const params = useLocalSearchParams<{ refresh?: string }>();
   const { activeMembership, ready } = useFamilyContext();
 
-  if (!ready) return null;
+  if (!ready) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={AppColors.coral.primary} />
+        <Text style={styles.loadingText}>正在准备小马虎…</Text>
+      </View>
+    );
+  }
 
   if (activeMembership && activeMembership.role !== 'creator') {
     return <JoinerHomeScreen refreshToken={params.refresh} />;
@@ -803,10 +810,13 @@ function CreatorHomeScreen() {
               <TouchableOpacity
                 onPress={() => setShowSwitcher(true)}
                 activeOpacity={0.75}
+                accessibilityLabel="切换家庭"
+                accessibilityRole="button"
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                 style={{
                   flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6,
                   backgroundColor: AppColors.surface.glass,
-                  borderRadius: 14, paddingHorizontal: 9, paddingVertical: 4,
+                  borderRadius: 14, paddingHorizontal: 9, paddingVertical: 8,
                   shadowColor: AppColors.shadow.soft, shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 1, shadowRadius: 8, elevation: 1,
                   alignSelf: 'flex-start',
@@ -942,7 +952,9 @@ function CreatorHomeScreen() {
                     {isActive && <Text style={{ fontSize: 16, color: AppColors.green.strong }}>✓</Text>}
                     {isActive && (
                       <TouchableOpacity
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                        accessibilityLabel="家庭设置"
+                        accessibilityRole="button"
                         onPress={() => {
                           setShowSwitcher(false);
                           setTimeout(() => router.push({ pathname: '/(modals)/family-settings' as any, params: { familyId: m.familyId } }), 200);
@@ -986,6 +998,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safeArea: { flex: 1 },
   container: { flex: 1, backgroundColor: 'transparent' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: 14, color: AppColors.text.tertiary },
   content: { paddingHorizontal: 22, paddingBottom: 112 },
 
   bgDecorLayer: { position: 'absolute', top: 0, left: 0, right: 0, height: 220, overflow: 'hidden' },

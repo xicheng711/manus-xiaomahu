@@ -1,18 +1,19 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AppColors, Gradients } from '@/lib/design-tokens';
+import { AppIcon, type AppIconName } from '@/components/app-icons';
 
 export type PageTheme = {
-  emoji: string;
+  icon: AppIconName;
   gradient: [string, string, string];
   title: string;
 };
 
 export const PAGE_THEMES: Record<string, PageTheme> = {
-  checkin:    { emoji: '✅', gradient: [Gradients.green[0], Gradients.green[1], AppColors.green.strong], title: '每日打卡' },
-  medication: { emoji: '💊', gradient: [Gradients.coral[0], Gradients.coral[1], AppColors.coral.primary], title: '用药管理' },
-  diary:      { emoji: '📔', gradient: [Gradients.purple[0], Gradients.purple[1], AppColors.purple.strong], title: '护理日记' },
-  family:     { emoji: '👥', gradient: [Gradients.navActive[0], Gradients.navActive[1], '#B8426A'], title: '家人共享' },
+  checkin:    { icon: 'checkin', gradient: [Gradients.green[0], Gradients.green[1], AppColors.green.strong], title: '每日打卡' },
+  medication: { icon: 'pill', gradient: [Gradients.coral[0], Gradients.coral[1], AppColors.coral.primary], title: '用药管理' },
+  diary:      { icon: 'book', gradient: [Gradients.purple[0], Gradients.purple[1], AppColors.purple.strong], title: '护理日记' },
+  family:     { icon: 'family', gradient: [Gradients.navActive[0], Gradients.navActive[1], '#B8426A'], title: '家人共享' },
 };
 
 interface PageHeaderProps {
@@ -36,7 +37,7 @@ export function PageHeader({ theme, subtitle, right, style }: PageHeaderProps) {
             end={{ x: 1, y: 1 }}
             style={styles.iconCircle}
           >
-            <Text style={styles.emoji}>{theme.emoji}</Text>
+            <AppIcon name={theme.icon} color="#fff" size={24} strokeWidth={1.7} />
           </LinearGradient>
 
           <View style={styles.textBlock}>
@@ -98,10 +99,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 4,
-  },
-  emoji: {
-    fontSize: 22,
-    lineHeight: 26,
   },
   textBlock: {
     flex: 1,
