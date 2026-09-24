@@ -6,10 +6,10 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
+import { AppIcon, type AppIconName } from '@/components/app-icons';
 import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, nightWakingsToKey, saveCheckInDraft, readCheckInDraft, clearCheckInDraft } from '@/lib/storage';
 import { computeStreak } from '@/lib/night-wakings';
 import { getSessionToken } from '@/lib/_core/auth';
@@ -255,6 +255,29 @@ const MOODS = [
   { emoji: '😤', label: '烦躁', score: 2 },
 ];
 
+// ─── 日历弹窗：线条图标 + 文字行（替代 emoji 前缀） ──────────────────────────
+function PopupIconRow({ icon, iconColor, textStyle, children }: {
+  icon: AppIconName; iconColor: string; textStyle: any; children: React.ReactNode;
+}) {
+  return (
+    <View style={calStyles.popupIconRow}>
+      <AppIcon name={icon} color={iconColor} size={13} />
+      <Text style={[textStyle, { flex: 1, marginBottom: 0, marginTop: 0 }]}>{children}</Text>
+    </View>
+  );
+}
+
+function PopupSectionTitle({ icon, iconColor, children }: {
+  icon: AppIconName; iconColor: string; children: React.ReactNode;
+}) {
+  return (
+    <View style={calStyles.popupSectionTitleRow}>
+      <AppIcon name={icon} color={iconColor} size={14} />
+      <Text style={calStyles.popupSectionTitle}>{children}</Text>
+    </View>
+  );
+}
+
 // ─── Month Calendar ────────────────────────────────────────────────────────
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 const MONTH_NAMES = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
@@ -400,7 +423,7 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
               <TouchableOpacity activeOpacity={1} onPress={() => {}}>
                 {/* ── Date header ── */}
                 <View style={calStyles.popupDateRow}>
-                  <Text style={calStyles.popupDateEmoji}>📅</Text>
+                  <AppIcon name="calendar" color={COLORS.text} size={20} />
                   <Text style={calStyles.popupDate}>{selectedDay?.date}</Text>
                 </View>
                 <View style={calStyles.popupDivider} />
@@ -410,25 +433,25 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                   {/* 早间打卡 */}
                   {selectedDay?.morningDone ? (
                     <View style={calStyles.popupSection}>
-                      <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
-                      <Text style={calStyles.popupItem}>
-                        💤 睡眠：{selectedDay.sleepHours ? `${selectedDay.sleepHours}小时` : '未记录'}
+                      <PopupSectionTitle icon="sunrise" iconColor="#F59E0B">早间打卡</PopupSectionTitle>
+                      <PopupIconRow icon="night" iconColor={COLORS.textSecondary} textStyle={calStyles.popupItem}>
+                        睡眠：{selectedDay.sleepHours ? `${selectedDay.sleepHours}小时` : '未记录'}
                         {selectedDay.sleepQuality ? ` · ${selectedDay.sleepQuality === 'good' ? '良好' : selectedDay.sleepQuality === 'fair' ? '一般' : '较差'}` : ''}
-                      </Text>
+                      </PopupIconRow>
                       {(() => {
                         const nw = getNightWakings(selectedDay);
                         return nw !== undefined ? (
-                          <Text style={calStyles.popupItem}>🌙 夜醒：{nw === 0 ? '没醒' : `${nw}次`}</Text>
+                          <PopupIconRow icon="night" iconColor={COLORS.textSecondary} textStyle={calStyles.popupItem}>夜醒：{nw === 0 ? '没醒' : `${nw}次`}</PopupIconRow>
                         ) : null;
                       })()}
                       {!selectedDay.eveningDone && hasRecordedNap(selectedDay) && (
-                        <Text style={calStyles.popupItem}>☀️ 白天小睡：{getNapDisplay(selectedDay)}</Text>
+                        <PopupIconRow icon="sun" iconColor={COLORS.textSecondary} textStyle={calStyles.popupItem}>白天小睡：{getNapDisplay(selectedDay)}</PopupIconRow>
                       )}
-                      {selectedDay.morningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.morningNotes}</Text> : null}
+                      {selectedDay.morningNotes ? <PopupIconRow icon="note" iconColor={COLORS.textSecondary} textStyle={calStyles.popupNote}>{selectedDay.morningNotes}</PopupIconRow> : null}
                     </View>
                   ) : (
                     <View style={calStyles.popupSection}>
-                      <Text style={calStyles.popupSectionTitle}>🌅 早间打卡</Text>
+                      <PopupSectionTitle icon="sunrise" iconColor="#F59E0B">早间打卡</PopupSectionTitle>
                       <Text style={[calStyles.popupItem, { color: '#aaa' }]}>未完成早间打卡</Text>
                     </View>
                   )}
@@ -436,18 +459,18 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                   {/* 晚间打卡 */}
                   {selectedDay?.eveningDone ? (
                     <View style={calStyles.popupSection}>
-                      <Text style={calStyles.popupSectionTitle}>🌙 晚间打卡</Text>
+                      <PopupSectionTitle icon="night" iconColor={AppColors.purple.primary}>晚间打卡</PopupSectionTitle>
                       <Text style={calStyles.popupItem}>
                         {selectedDay.moodEmoji || '😊'} 心情：{selectedDay.moodScore != null ? (selectedDay.moodScore >= 8 ? '良好' : selectedDay.moodScore >= 6 ? '一般' : '较差') : '未记录'}
                       </Text>
-                      <Text style={calStyles.popupItem}>💊 用药：{selectedDay.medicationTaken != null ? (selectedDay.medicationTaken ? '✅ 已按时服药' : '❌ 未服药') : '未记录'}</Text>
-                      {selectedDay.mealNotes ? <Text style={calStyles.popupItem}>🍽️ 饮食：{selectedDay.mealNotes}</Text> : selectedDay.mealOption ? <Text style={calStyles.popupItem}>🍽️ 饮食：{selectedDay.mealOption}</Text> : null}
-                      {hasRecordedNap(selectedDay) && <Text style={calStyles.popupItem}>☀️ 白天小睡：{getNapDisplay(selectedDay)}</Text>}
-                      {selectedDay.eveningNotes ? <Text style={calStyles.popupNote}>📝 {selectedDay.eveningNotes}</Text> : null}
+                      <PopupIconRow icon="pill" iconColor={COLORS.textSecondary} textStyle={calStyles.popupItem}>用药：{selectedDay.medicationTaken != null ? (selectedDay.medicationTaken ? '已按时服药' : '未服药') : '未记录'}</PopupIconRow>
+                      {selectedDay.mealNotes ? <PopupIconRow icon="bowl" iconColor={COLORS.textSecondary} textStyle={calStyles.popupItem}>饮食：{selectedDay.mealNotes}</PopupIconRow> : selectedDay.mealOption ? <PopupIconRow icon="bowl" iconColor={COLORS.textSecondary} textStyle={calStyles.popupItem}>饮食：{selectedDay.mealOption}</PopupIconRow> : null}
+                      {hasRecordedNap(selectedDay) && <PopupIconRow icon="sun" iconColor={COLORS.textSecondary} textStyle={calStyles.popupItem}>白天小睡：{getNapDisplay(selectedDay)}</PopupIconRow>}
+                      {selectedDay.eveningNotes ? <PopupIconRow icon="note" iconColor={COLORS.textSecondary} textStyle={calStyles.popupNote}>{selectedDay.eveningNotes}</PopupIconRow> : null}
                     </View>
                   ) : (
                     <View style={calStyles.popupSection}>
-                      <Text style={calStyles.popupSectionTitle}>🌙 晚间打卡</Text>
+                      <PopupSectionTitle icon="night" iconColor={AppColors.purple.primary}>晚间打卡</PopupSectionTitle>
                       <Text style={[calStyles.popupItem, { color: '#aaa' }]}>未完成晚间打卡</Text>
                     </View>
                   )}
@@ -460,7 +483,7 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
                   </View>
                 ) : selectedBriefing ? (
                   <View style={calStyles.popupSection}>
-                    <Text style={calStyles.popupSectionTitle}>📋 当日简报</Text>
+                    <PopupSectionTitle icon="note" iconColor={AppColors.text.secondary}>当日简报</PopupSectionTitle>
                     <View style={calStyles.briefingContent}>
                       <View style={calStyles.briefingSummaryBox}>
                         <Text style={calStyles.briefingSummaryLabel}>今日小结</Text>
@@ -554,7 +577,7 @@ function CheckinLanding({
 
       {lateNightCareWindow && (
         <View style={styles.lateNightCareNotice}>
-          <Text style={styles.lateNightCareNoticeIcon}>🌙</Text>
+          <AppIcon name="night" color="#665A9C" size={16} />
           <Text style={styles.lateNightCareNoticeText}>
             当前为凌晨时段，{String(CARE_DAY_ROLLOVER_HOUR).padStart(2, '0')}:00 前完成的晚间记录仍计入{careDayLabel}护理日
           </Text>
@@ -578,7 +601,7 @@ function CheckinLanding({
               colors={morningDone ? ['#FFCC02', '#FF9500'] : ['#FFD88A', '#FFBF60']}
               style={styles.checkinCardIconCircle}
             >
-              <Text style={styles.checkinCardIconEmoji}>🌅</Text>
+              <AppIcon name="sunrise" color="#fff" size={24} />
             </LinearGradient>
             <View style={styles.checkinCardInfo}>
               <Text style={styles.checkinCardTitle}>早间打卡</Text>
@@ -601,13 +624,15 @@ function CheckinLanding({
           {morningDone && checkIn && (
             <View style={styles.checkinCardChips}>
               <View style={styles.checkinChip}>
-                <Text style={styles.checkinChipText}>💤 {elderNickname}睡了 {checkIn.sleepHours}h</Text>
+                <AppIcon name="night" color="#B45309" size={12} />
+                <Text style={styles.checkinChipText}>{elderNickname}睡了 {checkIn.sleepHours}h</Text>
               </View>
               {(() => {
                 const nw = getNightWakings(checkIn);
                 return nw !== undefined && nw > 0 ? (
                   <View style={styles.checkinChip}>
-                    <Text style={styles.checkinChipText}>🌛 夜醒{nw}次</Text>
+                    <AppIcon name="night" color="#B45309" size={12} />
+                    <Text style={styles.checkinChipText}>夜醒{nw}次</Text>
                   </View>
                 ) : null;
               })()}
@@ -649,7 +674,7 @@ function CheckinLanding({
               colors={eveningDone ? [AppColors.purple.strong, '#6C5BAE'] : [AppColors.purple.primary, '#B5A2E8']}
               style={styles.checkinCardIconCircle}
             >
-              <Text style={styles.checkinCardIconEmoji}>🌙</Text>
+              <AppIcon name="night" color="#fff" size={24} />
             </LinearGradient>
             <View style={styles.checkinCardInfo}>
               <Text style={styles.checkinCardTitle}>晚间记录</Text>
@@ -679,16 +704,19 @@ function CheckinLanding({
                 <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>{checkIn.moodEmoji} 心情 {checkIn.moodScore}/10</Text>
               </View>
               <View style={[styles.checkinChip, { backgroundColor: 'rgba(119,104,181,0.1)' }]}>
-                <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>💊 {checkIn.medicationTaken ? '已服药' : '未服药'}</Text>
+                <AppIcon name="pill" color={AppColors.purple.strong} size={12} />
+                <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>{checkIn.medicationTaken ? '已服药' : '未服药'}</Text>
               </View>
               {checkIn.mealNotes && (
                 <View style={[styles.checkinChip, { backgroundColor: 'rgba(119,104,181,0.1)' }]}>
-                  <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>🍜 {checkIn.mealNotes}</Text>
+                  <AppIcon name="bowl" color={AppColors.purple.strong} size={12} />
+                  <Text style={[styles.checkinChipText, { color: AppColors.purple.strong }]}>{checkIn.mealNotes}</Text>
                 </View>
               )}
               {hasRecordedNap(checkIn) && (
                 <View style={[styles.checkinChip, { backgroundColor: 'rgba(255,200,100,0.15)' }]}>
-                  <Text style={[styles.checkinChipText, { color: '#B8860B' }]}>☀️ 白天小睡 {getNapDisplay(checkIn)}</Text>
+                  <AppIcon name="sun" color="#B8860B" size={12} />
+                  <Text style={[styles.checkinChipText, { color: '#B8860B' }]}>白天小睡 {getNapDisplay(checkIn)}</Text>
                 </View>
               )}
             </View>
@@ -722,7 +750,10 @@ function CheckinLanding({
 
       {/* History Calendar */}
       <View style={calStyles.sectionHeader}>
-        <Text style={calStyles.sectionTitle}>📅 打卡历史</Text>
+        <View style={calStyles.sectionTitleRow}>
+          <AppIcon name="calendar" color={COLORS.text} size={16} />
+          <Text style={calStyles.sectionTitle}>打卡历史</Text>
+        </View>
         <Text style={calStyles.sectionSub}>点击有记录的日期查看详情</Text>
       </View>
       <MonthCalendar checkIns={allCheckIns} caregiverName={caregiverName} />
@@ -1308,7 +1339,7 @@ function CheckinScreenContent() {
                 colors={['#EDE9FE', '#DDD6FE']}
                 style={styles.nightIconCircle}
               >
-                <Text style={{ fontSize: 52 }}>🌙</Text>
+                <AppIcon name="night" color="#7C6BD6" size={52} />
               </LinearGradient>
               <View style={styles.nightCheckBadge}>
                 <Text style={{ fontSize: 18, color: '#fff', fontWeight: '900' }}>✓</Text>
@@ -1321,7 +1352,7 @@ function CheckinScreenContent() {
 
             {/* 简报生成提示 */}
             <View style={styles.nightBriefingBanner}>
-              <Text style={styles.nightBriefingBannerEmoji}>📋</Text>
+              <AppIcon name="note" color="#5B21B6" size={18} />
               <Text style={styles.nightBriefingBannerText}>今日护理简报已生成</Text>
             </View>
 
@@ -1355,7 +1386,7 @@ function CheckinScreenContent() {
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={styles.nightPrimaryBtnInner}
                 >
-                  <Text style={{ fontSize: 20 }}>📋</Text>
+                  <AppIcon name="note" color="#fff" size={20} />
                   <Text style={styles.nightPrimaryBtnText}>查看今日护理简报</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -1538,7 +1569,10 @@ function CheckinScreenContent() {
               onPress={() => setSleepType('quick')}
               activeOpacity={0.8}
             >
-              <Text style={[styles.sleepToggleText, sleepType === 'quick' && styles.sleepToggleTextActive]}>⚡ 快捷记录</Text>
+              <View style={styles.sleepToggleBtnContent}>
+                <AppIcon name="zap" color={sleepType === 'quick' ? COLORS.primary : '#9BA1A6'} size={14} />
+                <Text style={[styles.sleepToggleText, sleepType === 'quick' && styles.sleepToggleTextActive]}>快捷记录</Text>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.sleepToggleBtn, sleepType === 'detailed' && styles.sleepToggleBtnActive]}
@@ -1548,7 +1582,10 @@ function CheckinScreenContent() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={[styles.sleepToggleText, sleepType === 'detailed' && styles.sleepToggleTextActive]}>📋 详细记录</Text>
+              <View style={styles.sleepToggleBtnContent}>
+                <AppIcon name="note" color={sleepType === 'detailed' ? COLORS.primary : '#9BA1A6'} size={14} />
+                <Text style={[styles.sleepToggleText, sleepType === 'detailed' && styles.sleepToggleTextActive]}>详细记录</Text>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -1605,9 +1642,12 @@ function CheckinScreenContent() {
                       const color = diffMin <= 0 ? '#EF4444' : diffMin >= 360 ? '#16A34A' : '#F59E0B';
                       return (
                         <View style={styles.segmentDurationBadge}>
-                          <Text style={[styles.segmentDurationText, { color }]}>
-                            {diffMin <= 0 ? '⚠️ ' : '💤 '}睡了 {durationStr}
-                          </Text>
+                          <View style={styles.segmentDurationRow}>
+                            <AppIcon name={diffMin <= 0 ? 'alert' : 'night'} color={color} size={13} />
+                            <Text style={[styles.segmentDurationText, { color }]}>
+                              {diffMin <= 0 ? '' : '睡了 '}{durationStr}
+                            </Text>
+                          </View>
                         </View>
                       );
                     })()}
@@ -1616,7 +1656,7 @@ function CheckinScreenContent() {
                       {/* 入睡 */}
                       <View style={styles.segmentTimeBlock}>
                         <View style={styles.segmentTimeLabelRow}>
-                          <Text style={styles.segmentTimeLabelEmoji}>🌙</Text>
+                          <AppIcon name="night" color="#7C6BD6" size={16} />
                           <Text style={styles.segmentTimeLabelNew}>入睡时间</Text>
                         </View>
                         <View style={styles.timeSpinnerCard}>
@@ -1662,7 +1702,7 @@ function CheckinScreenContent() {
                       {/* 醒来 */}
                       <View style={styles.segmentTimeBlock}>
                         <View style={styles.segmentTimeLabelRow}>
-                          <Text style={styles.segmentTimeLabelEmoji}>☀️</Text>
+                          <AppIcon name="sun" color="#F59E0B" size={16} />
                           <Text style={styles.segmentTimeLabelNew}>醒来时间</Text>
                         </View>
                         <View style={styles.timeSpinnerCard}>
@@ -1995,7 +2035,8 @@ function CheckinScreenContent() {
             onPress={() => setDraftRestoredNote(false)}
             activeOpacity={0.8}
           >
-            <Text style={styles.draftBannerText}>📝 已恢复你登录前填写的内容，继续完成打卡吧</Text>
+            <AppIcon name="note" color="#8A5A00" size={14} />
+            <Text style={styles.draftBannerText}>已恢复你登录前填写的内容，继续完成打卡吧</Text>
             <Text style={styles.draftBannerClose}>✕</Text>
           </TouchableOpacity>
         )}
@@ -2037,7 +2078,7 @@ function CheckinScreenContent() {
             >
               <Text style={styles.nextBtnText}>
                 {saving ? '保存中...' : isLast
-                  ? (mode === 'morning' ? '完成早间打卡 🌅' : backfillDate ? '完成补录 🌙' : '完成晚间记录 🌙')
+                  ? (mode === 'morning' ? '完成早间打卡' : backfillDate ? '完成补录' : '完成晚间记录')
                   : '下一题 →'}
               </Text>
             </TouchableOpacity>
@@ -2078,7 +2119,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     ...SHADOWS.sm,
   },
-  checkinCardIconEmoji: { fontSize: 24 },
   checkinCardInfo: { flex: 1 },
   checkinCardTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text, letterSpacing: -0.3 },
   checkinCardSubtitle: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500', marginTop: 2 },
@@ -2100,6 +2140,7 @@ const styles = StyleSheet.create({
   checkinChip: {
     backgroundColor: 'rgba(255,149,0,0.08)', borderRadius: RADIUS.pill,
     paddingHorizontal: 12, paddingVertical: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
   },
   checkinChipText: { fontSize: 12, fontWeight: '600', color: '#B45309' },
   checkinCardCTA: {
@@ -2118,7 +2159,6 @@ const styles = StyleSheet.create({
 
   // Tip
   lateNightCareNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: '#F1EDFA', borderWidth: 1, borderColor: '#DDD4F3' },
-  lateNightCareNoticeIcon: { fontSize: 16 },
   lateNightCareNoticeText: { flex: 1, fontSize: 12, lineHeight: 18, color: '#665A9C', fontWeight: '600' },
   landingTip: { marginTop: 4, marginBottom: 24 },
   landingTipGradient: {
@@ -2145,7 +2185,7 @@ const styles = StyleSheet.create({
 
   // 游客草稿恢复提示横幅
   draftBanner: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginTop: 12, marginBottom: 4,
     backgroundColor: '#FFF7E6', borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 11,
@@ -2304,13 +2344,13 @@ const styles = StyleSheet.create({
   sleepToggleBtn: {
     flex: 1, paddingVertical: 10, borderRadius: RADIUS.lg,
     backgroundColor: AppColors.bg.secondary, alignItems: 'center',
-    borderWidth: 1.5, borderColor: 'transparent',
-  },
+    borderWidth: 1.5, borderColor: 'transparent',  },
   sleepToggleBtnActive: {
     backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary,
   },
   sleepToggleText: { fontSize: 14, fontWeight: '600', color: '#9BA1A6' },
   sleepToggleTextActive: { color: COLORS.primary },
+  sleepToggleBtnContent: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 
   segmentTotalBar: {
     backgroundColor: '#EEF9EE', borderRadius: RADIUS.lg,
@@ -2335,7 +2375,6 @@ const styles = StyleSheet.create({
   segmentTimeBlock: { flex: 1, alignItems: 'center', gap: 6 },
   segmentTimeLabel: { fontSize: 12, fontWeight: '600', color: '#9BA1A6' },
   segmentTimeLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
-  segmentTimeLabelEmoji: { fontSize: 16 },
   segmentTimeLabelNew: { fontSize: 14, fontWeight: '700', color: '#374151' },
   segmentArrow: { fontSize: 20, color: AppColors.purple.strong },
   segmentArrowCol: { alignItems: 'center', justifyContent: 'center', paddingTop: 28 },
@@ -2345,6 +2384,7 @@ const styles = StyleSheet.create({
     marginBottom: 6, borderWidth: 1, borderColor: '#BBF7D0',
   },
   segmentDurationText: { fontSize: 13, fontWeight: '700' },
+  segmentDurationRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
 
   // Spinner 样式
   timeSpinnerCard: {
@@ -2545,7 +2585,6 @@ const styles = StyleSheet.create({
     marginBottom: 14, width: '100%', justifyContent: 'center',
     borderWidth: 1, borderColor: '#DDD6FE',
   },
-  nightBriefingBannerEmoji: { fontSize: 18 },
   nightBriefingBannerText: {
     fontSize: 15, fontWeight: '700', color: '#5B21B6',
   },
@@ -2632,6 +2671,7 @@ const styles = StyleSheet.create({
 const CELL_SIZE = Math.floor((width - 76) / 7);
 const calStyles = StyleSheet.create({
   sectionHeader: { marginTop: 20, marginBottom: 10, flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text },
   sectionSub: { fontSize: 12, color: COLORS.textMuted },
 
@@ -2688,11 +2728,12 @@ const calStyles = StyleSheet.create({
     shadowOpacity: 1, shadowRadius: 24, elevation: 12,
   },
   popupDateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  popupDateEmoji: { fontSize: 20 },
   popupDate: { fontSize: 16, fontWeight: '800', color: COLORS.text },
   popupDivider: { height: 1, backgroundColor: '#F0F0F0', marginBottom: 12 },
   popupSection: { marginBottom: 12 },
-  popupSectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text, marginBottom: 6 },
+  popupSectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  popupSectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text },
+  popupIconRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 3 },
   popupItem: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 3 },
   popupNote: { fontSize: 12, color: COLORS.textMuted, fontStyle: 'italic', marginTop: 4 },
   popupClose: {
@@ -2850,7 +2891,7 @@ function JoinerCheckinView() {
 
         {/* Read-only notice */}
         <View style={{ backgroundColor: '#F0ECF8', borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={{ fontSize: 18 }}>👁️</Text>
+          <AppIcon name="eye" color="#6C5BAE" size={18} />
           <Text style={{ fontSize: 13, color: '#6C5BAE', flex: 1, lineHeight: 20 }}>您是家庭成员，可以查看{elderNickname}的打卡记录，但不能新增或修改。</Text>
         </View>
 
@@ -2859,17 +2900,24 @@ function JoinerCheckinView() {
           <Text style={{ fontSize: 15, fontWeight: '700', color: '#2D1B4E', marginBottom: 12 }}>最新打卡状态</Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <View style={{ flex: 1, backgroundColor: morningDone ? '#FFF3E0' : '#F5F5F5', borderRadius: 12, padding: 12, alignItems: 'center' }}>
-              <Text style={{ fontSize: 24, marginBottom: 6 }}>🌅</Text>
+              <View style={{ marginBottom: 6 }}>
+                <AppIcon name="sunrise" color={morningDone ? '#FF9500' : '#aaa'} size={24} />
+              </View>
               <Text style={{ fontSize: 13, fontWeight: '600', color: morningDone ? '#FF9500' : '#aaa' }}>早间打卡</Text>
-              <Text style={{ fontSize: 12, color: morningDone ? '#059669' : '#bbb', marginTop: 4 }}>{morningDone ? '✅ 已完成' : '未完成'}</Text>
+              <Text style={{ fontSize: 12, color: morningDone ? '#059669' : '#bbb', marginTop: 4 }}>{morningDone ? '已完成' : '未完成'}</Text>
               {morningDone && checkIn?.sleepHours ? (
-                <Text style={{ fontSize: 11, color: '#888', marginTop: 4 }}>💤 睡了 {checkIn.sleepHours}h</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <AppIcon name="night" color="#888" size={11} />
+                  <Text style={{ fontSize: 11, color: '#888' }}>睡了 {checkIn.sleepHours}h</Text>
+                </View>
               ) : null}
             </View>
             <View style={{ flex: 1, backgroundColor: eveningDone ? '#F0ECF8' : '#F5F5F5', borderRadius: 12, padding: 12, alignItems: 'center' }}>
-              <Text style={{ fontSize: 24, marginBottom: 6 }}>🌙</Text>
+              <View style={{ marginBottom: 6 }}>
+                <AppIcon name="night" color={eveningDone ? '#6C5BAE' : '#aaa'} size={24} />
+              </View>
               <Text style={{ fontSize: 13, fontWeight: '600', color: eveningDone ? '#6C5BAE' : '#aaa' }}>晚间记录</Text>
-              <Text style={{ fontSize: 12, color: eveningDone ? '#059669' : '#bbb', marginTop: 4 }}>{eveningDone ? '✅ 已完成' : '未完成'}</Text>
+              <Text style={{ fontSize: 12, color: eveningDone ? '#059669' : '#bbb', marginTop: 4 }}>{eveningDone ? '已完成' : '未完成'}</Text>
               {eveningDone && checkIn?.moodScore != null ? (
                 <Text style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{checkIn.moodEmoji} 心情 {checkIn.moodScore}/10</Text>
               ) : null}
@@ -2879,7 +2927,10 @@ function JoinerCheckinView() {
 
         {/* History calendar */}
         <View style={calStyles.sectionHeader}>
-          <Text style={calStyles.sectionTitle}>📅 打卡历史</Text>
+          <View style={calStyles.sectionTitleRow}>
+            <AppIcon name="calendar" color={COLORS.text} size={16} />
+            <Text style={calStyles.sectionTitle}>打卡历史</Text>
+          </View>
           <Text style={calStyles.sectionSub}>点击有记录的日期查看详情</Text>
         </View>
         <MonthCalendar checkIns={allCheckIns} caregiverName="" />

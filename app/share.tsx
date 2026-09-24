@@ -12,7 +12,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getProfile, getUserProfile, getFamilyProfile, getTodayCheckIn, getYesterdayCheckIn, getWeeklySleepData, upsertCheckIn, getCheckInByDate, saveBriefing, syncPendingBriefings, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, type DailyCheckIn } from '@/lib/storage';
 import { trpc } from '@/lib/trpc';
 import * as Haptics from 'expo-haptics';
-import * as Clipboard from 'expo-clipboard';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
 import { AppIcon, type AppIconName } from '@/components/app-icons';
@@ -811,7 +810,6 @@ export default function ShareScreen() {
   const [elderPhotoUri, setElderPhotoUri] = useState<string | null>(null);
   const [caregiverName, setCaregiverName] = useState('照顾者');
   const [shareText, setShareText] = useState('');
-  const [copied, setCopied] = useState(false);
   const [sharingImage, setSharingImage] = useState(false);
   const [weeklyData, setWeeklyData] = useState<Array<{ date: string; sleepHours: number; awakeHours: number; nightWakings: number; napMinutes: number }>>([]);
   const [weeklyLoading, setWeeklyLoading] = useState(true); // 初始为 true，等 loadSupplementaryData 完成后设为 false
@@ -1446,15 +1444,6 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
 记录人：${caregiverName}`;
   }
 
-  async function handleCopy() {
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const text = shareText || buildFallbackShareText();
-    // expo-clipboard works on native + web (navigator.clipboard does not exist on native)
-    await Clipboard.setStringAsync(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   // ── Loading ──
   if (loading) return <ShareLoadingScreen />;
 
@@ -1698,9 +1687,6 @@ const styles = StyleSheet.create({
   shareWechatIcon: { fontSize: 22 },
   shareWechatText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
   actionRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  copyBtn: { flex: 1, backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 14, alignItems: 'center' },
-  copiedBtn: { backgroundColor: AppColors.green.soft },
-  copyBtnText: { fontSize: 14, fontWeight: '600', color: AppColors.text.primary },
   regenerateBtn: { flex: 1, backgroundColor: AppColors.green.soft, borderRadius: 16, padding: 14, alignItems: 'center' },
   regenerateBtnText: { fontSize: 14, fontWeight: '600', color: AppColors.green.strong },
   familySyncNotice: {

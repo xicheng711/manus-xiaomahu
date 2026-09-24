@@ -9,12 +9,11 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getYesterdayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, todayStr, syncPendingCheckIns } from '@/lib/storage';
+import { getTodayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, todayStr, syncPendingCheckIns } from '@/lib/storage';
 import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
-import { getSessionToken } from '@/lib/_core/auth';
 import { getMemberDisplayEmoji } from '@/lib/member-avatar';
 import { TrendChart } from '@/components/trend-chart';
-import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
+import { COLORS, SHADOWS, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { AppIcon } from '@/components/app-icons';
 import * as Haptics from 'expo-haptics';
@@ -501,7 +500,6 @@ function CreatorHomeScreen() {
   const [photoLoadError, setPhotoLoadError] = useState(false);
   const [memberAvatarEmoji, setMemberAvatarEmoji] = useState('👤');
   const { weatherData, cityName, buildGreeting, refresh: refreshWeather } = useWeather();
-  const [latestCheckIn, setLatestCheckIn] = useState<DailyCheckIn | null>(null);
   const [briefingSummary, setBriefingSummary] = useState<string | null>(null);
   const lunarDate = getLunarDate();
   const todayLabel = getFormattedDate();
@@ -516,7 +514,6 @@ function CreatorHomeScreen() {
   useEffect(() => {
     // 切换家庭时立即清除上一家庭的可见状态，随后从新家庭缓存秒开。
     setTodayCheckIn(null);
-    setLatestCheckIn(null);
     setAllCheckIns([]);
     setAllDiaryEntries([]);
     setBriefingSummary(null);
@@ -615,10 +612,7 @@ function CreatorHomeScreen() {
     const today = await getTodayCheckIn(fid);
     if (!isCurrentFamily()) return;
     setTodayCheckIn(today);
-    const yesterday = await getYesterdayCheckIn(fid);
     if (!isCurrentFamily()) return;
-    const latest = today ?? yesterday;
-    setLatestCheckIn(latest);
     // 限量读取：只取当年打卡数据（TrendChart 需要）和最近 20 条日记，切换家庭时读取量轻得多
     const all = await getCheckInsForHome(fid);
     if (!isCurrentFamily()) return;
@@ -654,9 +648,7 @@ function CreatorHomeScreen() {
           ]);
           if (!isCurrentFamily()) return;
           setTodayCheckIn(freshToday);
-          const freshYesterday = await getYesterdayCheckIn(fid);
           if (!isCurrentFamily()) return;
-          setLatestCheckIn(freshToday ?? freshYesterday);
           setAllCheckIns(freshAll);
           setAllDiaryEntries(freshDiaries);
           await markCloudCacheFresh(fidNum, 'home');

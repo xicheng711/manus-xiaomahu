@@ -358,9 +358,18 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
           onPress={mode === 'create' ? handleCreate : handleJoin}
           disabled={loading || !memberName.trim() || (mode === 'join' && roomCode.length < 6)}
         >
-          <Text style={setup.primaryBtnText}>
-            {loading ? '请稍候...' : mode === 'create' ? '创建 🎉' : '加入 🔗'}
-          </Text>
+          <View style={setup.primaryBtnInner}>
+            {loading ? null : (
+              <AppIcon
+                name={mode === 'create' ? 'plus' : 'link'}
+                color={AppColors.surface.whiteStrong}
+                size={16}
+              />
+            )}
+            <Text style={setup.primaryBtnText}>
+              {loading ? '请稍候...' : mode === 'create' ? '创建' : '加入'}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
         </ScrollView>
@@ -1077,7 +1086,7 @@ export default function FamilyScreen() {
             <TouchableOpacity onPress={() => setShowInviteModal(true)} activeOpacity={0.8} style={styles.heroCodeWrap}>
               <Text style={styles.heroCodeLabel}>邀请码</Text>
               <View style={styles.heroCodePill}>
-                <Text style={styles.heroCodeIcon}>🔗</Text>
+                <AppIcon name="link" color="#B8426A" size={13} />
                 <Text style={styles.heroCodeText}>{room.roomCode}</Text>
               </View>
             </TouchableOpacity>
@@ -1116,10 +1125,16 @@ export default function FamilyScreen() {
         >
           {activeSection === 'broadcast' ? (
             <LinearGradient colors={[Gradients.navActive[0], Gradients.navActive[1], '#B8426A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sectionTabGradient}>
-              <Text style={styles.sectionTabTextActive}>📢 公告</Text>
+              <View style={styles.sectionTabInner}>
+                <AppIcon name="megaphone" color={AppColors.surface.whiteStrong} size={14} />
+                <Text style={styles.sectionTabTextActive}>公告</Text>
+              </View>
             </LinearGradient>
           ) : (
-            <Text style={styles.sectionTabText}>📢 公告</Text>
+            <View style={styles.sectionTabInner}>
+              <AppIcon name="megaphone" color="#B8426A" size={14} />
+              <Text style={styles.sectionTabText}>公告</Text>
+            </View>
           )}
         </TouchableOpacity>
         <TouchableOpacity
@@ -1129,10 +1144,16 @@ export default function FamilyScreen() {
         >
           {activeSection === 'briefing' ? (
             <LinearGradient colors={[Gradients.navActive[0], Gradients.navActive[1], '#B8426A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sectionTabGradient}>
-              <Text style={styles.sectionTabTextActive}>📋 简报</Text>
+              <View style={styles.sectionTabInner}>
+                <AppIcon name="note" color={AppColors.surface.whiteStrong} size={14} />
+                <Text style={styles.sectionTabTextActive}>简报</Text>
+              </View>
             </LinearGradient>
           ) : (
-            <Text style={styles.sectionTabText}>📋 简报</Text>
+            <View style={styles.sectionTabInner}>
+              <AppIcon name="note" color="#B8426A" size={14} />
+              <Text style={styles.sectionTabText}>简报</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -1333,7 +1354,7 @@ export default function FamilyScreen() {
                 {/* ── Diary & Announcements ── */}
                 {item.diary && (
                   <View style={styles.briefingExtraRow}>
-                    <Text style={styles.briefingExtraIcon}>📔</Text>
+                    <AppIcon name="book" color={AppColors.text.secondary} size={14} />
                     <Text style={styles.briefingExtraText} numberOfLines={2}>
                       {item.diary.moodEmoji} {item.diary.content || '无详细内容'}
                     </Text>
@@ -1341,7 +1362,7 @@ export default function FamilyScreen() {
                 )}
                 {item.announcements.length > 0 && (
                   <View style={styles.briefingExtraRow}>
-                    <Text style={styles.briefingExtraIcon}>📢</Text>
+                    <AppIcon name="megaphone" color={AppColors.text.secondary} size={14} />
                     <Text style={styles.briefingExtraText} numberOfLines={2}>
                       {item.announcements.map((ann: any) => `${ann.authorEmoji} ${ann.content}`).join('  ')}
                     </Text>
@@ -1358,7 +1379,10 @@ export default function FamilyScreen() {
                 {item.checkIn && (
                   <View style={styles.briefingActions}>
                     <TouchableOpacity style={styles.exportBtn} onPress={() => router.push(({ pathname: '/share', params: { date: item.date } }) as any)}>
-                      <Text style={styles.exportBtnText}>📋 查看简报</Text>
+                      <View style={styles.exportBtnInner}>
+                        <AppIcon name="note" color="#B8426A" size={14} />
+                        <Text style={styles.exportBtnText}>查看简报</Text>
+                      </View>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.shareBtn, isGeneratingShare && { opacity: 0.6 }]} onPress={handleShareBriefing} disabled={isGeneratingShare}>
                       <Text style={styles.shareBtnText}>{isGeneratingShare ? '⏳ 生成中...' : '📤 一键分享'}</Text>
@@ -1454,7 +1478,10 @@ export default function FamilyScreen() {
             disabled={!composeText.trim() || isPostingAnnouncement}
             activeOpacity={0.85}
           >
-            <Text style={styles.modalPublishBtnText}>{isPostingAnnouncement ? '正在发布…' : '📢 发布公告'}</Text>
+            <View style={styles.modalPublishBtnInner}>
+              <AppIcon name="megaphone" color={AppColors.surface.whiteStrong} size={16} />
+              <Text style={styles.modalPublishBtnText}>{isPostingAnnouncement ? '正在发布…' : '发布公告'}</Text>
+            </View>
           </TouchableOpacity>
           </ScrollView>
         </View>
@@ -1498,7 +1525,10 @@ export default function FamilyScreen() {
             {/* Check-in data */}
             {selectedItem.checkIn ? (
               <View style={{ backgroundColor: AppColors.surface.whiteStrong, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: AppColors.coral.soft }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: AppColors.text.primary, marginBottom: 12 }}>📋 今日打卡</Text>
+              <View style={styles.briefingDetailTitleRow}>
+                <AppIcon name="note" color={AppColors.text.primary} size={15} />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: AppColors.text.primary }}>今日打卡</Text>
+              </View>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                   <View style={{ flex: 1, minWidth: 140, backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 12 }}>
                     <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>💤 睡眠</Text>
@@ -1535,7 +1565,10 @@ export default function FamilyScreen() {
             {/* Announcements */}
             {selectedItem.announcements.length > 0 && (
               <View style={{ backgroundColor: AppColors.surface.whiteStrong, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: AppColors.green.soft }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: AppColors.text.primary, marginBottom: 8 }}>📢 家庭公告</Text>
+              <View style={styles.briefingDetailTitleRow}>
+                <AppIcon name="megaphone" color={AppColors.text.primary} size={15} />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: AppColors.text.primary }}>家庭公告</Text>
+              </View>
                 {selectedItem.announcements.map((ann: any, idx: number) => (
                   <View key={idx} style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
                     <Text style={{ fontSize: 14 }}>{ann.authorEmoji}</Text>
@@ -1598,7 +1631,10 @@ export default function FamilyScreen() {
                 alert('已复制！去微信粘贴发给家人即可 🎉');
               }}
             >
-              <Text style={styles.inviteShareBtnText}>📋 复制邀请链接</Text>
+              <View style={styles.inviteShareBtnInner}>
+                <AppIcon name="copy" color="#fff" size={15} />
+                <Text style={styles.inviteShareBtnText}>复制邀请链接</Text>
+              </View>
             </TouchableOpacity>
 
             <Text style={styles.inviteHint}>家人点链接后打开小马虎，输入名字即可自动加入</Text>
@@ -1870,7 +1906,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 7,
     borderWidth: 1.5, borderColor: '#EDAABB' + '60',
   },
-  heroCodeIcon: { fontSize: 13 },
   heroCodeText: { fontSize: 14, fontWeight: '900', color: '#B8426A', letterSpacing: 1.5 },
 
   // ── Members ──
@@ -1899,6 +1934,7 @@ const styles = StyleSheet.create({
   sectionTab: { flex: 1, alignItems: 'center', borderRadius: 14, overflow: 'hidden' },
   sectionTabActive: {},
   sectionTabGradient: { width: '100%', paddingVertical: 11, alignItems: 'center', borderRadius: 14 },
+  sectionTabInner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 11 },
   sectionTabText: { fontSize: 14, fontWeight: '600', color: '#B8426A', paddingVertical: 11 },
   sectionTabTextActive: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
   content: { flex: 1 },
@@ -1938,7 +1974,6 @@ const styles = StyleSheet.create({
   briefingDataValue: { fontSize: 12, fontWeight: '800', color: AppColors.text.primary },
   briefingDataLabel: { fontSize: 10, color: AppColors.text.tertiary, fontWeight: '500' },
   briefingExtraRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingVertical: 8, borderTopWidth: 1, borderTopColor: AppColors.border.light },
-  briefingExtraIcon: { fontSize: 14, marginTop: 1 },
   briefingExtraText: { flex: 1, fontSize: 13, color: AppColors.text.secondary, lineHeight: 20 },
   briefingCardFooter: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: AppColors.bg.secondary, paddingTop: 12, marginTop: 12, marginBottom: 14 },
   briefingFooterLeft: { fontSize: 11, color: AppColors.text.tertiary },
@@ -1953,9 +1988,11 @@ const styles = StyleSheet.create({
   briefingDiaryText: { fontSize: 13, color: AppColors.text.secondary, lineHeight: 20 },
   briefingEmpty: { alignItems: 'center', padding: 24, gap: 8 },
   briefingActions: { flexDirection: 'row', gap: 12 },
+  briefingDetailTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
   shareBtn: { flex: 1, backgroundColor: '#B8426A', borderRadius: 16, padding: 14, alignItems: 'center', shadowColor: '#B8426A', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
   shareBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
   exportBtn: { flex: 1, backgroundColor: '#FEF0F4', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: '#EDAABB' },
+  exportBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   exportBtnText: { fontSize: 14, fontWeight: '700', color: '#B8426A' },
   goCheckinBtn: { backgroundColor: '#B8426A', borderRadius: 14, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
   goCheckinBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
@@ -1991,6 +2028,7 @@ const styles = StyleSheet.create({
     shadowColor: AppColors.coral.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
   modalPublishBtnText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
+  modalPublishBtnInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   briefingDateScroll: { marginBottom: 12 },
   briefingDateScrollContent: { gap: 8, paddingHorizontal: 0 },
   briefingDateTab: {
@@ -2009,6 +2047,7 @@ const styles = StyleSheet.create({
   inviteCopyHint: { fontSize: 12, color: '#B8426A', marginTop: 6, fontWeight: '600', opacity: 0.7 },
   inviteShareBtn: { backgroundColor: '#07C160', borderRadius: 18, paddingHorizontal: 24, paddingVertical: 13, alignItems: 'center', width: '100%', marginBottom: 12, marginTop: 12 },
   inviteShareBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  inviteShareBtnInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   inviteHint: { fontSize: 12, color: AppColors.text.tertiary, textAlign: 'center', marginBottom: 16, lineHeight: 18 },
   inviteCloseBtn: { backgroundColor: '#B8426A', borderRadius: 20, paddingHorizontal: 40, paddingVertical: 12, alignItems: 'center' },
   inviteCloseBtnText: { fontSize: 15, fontWeight: '700', color: AppColors.surface.whiteStrong },
@@ -2107,6 +2146,7 @@ const setup = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800', color: AppColors.text.primary, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: 32 },
   primaryBtn: { width: '100%', backgroundColor: AppColors.coral.primary, borderRadius: 20, padding: 16, alignItems: 'center', marginBottom: 12 },
+  primaryBtnInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
   secondaryBtn: { width: '100%', backgroundColor: 'transparent', borderRadius: 20, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: AppColors.border.soft },
   secondaryBtnText: { fontSize: 15, fontWeight: '600', color: AppColors.text.tertiary },

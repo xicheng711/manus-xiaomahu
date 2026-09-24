@@ -61,16 +61,23 @@ function MedCard({ med, changes, onToggle, onDelete, onEdit, index, isCreator }:
         <View style={styles.medTimes}>
           {med.times.map((t, i) => (
             <View key={i} style={styles.timeBadge}>
-              <Text style={styles.timeBadgeText}>🕐 {t}</Text>
+              <AppIcon name="clock" color={COLORS.primary} size={12} />
+              <Text style={styles.timeBadgeText}>{t}</Text>
             </View>
           ))}
         </View>
 
-        {med.notes ? <Text style={styles.medNotes}>📝 {med.notes}</Text> : null}
+        {med.notes ? (
+          <View style={styles.medNotesRow}>
+            <AppIcon name="note" color={COLORS.textMuted} size={12} />
+            <Text style={styles.medNotes}>{med.notes}</Text>
+          </View>
+        ) : null}
 
         {med.reminderEnabled && (
           <View style={styles.reminderBadge}>
-            <Text style={styles.reminderBadgeText}>🔔 每日提醒已开启</Text>
+            <AppIcon name="bell" color={AppColors.text.primary} size={11} />
+            <Text style={styles.reminderBadgeText}>每日提醒已开启</Text>
           </View>
         )}
 
@@ -79,7 +86,8 @@ function MedCard({ med, changes, onToggle, onDelete, onEdit, index, isCreator }:
         {isCreator && (
           <View style={styles.medCardActions}>
             <TouchableOpacity style={styles.editBtn} onPress={onEdit}>
-              <Text style={styles.editBtnText}>✏️ 修改</Text>
+              <AppIcon name="pencil" color={AppColors.purple.strong} size={13} />
+              <Text style={styles.editBtnText}>修改</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: med.active ? AppColors.coral.soft : AppColors.green.soft }]}
@@ -96,7 +104,7 @@ function MedCard({ med, changes, onToggle, onDelete, onEdit, index, isCreator }:
               accessibilityRole="button"
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.deleteBtnText}>🗑️</Text>
+              <AppIcon name="trash" color={AppColors.status.error} size={18} />
             </TouchableOpacity>
           </View>
         )}
@@ -521,7 +529,7 @@ function MedicationScreenContent() {
         {adding && (
           <Animated.View style={[styles.addForm, { opacity: formFade, transform: [{ translateY: formSlide }] }]}>
             <View style={styles.formTitleRow}>
-              <Text style={styles.formEmoji}>{editingMed ? '✏️' : '💊'}</Text>
+              <AppIcon name={editingMed ? 'pencil' : 'pill'} color={AppColors.peach.primary} size={24} />
               <Text style={styles.formTitle}>{editingMed ? '修改药物信息' : '添加新药物'}</Text>
             </View>
 
@@ -608,7 +616,11 @@ function MedicationScreenContent() {
               activeOpacity={0.85}
             >
               <View style={styles.reminderToggleLeft}>
-                <Text style={styles.reminderToggleEmoji}>{reminderEnabled ? '🔔' : '🔕'}</Text>
+                <AppIcon
+                  name="bell"
+                  color={reminderEnabled ? AppColors.peach.primary : AppColors.text.tertiary}
+                  size={24}
+                />
                 <View>
                   <Text style={[styles.reminderToggleTitle, reminderEnabled && { color: AppColors.peach.primary }]}>
                     每日 App 提醒
@@ -777,7 +789,6 @@ const styles = StyleSheet.create({
     ...SHADOWS.lg,
   },
   formTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  formEmoji: { fontSize: 24 },
   formTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text },
   label: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 8, marginTop: 14 },
   input: {
@@ -869,24 +880,26 @@ const styles = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontWeight: '700' },
   medTimes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  timeBadge: { backgroundColor: COLORS.primaryBg, borderRadius: RADIUS.sm, paddingHorizontal: 10, paddingVertical: 5 },
+  timeBadge: { backgroundColor: COLORS.primaryBg, borderRadius: RADIUS.sm, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 4 },
   timeBadgeText: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
-  medNotes: { fontSize: 12, color: COLORS.textMuted, marginBottom: 8 },
+  medNotesRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  medNotes: { fontSize: 12, color: COLORS.textMuted, flex: 1 },
   reminderBadge: {
     backgroundColor: AppColors.peach.soft, borderRadius: RADIUS.sm,
     paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
   },
   reminderBadgeText: { fontSize: 11, color: AppColors.text.primary, fontWeight: '600' },
   medCardActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 4, alignItems: 'center' },
   editBtn: {
     borderRadius: RADIUS.sm, paddingHorizontal: 12, paddingVertical: 8,
     backgroundColor: AppColors.purple.soft, borderWidth: 1, borderColor: AppColors.purple.primary,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
   },
   editBtnText: { fontSize: 13, fontWeight: '600', color: AppColors.purple.strong },
   actionBtn: { borderRadius: RADIUS.sm, paddingHorizontal: 14, paddingVertical: 8 },
   actionBtnText: { fontSize: 13, fontWeight: '600' },
   deleteBtn: { padding: 8 },
-  deleteBtnText: { fontSize: 18 },
 
   // Reminder toggle (form)
   reminderToggleRow: {
@@ -896,7 +909,6 @@ const styles = StyleSheet.create({
   },
   reminderToggleRowActive: { backgroundColor: AppColors.peach.soft, borderColor: AppColors.peach.primary },
   reminderToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  reminderToggleEmoji: { fontSize: 24 },
   reminderToggleTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 2 },
   reminderToggleSub: { fontSize: 12, color: COLORS.textSecondary },
   toggleTrack: {

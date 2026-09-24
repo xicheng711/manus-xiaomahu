@@ -7,7 +7,8 @@ import { AppColors } from '@/lib/design-tokens';
 export type AppIconName =
   | 'home' | 'checkin' | 'pill' | 'book' | 'family'
   | 'moon' | 'smile' | 'bowl' | 'note' | 'chart'
-  | 'sunrise' | 'night' | 'heart' | 'eye';
+  | 'sunrise' | 'night' | 'heart' | 'eye'
+  | 'clock' | 'bell' | 'pencil' | 'trash' | 'chat' | 'link' | 'megaphone' | 'sun' | 'alert' | 'calendar' | 'zap' | 'copy' | 'plus';
 
 function IconPaths({ name }: { name: AppIconName }) {
   switch (name) {
@@ -77,6 +78,18 @@ function IconPaths({ name }: { name: AppIconName }) {
         <Path d="M6.2 15a5.8 5.8 0 0 1 11.6 0" />
         <Path d="M4 18.2h16" />
       </>);
+    case 'sun':
+      return (<>
+        <Circle cx="12" cy="12" r="4" />
+        <Path d="M12 2.5v2.5" />
+        <Path d="M12 19v2.5" />
+        <Path d="M2.5 12H5" />
+        <Path d="M19 12h2.5" />
+        <Path d="M5.3 5.3l1.8 1.8" />
+        <Path d="M16.9 16.9l1.8 1.8" />
+        <Path d="M18.7 5.3l-1.8 1.8" />
+        <Path d="M7.1 16.9l-1.8 1.8" />
+      </>);
     case 'night':
       return (<Path d="M19.8 13.8A7.6 7.6 0 1 1 10.2 4.2a6.1 6.1 0 0 0 9.6 9.6Z" />);
     case 'heart':
@@ -86,6 +99,58 @@ function IconPaths({ name }: { name: AppIconName }) {
         <Path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z" />
         <Circle cx="12" cy="12" r="2.8" />
       </>);
+    case 'clock':
+      return (<>
+        <Circle cx="12" cy="12" r="8.5" />
+        <Path d="M12 7.5V12l3 2" />
+      </>);
+    case 'bell':
+      return (<>
+        <Path d="M6 8.5a6 6 0 0 1 12 0c0 6.5 2.8 8.5 2.8 8.5H3.2S6 15 6 8.5" />
+        <Path d="M10.3 20.5a1.94 1.94 0 0 0 3.4 0" />
+      </>);
+    case 'pencil':
+      return (<Path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />);
+    case 'trash':
+      return (<>
+        <Path d="M3 6h18" />
+        <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </>);
+    case 'chat':
+      return (<Path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />);
+    case 'link':
+      return (<>
+        <Path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+        <Path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+      </>);
+    case 'megaphone':
+      return (<>
+        <Path d="m3 11 18-5v12L3 14v-3Z" />
+        <Path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+      </>);
+    case 'alert':
+      return (<>
+        <Path d="M12 3.5 21.5 20h-19Z" />
+        <Path d="M12 9.5v4.5" />
+        <Path d="M12 17h.01" />
+      </>);
+    case 'calendar':
+      return (<>
+        <Rect x="4.5" y="5.5" width="15" height="15" rx="2.5" />
+        <Path d="M4.5 10h15" />
+        <Path d="M8.5 3.5v4" />
+        <Path d="M15.5 3.5v4" />
+      </>);
+    case 'zap':
+      return (<Path d="M13 2.5 3.5 13.5h8.5l-1 8 9.5-11h-8.5l1-8Z" />);
+    case 'copy':
+      return (<>
+        <Rect x="9" y="9" width="11" height="11" rx="2.5" />
+        <Path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5" />
+      </>);
+    case 'plus':
+      return (<Path d="M12 5v14M5 12h14" />);
   }
 }
 

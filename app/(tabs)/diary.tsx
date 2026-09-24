@@ -105,7 +105,12 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
             {entry.authorName ? (
               <Text style={styles.diaryAuthor}>记录人：{entry.authorName}</Text>
             ) : null}
-            {entry.syncPending ? <Text style={styles.syncPendingText}>⏳ 等待同步</Text> : null}
+            {entry.syncPending ? (
+              <View style={styles.syncPendingRow}>
+                <AppIcon name="clock" color="#B7791F" size={11} />
+                <Text style={styles.syncPendingText}>等待同步</Text>
+              </View>
+            ) : null}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, justifyContent: 'flex-end' }}>
             {editMode && (
@@ -118,7 +123,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
                   accessibilityRole="button"
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={styles.deleteBtnText}>🗑️</Text>
+                  <AppIcon name="trash" color={AppColors.status.error} size={16} />
                 </TouchableOpacity>
               </Animated.View>
             )}
@@ -145,13 +150,19 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
         {interaction && (interaction.readers.length > 0 || interaction.commentCount > 0) ? (
           <View style={styles.interactionSummaryRow}>
             {interaction.readers.length > 0 ? (
-              <Text style={styles.interactionSummaryText} numberOfLines={1}>
-                👀 已被 {interaction.readers.slice(0, 2).map(reader => reader.readerName).join('、')}
-                {interaction.readers.length > 2 ? ` 等${interaction.readers.length}人` : ''} 阅读
-              </Text>
+              <View style={styles.interactionSummaryLeft}>
+                <AppIcon name="eye" color="#93878B" size={11} />
+                <Text style={styles.interactionSummaryText} numberOfLines={1}>
+                  已被 {interaction.readers.slice(0, 2).map(reader => reader.readerName).join('、')}
+                  {interaction.readers.length > 2 ? ` 等${interaction.readers.length}人` : ''} 阅读
+                </Text>
+              </View>
             ) : <View style={{ flex: 1 }} />}
             {interaction.commentCount > 0 ? (
-              <Text style={styles.interactionCommentCount}>💬 {interaction.commentCount} 条留言</Text>
+              <View style={styles.interactionCommentRow}>
+                <AppIcon name="chat" color="#A66B7E" size={11} />
+                <Text style={styles.interactionCommentCount}>{interaction.commentCount} 条留言</Text>
+              </View>
             ) : null}
           </View>
         ) : null}
@@ -159,7 +170,7 @@ function DiaryCard({ entry, onPress, onDelete, index, editMode, interaction }: {
         {hasAiReply ? (
           <View style={styles.aiPreviewBox}>
             <View style={styles.aiPreviewHeader}>
-              <Text style={styles.aiPreviewIcon}>🩺</Text>
+              <AppIcon name="heart" color={AppColors.purple.strong} size={13} />
               <Text style={styles.aiPreviewLabel}>小马虎护理回复</Text>
             </View>
             <Text style={styles.aiPreviewText} numberOfLines={2}>{aiPreview}</Text>
@@ -200,7 +211,10 @@ function DraftCard({ content, savedAt, stage, onContinue, onDelete }: {
           <Text style={styles.draftDeleteText}>删除</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.draftStage}>{stage === 'conversation' ? '💬 正在和小马虎整理' : '✏️ 尚未发布'}</Text>
+      <View style={styles.draftStageRow}>
+        <AppIcon name={stage === 'conversation' ? 'chat' : 'pencil'} color="#A66B7E" size={11} />
+        <Text style={styles.draftStage}>{stage === 'conversation' ? '正在和小马虎整理' : '尚未发布'}</Text>
+      </View>
       <Text style={styles.draftContent} numberOfLines={3}>{content || '还没有输入正文'}</Text>
       <View style={styles.draftFooter}>
         <Text style={styles.draftTime}>最后编辑：{formatDraftTime(savedAt)}</Text>
@@ -720,7 +734,8 @@ function DiaryScreenContent() {
         {/* Edit mode hint */}
         {editMode && (
           <View style={styles.editHintRow}>
-            <Text style={styles.editHintText}>🗑️ 点击日记右侧的删除按钮来删除日记</Text>
+            <AppIcon name="trash" color={AppColors.status.error} size={13} />
+            <Text style={styles.editHintText}>点击日记右侧的删除按钮来删除日记</Text>
           </View>
         )}
 
@@ -765,7 +780,14 @@ function DiaryScreenContent() {
             {/* ── 已发布日记列表 ── */}
             {publishedEntries.length > 0 && <View style={styles.entriesList}>
               <View style={styles.listTitleRow}>
-                <Text style={styles.listTitle}>{editMode ? '🗑️ 选择要删除的日记' : '📅 最近记录'}</Text>
+                <View style={styles.listTitleIconRow}>
+                  <AppIcon
+                    name={editMode ? 'trash' : 'calendar'}
+                    color={editMode ? AppColors.status.error : AppColors.text.secondary}
+                    size={15}
+                  />
+                  <Text style={styles.listTitle}>{editMode ? '选择要删除的日记' : '最近记录'}</Text>
+                </View>
                 {editMode
                   ? <Text style={styles.listCount}>共 {publishedEntries.length} 篇</Text>
                   : publishedEntries.length > 3
@@ -874,7 +896,9 @@ function DiaryScreenContent() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalIcon}>🗑️</Text>
+            <View style={styles.modalIconWrap}>
+              <AppIcon name="trash" color={AppColors.status.error} size={36} />
+            </View>
             <Text style={styles.modalTitle}>删除日记</Text>
             <Text style={styles.modalMsg}>
               确定要删除 {deleteTarget?.date} 的日记吗？{'\n'}删除后无法恢复。
@@ -932,6 +956,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2', borderRadius: RADIUS.md,
     padding: 10, marginBottom: 12,
     borderWidth: 1, borderColor: '#FECACA',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
   },
   editHintText: { fontSize: 13, color: '#B91C1C', textAlign: 'center', fontWeight: '500' },
 
@@ -973,7 +998,8 @@ const styles = StyleSheet.create({
   draftBadgeText: { fontSize: 11, fontWeight: '800', color: '#966B22' },
   draftDeleteButton: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#FFF0EE' },
   draftDeleteText: { fontSize: 11, fontWeight: '700', color: '#B65D61' },
-  draftStage: { fontSize: 13, fontWeight: '700', color: '#876A35', marginBottom: 7 },
+  draftStageRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 7 },
+  draftStage: { fontSize: 13, fontWeight: '700', color: '#876A35' },
   draftContent: { fontSize: 14, lineHeight: 21, color: COLORS.text, marginBottom: 13 },
   draftFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   draftTime: { flex: 1, fontSize: 11, color: COLORS.textSecondary },
@@ -984,6 +1010,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 8,
   },
+  listTitleIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   listTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
   listCount: { fontSize: 13, color: COLORS.textSecondary },
 
@@ -1001,7 +1028,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: '#FECACA',
   },
-  deleteBtnText: { fontSize: 16 },
   diaryCardHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 8,
@@ -1010,6 +1036,7 @@ const styles = StyleSheet.create({
   diaryDate: { fontSize: 14, fontWeight: '700', color: COLORS.text },
   diaryTime: { fontSize: 12, color: COLORS.textSecondary },
   diaryAuthor: { fontSize: 11, color: COLORS.textSecondary, opacity: 0.75 },
+  syncPendingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   syncPendingText: { fontSize: 11, color: '#B7791F', fontWeight: '600' },
   moodBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -1028,13 +1055,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 8, marginBottom: 9, paddingTop: 2,
   },
+  interactionSummaryLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  interactionCommentRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   interactionSummaryText: { flex: 1, fontSize: 11, lineHeight: 16, color: '#93878B' },
   interactionCommentCount: { fontSize: 11, lineHeight: 16, color: '#A66B7E', fontWeight: '600' },
   aiPreviewBox: {
     backgroundColor: AppColors.purple.soft, borderRadius: 10, padding: 10, marginTop: 4,
   },
   aiPreviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  aiPreviewIcon: { fontSize: 13 },
   aiPreviewLabel: { fontSize: 12, fontWeight: '600', color: AppColors.purple.strong },
   aiPreviewText: { fontSize: 13, color: AppColors.text.primary, lineHeight: 18 },
   tapHint: { alignItems: 'flex-end', marginTop: 8 },
@@ -1069,7 +1097,7 @@ const styles = StyleSheet.create({
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
   },
-  modalIcon: { fontSize: 36, marginBottom: 10 },
+  modalIconWrap: { marginBottom: 10 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: AppColors.text.primary, marginBottom: 10 },
   modalMsg: { fontSize: 14, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   modalBtns: { flexDirection: 'row', gap: 12, width: '100%' },
@@ -1111,142 +1139,6 @@ const calStyles = StyleSheet.create({
   miniMood: { fontSize: 22 },
   miniContent: { fontSize: 13, color: AppColors.text.primary, lineHeight: 18 },
   miniCaregiverMood: { fontSize: 11, color: AppColors.text.tertiary, marginTop: 3 },
-});
-
-function JoinerDiaryReadOnly() {
-  const router = useRouter();
-  const { activeMembership } = useFamilyContext();
-  const familyId = activeMembership?.familyId;
-  const [entries, setEntries] = useState<DiaryEntry[]>([]);
-  const [showAll, setShowAll] = useState(false);
-  const headerFade = useRef(new Animated.Value(0)).current;
-  const headerSlide = useRef(new Animated.Value(-20)).current;
-
-  useEffect(() => { fadeInUp(headerFade, headerSlide, { duration: 500 }); }, []);
-  useFocusEffect(useCallback(() => {
-    async function loadJoinerEntries() {
-      // 始终只读取当前 active family 的 key，先让页面秒开。
-      const local = await getDiaryEntries(familyId);
-      const localSorted = [...local].sort((a, b) => {
-        const ta = new Date(a.createdAt || a.date).getTime();
-        const tb = new Date(b.createdAt || b.date).getTime();
-        if (tb !== ta) return tb - ta;
-        return (b.localTimeStr || '00:00').localeCompare(a.localTimeStr || '00:00');
-      });
-      setEntries(localSorted);
-
-      const roomId = familyId ? Number(familyId) : NaN;
-      if (!Number.isFinite(roomId) || !await shouldRefreshCloudCache(roomId, 'diary')) return;
-      try {
-        const cloudEntries = await cloudGetDiaries(roomId);
-        if (Array.isArray(cloudEntries)) {
-          const merged = await mergeCloudDiariesIntoLocal(cloudEntries, familyId);
-          setEntries(merged);
-        }
-        await markCloudCacheFresh(roomId, 'diary');
-      } catch {
-        // 网络不可用时保留当前家庭的本地缓存。
-      }
-    }
-    loadJoinerEntries();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyId]));
-
-  function openDetail(entryId: string) {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // joiner 和主照顾者都用同一个页面查看日记，体验完全一致
-    // diary-edit 内部会检测角色，自动设置 readOnly 模式
-    router.push({ pathname: '/diary-edit', params: { id: entryId } } as any);
-  }
-
-  const displayEntries = showAll ? entries : entries.slice(0, 5);
-
-  return (
-    <ScreenContainer containerClassName="bg-[#F7F1F3]">
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <Animated.View style={{ opacity: headerFade, transform: [{ translateY: headerSlide }] }}>
-          <PageHeader
-            theme={PAGE_THEMES.diary}
-            subtitle={new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}
-            style={{ marginBottom: 12 }}
-          />
-          <View style={jStyles.roleHint}>
-            <Text style={jStyles.roleHintIcon}>👀</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={jStyles.roleHintText}>查看主照顾者写的护理日记</Text>
-              <Text style={jStyles.roleHintSub}>日记由主照顾者记录，家人可在这里查阅，不支持编写</Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        {entries.length === 0 ? (
-          <View style={jStyles.emptyWrap}>
-            <Text style={{ fontSize: 42, marginBottom: 12 }}>📔</Text>
-            <Text style={jStyles.emptyTitle}>暂时还没有日记</Text>
-            <Text style={jStyles.emptyDesc}>主照顾者写日记之后，你就可以在这里看到了</Text>
-          </View>
-        ) : (
-          <>
-            <View style={jStyles.countRow}>
-              <Text style={jStyles.countText}>共 {entries.length} 篇日记</Text>
-            </View>
-            <View style={styles.entriesList}>
-              {displayEntries.map((entry, i) => (
-                <DiaryCard
-                  key={entry.id}
-                  entry={entry}
-                  onPress={() => openDetail(entry.id)}
-                  onDelete={() => {}}
-                  index={i}
-                  editMode={false}
-                />
-              ))}
-            </View>
-            {entries.length > 5 && (
-              <TouchableOpacity
-                style={styles.moreBtn}
-                onPress={() => setShowAll(v => !v)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.moreBtnText}>
-                  {showAll ? '收起 ↑' : `查看更多日记（共 ${entries.length} 篇）↓`}
-                </Text>
-              </TouchableOpacity>
-            )}
-            <View style={{ marginTop: 24 }}>
-              <View style={styles.listTitleRow}>
-                <Text style={styles.listTitle}>🗓️ 日历回顾</Text>
-                <Text style={styles.listCount}>点击有记录的日期</Text>
-              </View>
-              <CalendarView entries={entries} onOpenEntry={openDetail} />
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </ScreenContainer>
-  );
-}
-
-const jStyles = StyleSheet.create({
-  roleHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: AppColors.purple.soft,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: AppColors.purple.primary + '25',
-  },
-  roleHintIcon: { fontSize: 16, marginRight: 8 },
-  roleHintText: { fontSize: 13, color: AppColors.purple.strong, fontWeight: '500' },
-  roleHintSub: { fontSize: 11, color: AppColors.text.tertiary, marginTop: 3, lineHeight: 16 },
-  emptyWrap: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: AppColors.text.primary, marginBottom: 8 },
-  emptyDesc: { fontSize: 13, color: AppColors.text.tertiary, textAlign: 'center', lineHeight: 20 },
-  countRow: { marginBottom: 8 },
-  countText: { fontSize: 12, color: AppColors.text.tertiary, fontWeight: '500' },
 });
 
 export default function DiaryScreen() {
