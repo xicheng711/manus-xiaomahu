@@ -16,6 +16,7 @@ import { getMemberDisplayEmoji } from '@/lib/member-avatar';
 import { TrendChart } from '@/components/trend-chart';
 import { COLORS, SHADOWS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
+import { AppIcon } from '@/components/app-icons';
 import * as Haptics from 'expo-haptics';
 import { WeeklyEcho } from '@/components/weekly-echo';
 import { JoinerHomeScreen } from '@/components/joiner-home';
@@ -198,11 +199,11 @@ function EnhancedCheckinBanner({
 
               <View style={styles.checkinLeft}>
                 <View style={styles.checkinIconBox}>
-                  <Text style={{ fontSize: 24 }}>📋</Text>
+                  <AppIcon name="note" color="#FFFFFF" size={24} strokeWidth={1.7} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.checkinTitle}>开始今日记录</Text>
-                  <Text style={styles.checkinSub}>轻松记录{elderNickname}的状态，约1分钟</Text>
+                  <Text style={styles.checkinSub}>轻松记录{elderNickname}的状态，约1分钟 · 完成后自动生成今日摘要</Text>
                 </View>
               </View>
               <View style={styles.chevronCircle}>
@@ -219,14 +220,15 @@ function EnhancedCheckinBanner({
     <TouchableOpacity style={styles.checkinDone} onPress={handlePress} activeOpacity={0.88}>
       <View style={styles.checkinLeft}>
         <View style={styles.checkinIconBoxDone}>
-          <Text style={{ fontSize: 26 }}>✅</Text>
+          <AppIcon name="checkin" color={AppColors.green.strong} size={24} strokeWidth={1.7} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.checkinTitleDone}>今日记录 {checkinProgress}/2 ✅</Text>
+          <Text style={styles.checkinTitleDone}>今日记录 {checkinProgress}/2</Text>
           <Text style={styles.checkinSubDone}>早间已完成{eveningDone ? ' · 晚间已完成' : ' · 晚间待完成'}</Text>
           {todayCheckIn?.sleepHours != null && (
             <View style={styles.careScoreBadge}>
-              <Text style={{ fontSize: 11 }}>💤 {elderNickname}睡了 {todayCheckIn.sleepHours}h</Text>
+              <AppIcon name="moon" color={AppColors.green.strong} size={12} strokeWidth={1.8} />
+              <Text style={{ fontSize: 11 }}>{elderNickname}睡了 {todayCheckIn.sleepHours}h</Text>
               {todayCheckIn.caregiverMoodEmoji && (
                 <Text style={{ fontSize: 11, marginLeft: 6 }}>{todayCheckIn.caregiverMoodEmoji} {caregiverName}的心情已记录</Text>
               )}
@@ -296,7 +298,7 @@ function EnhancedSmartCard({
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.aiIconBox}
             >
-              <Text style={{ fontSize: 16, lineHeight: 20 }}>📊</Text>
+              <AppIcon name="chart" color="#FFFFFF" size={20} strokeWidth={1.7} />
             </LinearGradient>
           </Animated.View>
 
@@ -334,10 +336,10 @@ function EnhancedSmartCard({
 
 // ─── 快捷入口卡片 ────────────────────────────────────────────────────
 function QuickActionCard({
-  emoji, label, gradientStart, gradientEnd, bgColor, onPress, delay, pulse = false,
+  icon, iconColor, label, bgColor, onPress, delay, pulse = false,
 }: {
-  emoji: string; label: string;
-  gradientStart: string; gradientEnd: string; bgColor: string;
+  icon: 'pill' | 'book' | 'family' | 'chart'; iconColor: string; label: string;
+  bgColor: string;
   onPress: () => void; delay: number; pulse?: boolean;
 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -390,9 +392,11 @@ function QuickActionCard({
                 style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
               />
             </View>
-            <LinearGradient colors={[gradientStart, gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.quickIconBox}>
-              <Animated.Text style={[styles.quickEmoji, { transform: [{ rotate: emojiRot }] }]}>{emoji}</Animated.Text>
-            </LinearGradient>
+            <View style={[styles.quickIconBox, { backgroundColor: bgColor }]}>
+              <Animated.View style={{ transform: [{ rotate: emojiRot }] }}>
+                <AppIcon name={icon} color={iconColor} size={26} strokeWidth={1.7} />
+              </Animated.View>
+            </View>
             <View style={{ flex: 1 }} />
             <Text style={styles.quickLabel}>{label}</Text>
           </TouchableOpacity>
@@ -719,11 +723,12 @@ function CreatorHomeScreen() {
         ? '早间打卡已完成，完成晚间打卡后就能看到今日记录'
         : '完成今日打卡，就能看到今日记录';
 
+  // 快捷入口：统一暖色系 + C 版线条图标
   const quickActions = [
-    { emoji: '💊', label: '用药记录', route: '/medication', gradientStart: Gradients.coral[0], gradientEnd: Gradients.coral[1], bgColor: AppColors.coral.soft, pulse: false },
-    { emoji: '📔', label: '护理日记', route: '/diary',      gradientStart: Gradients.peach[0], gradientEnd: Gradients.peach[1], bgColor: AppColors.peach.soft, pulse: false },
-    { emoji: '👥', label: '家庭同步', route: '/family',     gradientStart: Gradients.purple[0], gradientEnd: Gradients.purple[1], bgColor: AppColors.purple.soft, pulse: false },
-    { emoji: '📊', label: '今日记录', route: '/share',      gradientStart: Gradients.green[0], gradientEnd: Gradients.green[1], bgColor: AppColors.green.soft, pulse: true },
+    { icon: 'pill' as const,   label: '用药记录', route: '/medication', iconColor: '#D98868', bgColor: '#FBE9E2', pulse: false },
+    { icon: 'book' as const,   label: '护理日记', route: '/diary',      iconColor: '#C99A3D', bgColor: '#F7EFDF', pulse: false },
+    { icon: 'family' as const, label: '家庭同步', route: '/family',     iconColor: '#A89080', bgColor: '#F1ECE7', pulse: false },
+    { icon: 'chart' as const,  label: '今日记录', route: '/share',      iconColor: '#E8897B', bgColor: '#FAE8E4', pulse: true },
   ];
 
   return (
@@ -851,7 +856,9 @@ function CreatorHomeScreen() {
           onPress={() => router.push('/(tabs)/checkin' as any)}
         />
 
-         {/* ── 智能卡片 ── */}
+         {/* ── 智能卡片：未打卡时不渲染，避免与上方"开始今日记录"横幅重复；
+             横幅已是唯一主 CTA，且副文案说明了"完成后自动生成今日摘要" ── */}
+         {morningDone && (
          <EnhancedSmartCard
           morningDone={morningDone}
           eveningDone={eveningDone}
@@ -867,6 +874,7 @@ function CreatorHomeScreen() {
           }}
           onCheckinPress={() => router.push('/(tabs)/checkin' as any)}
         />
+        )}
 
         {/* ── 趋势图 ── */}
         {allCheckIns.length > 0 && <TrendChart checkIns={allCheckIns} diaryEntries={allDiaryEntries} patientNickname={elderNickname} caregiverName={caregiverName} />}
@@ -880,12 +888,12 @@ function CreatorHomeScreen() {
           <View style={styles.quickGrid}>
             <View style={styles.quickRow}>
               {quickActions.slice(0, 2).map((item, i) => (
-                <QuickActionCard key={item.route} emoji={item.emoji} label={item.label} gradientStart={item.gradientStart} gradientEnd={item.gradientEnd} bgColor={item.bgColor} pulse={item.pulse} onPress={() => router.push(item.route as any)} delay={50 + i * 80} />
+                <QuickActionCard key={item.route} icon={item.icon} iconColor={item.iconColor} label={item.label} bgColor={item.bgColor} pulse={item.pulse} onPress={() => router.push(item.route as any)} delay={50 + i * 80} />
               ))}
             </View>
             <View style={styles.quickRow}>
               {quickActions.slice(2, 4).map((item, i) => (
-                <QuickActionCard key={item.route} emoji={item.emoji} label={item.label} gradientStart={item.gradientStart} gradientEnd={item.gradientEnd} bgColor={item.bgColor} pulse={item.pulse} onPress={() => router.push(item.route as any)} delay={210 + i * 80} />
+                <QuickActionCard key={item.route} icon={item.icon} iconColor={item.iconColor} label={item.label} bgColor={item.bgColor} pulse={item.pulse} onPress={() => router.push(item.route as any)} delay={210 + i * 80} />
               ))}
             </View>
           </View>
@@ -1016,7 +1024,7 @@ const styles = StyleSheet.create({
   checkinLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   checkinIconBox: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.40)' },
   checkinIconBoxDone: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: AppColors.green.soft },
-  checkinTitle: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  checkinTitle: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: -0.3 },
   checkinTitleDone: { fontSize: 15, fontWeight: '700', color: AppColors.text.primary },
   checkinSub: { fontSize: 12, color: 'rgba(255,255,255,0.82)', marginTop: 3, lineHeight: 17 },
   checkinSubDone: { fontSize: 12, color: AppColors.text.secondary, marginTop: 2 },
@@ -1024,6 +1032,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: AppColors.surface.card,
     borderRadius: 24, padding: 17, marginBottom: 18,
+    borderWidth: 1, borderColor: 'rgba(129,111,101,0.08)',
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 16, elevation: 3,
   },
   chevronCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' },
@@ -1038,7 +1047,7 @@ const styles = StyleSheet.create({
   },
   aiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   aiIconBox: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  aiLabel: { fontSize: 14, fontWeight: '800', color: AppColors.purple.strong, letterSpacing: -0.2 },
+  aiLabel: { fontSize: 14, fontWeight: '700', color: AppColors.purple.strong, letterSpacing: -0.2 },
   aiSubLabel: { fontSize: 10, color: AppColors.text.tertiary },
   aiMessage: { fontSize: 13, color: AppColors.text.secondary, lineHeight: 19, marginTop: 4 },
   aiMotivation: { fontSize: 13, color: AppColors.text.primary, lineHeight: 19, marginTop: 6, fontWeight: '600' },
@@ -1054,7 +1063,7 @@ const styles = StyleSheet.create({
   // 快捷入口标题
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, marginTop: 4 },
   sectionDot: { width: 3, height: 16, borderRadius: 2, backgroundColor: AppColors.green.primary },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, letterSpacing: -0.2 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: AppColors.text.primary, letterSpacing: -0.2 },
 
   // 快捷入口网格
   quickGrid: { marginTop: 0 },
@@ -1063,6 +1072,7 @@ const styles = StyleSheet.create({
   quickCard: {
     borderRadius: 24, padding: 16, paddingBottom: 14, height: 112,
     flexDirection: 'column', alignItems: 'flex-start',
+    borderWidth: 1, borderColor: 'rgba(129,111,101,0.08)',
     shadowColor: AppColors.shadow.default, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 15, elevation: 3,
   },
   quickIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

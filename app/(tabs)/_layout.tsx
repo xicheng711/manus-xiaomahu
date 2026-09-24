@@ -2,21 +2,9 @@ import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
 import { Platform, View, Text, StyleSheet } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { AppColors, Gradients } from "@/lib/design-tokens";
+import { AppColors } from "@/lib/design-tokens";
+import { AppIcon, TAB_CONFIG, TAB_ACTIVE_BG, TAB_ACTIVE_LABEL } from "@/components/app-icons";
 import { useFamilyContext } from "@/lib/family-context";
-
-const TAB_CONFIG: Record<string, {
-  emoji: string;
-  gradient: readonly [string, string];
-  label: string;
-}> = {
-  index:      { emoji: "🏠", gradient: Gradients.coral,      label: "首页" },
-  checkin:    { emoji: "✅", gradient: Gradients.green,       label: "每日打卡" },
-  medication: { emoji: "💊", gradient: Gradients.peach,       label: "用药记录" },
-  diary:      { emoji: "📔", gradient: Gradients.purple,      label: "日记" },
-  family:     { emoji: "👥", gradient: Gradients.navActive,   label: "家人共享" },
-};
 
 // Joiner 可见的 Tab：首页 / 每日打卡（只读） / 用药记录 / 日记 / 家人共享。
 // 打卡页对 joiner 渲染 JoinerCheckinView 只读视图（见 checkin.tsx），不再拦截。
@@ -32,7 +20,7 @@ function TabIcon({
   isJoiner: boolean;
 }) {
   const cfg = TAB_CONFIG[route] ?? {
-    emoji: "⭕", gradient: ["#ccc", "#aaa"] as readonly [string, string], label: "",
+    icon: "heart" as const, idleColor: "#ccc", label: "",
   };
 
   const accessible = !isJoiner || JOINER_TABS.has(route);
@@ -42,22 +30,17 @@ function TabIcon({
   return (
     <View style={[styles.tabItem, !accessible && styles.tabItemFaded]}>
       {showActive ? (
-        <LinearGradient
-          colors={cfg.gradient as any}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.iconCircle}
-        >
-          <Text style={styles.activeEmoji}>{cfg.emoji}</Text>
-        </LinearGradient>
+        <View style={[styles.iconCircle, { backgroundColor: TAB_ACTIVE_BG, shadowColor: TAB_ACTIVE_BG, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 4 }]}>
+          <AppIcon name={cfg.icon} color="#FFFFFF" size={23} strokeWidth={1.7} />
+        </View>
       ) : (
         <View style={[styles.iconCircle, styles.inactiveCircle]}>
-          <Text style={styles.inactiveEmoji}>{cfg.emoji}</Text>
+          <AppIcon name={cfg.icon} color={cfg.idleColor} size={23} strokeWidth={1.7} />
         </View>
       )}
       <Text style={[
         styles.tabLabel,
-        showActive && { color: cfg.gradient[1], fontWeight: "700" as const },
+        showActive && { color: TAB_ACTIVE_LABEL, fontWeight: "700" as const },
         !accessible && styles.tabLabelFaded,
       ]} numberOfLines={1}>
         {cfg.label}
@@ -141,16 +124,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inactiveCircle: {
-    backgroundColor: '#F3EEEB',
-  },
-  activeEmoji: {
-    fontSize: 22,
-    lineHeight: 26,
-  },
-  inactiveEmoji: {
-    fontSize: 20,
-    lineHeight: 24,
-    opacity: 0.78,
+    backgroundColor: '#F6F1EE',
   },
   tabLabel: {
     fontSize: 11,

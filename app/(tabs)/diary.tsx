@@ -17,6 +17,7 @@ import { cloudGetDiaries, cloudGetDiaryInteractionSummaries, getCloudSyncState, 
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
+import { AppIcon } from '@/components/app-icons';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
@@ -224,7 +225,7 @@ function EmptyState({ onStart }: { onStart: () => void }) {
   return (
     <Animated.View style={[styles.emptyState, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <Animated.View style={[styles.emptyEmojiCircle, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.emptyEmoji}>📖</Text>
+        <AppIcon name="book" color={AppColors.coral.primary} size={44} strokeWidth={1.5} />
       </Animated.View>
       <Text style={styles.emptyTitle}>还没有日记</Text>
       <Text style={styles.emptyText}>每天记录一点点，{'\n'}积累成最珍贵的回忆</Text>
@@ -234,7 +235,8 @@ function EmptyState({ onStart }: { onStart: () => void }) {
           onPress={() => pressAnimation(btnScale, onStart)}
           activeOpacity={0.85}
         >
-          <Text style={styles.startBtnText}>开始第一篇日记 ✏️</Text>
+          <AppIcon name="note" color="#fff" size={16} strokeWidth={1.8} />
+          <Text style={styles.startBtnText}>开始第一篇日记</Text>
         </TouchableOpacity>
       </Animated.View>
     </Animated.View>
@@ -700,14 +702,15 @@ function DiaryScreenContent() {
                 </Text>
               </TouchableOpacity>
             )}
-            {!editMode && (
+            {!editMode && hasAnyContent && (
               <Animated.View style={{ transform: [{ scale: fabScale }] }}>
                 <TouchableOpacity
                   style={styles.writeBtn}
                   onPress={() => pressAnimation(fabScale, openNewEntry)}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.writeBtnText}>✏️ 写日记</Text>
+                  <AppIcon name="note" color="#fff" size={15} strokeWidth={1.8} />
+                  <Text style={styles.writeBtnText}>写日记</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}
@@ -870,7 +873,7 @@ function DiaryScreenContent() {
             onPress={() => pressAnimation(fabScale, openNewEntry)}
             activeOpacity={0.85}
           >
-            <Text style={styles.fabIcon}>✏️</Text>
+            <AppIcon name="note" color="#fff" size={24} strokeWidth={1.7} />
           </TouchableOpacity>
         </Animated.View>
       )}
@@ -930,6 +933,7 @@ const styles = StyleSheet.create({
   manageBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
   manageBtnTextActive: { color: '#DC2626' },
   writeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: COLORS.primary, borderRadius: RADIUS.pill,
     paddingHorizontal: 18, paddingVertical: 10,
     ...SHADOWS.glow(COLORS.primary),
@@ -1056,10 +1060,10 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.peach.soft, alignItems: 'center', justifyContent: 'center',
     marginBottom: 20,
   },
-  emptyEmoji: { fontSize: 40 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
   emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   startBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: COLORS.primary, borderRadius: RADIUS.pill,
     paddingHorizontal: 28, paddingVertical: 14,
     ...SHADOWS.glow(COLORS.primary),
@@ -1080,8 +1084,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
-  fabIcon: { fontSize: 24 },
-
   // Delete confirmation modal
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',

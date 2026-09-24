@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { AppColors, Gradients, Shadows } from '@/lib/design-tokens';
+import { AppIcon, type AppIconName } from '@/components/app-icons';
 import { useWeather } from '@/lib/weather-context';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetCheckIns, cloudGetBriefings, cloudGetRoomDetail } from '@/lib/cloud-sync';
@@ -142,10 +143,10 @@ function ShareLoadingScreen() {
   const progressW = progressVal.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
   const shimmerLeft = shimmerX.interpolate({ inputRange: [-1, 2], outputRange: ['-30%', '130%'] });
 
-  const STATUS = [
-    { emoji: '📋', label: '整理数据', bg: AppColors.green.soft, pulse: pulse1 },
-    { emoji: '📊', label: '汇总记录', bg: AppColors.purple.soft, pulse: pulse2 },
-    { emoji: '📝', label: '生成简报', bg: AppColors.coral.soft, pulse: pulse3 },
+  const STATUS: { icon: AppIconName; label: string; bg: string; iconColor: string; pulse: Animated.Value }[] = [
+    { icon: 'note', label: '整理数据', bg: AppColors.green.soft, iconColor: AppColors.green.primary, pulse: pulse1 },
+    { icon: 'chart', label: '汇总记录', bg: AppColors.purple.soft, iconColor: AppColors.purple.primary, pulse: pulse2 },
+    { icon: 'book', label: '生成简报', bg: AppColors.coral.soft, iconColor: AppColors.coral.primary, pulse: pulse3 },
   ];
 
   return (
@@ -168,7 +169,7 @@ function ShareLoadingScreen() {
           </Animated.View>
           <Animated.View style={[slStyles.badge, { transform: [{ translateY: badgeY }, { rotate: badgeSpin }] }]}>
             <LinearGradient colors={[...Gradients.purple]} style={slStyles.badgeGrad}>
-              <Text style={slStyles.badgeEmoji}>📰</Text>
+              <AppIcon name="note" color="#fff" size={22} strokeWidth={1.7} />
             </LinearGradient>
           </Animated.View>
         </View>
@@ -191,7 +192,7 @@ function ShareLoadingScreen() {
           {STATUS.map((s, i) => (
             <Animated.View key={i} style={[slStyles.statusItem, { opacity: s.pulse }]}>
               <View style={[slStyles.statusIcon, { backgroundColor: s.bg }]}>
-                <Text style={{ fontSize: 18 }}>{s.emoji}</Text>
+                <AppIcon name={s.icon} color={s.iconColor} size={19} strokeWidth={1.7} />
               </View>
               <Text style={slStyles.statusLabel}>{s.label}</Text>
             </Animated.View>
@@ -217,7 +218,6 @@ const slStyles = StyleSheet.create({
   barFill: { width: '100%', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   badge: { position: 'absolute', top: -18, right: -18 },
   badgeGrad: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: AppColors.purple.strong, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6 },
-  badgeEmoji: { fontSize: 22 },
   textBlock: { alignItems: 'center', marginBottom: 28 },
   title: { fontSize: 22, fontWeight: '800', color: AppColors.purple.strong, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: AppColors.text.secondary, textAlign: 'center' },
@@ -234,10 +234,18 @@ const slStyles = StyleSheet.create({
 // ─── Score Ring (animated) ───────────────────────────────────────────────────
 
 // ─── Data Badge ──────────────────────────────────────────────────────────────
-function DataBadge({ emoji, label, value, color, onPress, highlighted }: { emoji: string; label: string; value: string; color: string; onPress?: () => void; highlighted?: boolean }) {
+// 图标统一为 C 版线条风格；色块做减法：底统一纯白，仅图标颜色区分功能。
+function DataBadge({ icon, emoji, label, value, color, onPress, highlighted }: {
+  icon?: AppIconName; emoji?: string;
+  label: string; value: string; color: string; onPress?: () => void; highlighted?: boolean;
+}) {
   const inner = (
-    <View style={[badgeStyles.badge, { backgroundColor: color + '14', borderColor: highlighted ? color + '80' : color + '25', borderWidth: highlighted ? 1.5 : 1 }]}>
-      <Text style={badgeStyles.emoji}>{emoji}</Text>
+    <View style={[badgeStyles.badge, highlighted && { borderColor: color + '80', borderWidth: 1.5 }]}>
+      {icon ? (
+        <AppIcon name={icon} color={color} size={26} strokeWidth={1.7} />
+      ) : (
+        <Text style={badgeStyles.emoji}>{emoji}</Text>
+      )}
       <Text style={badgeStyles.value}>{value}</Text>
       <Text style={[badgeStyles.label, { color: color }]}>{label}</Text>
       {onPress && <Text style={[badgeStyles.tapHint, { color: color }]}>点击查看</Text>}
@@ -249,7 +257,7 @@ function DataBadge({ emoji, label, value, color, onPress, highlighted }: { emoji
   return inner;
 }
 const badgeStyles = StyleSheet.create({
-  badge: { flex: 1, borderRadius: 18, padding: 14, alignItems: 'center', gap: 4, minWidth: 70, borderWidth: 1 },
+  badge: { flex: 1, borderRadius: 18, padding: 16, alignItems: 'center', gap: 6, minWidth: 70, borderWidth: 1, backgroundColor: '#FFFFFF', borderColor: '#F0E8E3' },
   emoji: { fontSize: 22 },
   value: { fontSize: 14, fontWeight: '800', color: AppColors.text.primary },
   label: { fontSize: 11, fontWeight: '600' },
@@ -257,7 +265,10 @@ const badgeStyles = StyleSheet.create({
 });
 
 // ─── Beautiful Briefing Card ─────────────────────────────────────────────────
-function AnimatedBadge({ emoji, label, value, color, delay, onPress, highlighted }: { emoji: string; label: string; value: string; color: string; delay: number; onPress?: () => void; highlighted?: boolean }) {
+function AnimatedBadge({ icon, emoji, label, value, color, delay, onPress, highlighted }: {
+  icon?: AppIconName; emoji?: string;
+  label: string; value: string; color: string; delay: number; onPress?: () => void; highlighted?: boolean;
+}) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(16)).current;
   useEffect(() => {
@@ -268,7 +279,7 @@ function AnimatedBadge({ emoji, label, value, color, delay, onPress, highlighted
   }, []);
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-      <DataBadge emoji={emoji} label={label} value={value} color={color} onPress={onPress} highlighted={highlighted} />
+      <DataBadge icon={icon} emoji={emoji} label={label} value={value} color={color} onPress={onPress} highlighted={highlighted} />
     </Animated.View>
   );
 }
@@ -359,13 +370,14 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
 
       {/* ── Data Grid (4 badges with staggered entrance) ── */}
       <View style={cardStyles.dataGrid}>
-        <AnimatedBadge emoji="😴" label="睡眠" value={sleepLabel} color={AppColors.green.muted} delay={0} />
+        <AnimatedBadge icon="moon" label="睡眠" value={sleepLabel} color={AppColors.green.muted} delay={0} />
+        {/* 心情图标保留用户所选的 emoji：这是用户的数据，不是装饰 */}
         <AnimatedBadge emoji={moodEmoji !== '—' ? moodEmoji : '😊'} label="心情" value={moodValue} color={AppColors.peach.primary} delay={100} />
       </View>
       <View style={cardStyles.dataGrid}>
-        <AnimatedBadge emoji="💊" label="用药" value={medLabel} color={AppColors.purple.strong} delay={200} />
+        <AnimatedBadge icon="pill" label="用药" value={medLabel} color={AppColors.purple.strong} delay={200} />
         <AnimatedBadge
-          emoji="🍽️" label="饮食" value={mealValue} color={AppColors.coral.primary} delay={300}
+          icon="bowl" label="饮食" value={mealValue} color={AppColors.coral.primary} delay={300}
           onPress={hasMealNotes ? () => setExpandedMeal(v => !v) : undefined}
           highlighted={expandedMeal}
         />
@@ -373,7 +385,10 @@ function BriefingCard({ briefing, checkIn, elderNickname, caregiverName, elderEm
       {/* ── Meal Notes Expanded ── */}
       {expandedMeal && hasMealNotes && (
         <View style={cardStyles.mealExpanded}>
-          <Text style={cardStyles.mealExpandedTitle}>🍽️ 饮食详情</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <AppIcon name="bowl" color="#C2410C" size={15} />
+            <Text style={cardStyles.mealExpandedTitle}>饮食详情</Text>
+          </View>
           <Text style={cardStyles.mealExpandedText}>{checkIn.mealNotes}</Text>
         </View>
       )}
@@ -416,9 +431,9 @@ const cardStyles = StyleSheet.create({
   elderInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   elderAvatarWrap: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#F3EDE8', alignItems: 'center', justifyContent: 'center' },
   elderEmoji: { fontSize: 32 },
-  elderName: { fontSize: 20, fontWeight: '800', color: AppColors.text.primary },
+  elderName: { fontSize: 17, fontWeight: '800', color: AppColors.text.primary },
   elderSub: { fontSize: 13, color: AppColors.text.tertiary, marginTop: 2 },
-  dataGrid: { flexDirection: 'row', gap: 10, marginBottom: 10, paddingHorizontal: 22 },
+  dataGrid: { flexDirection: 'row', gap: 12, marginBottom: 12, paddingHorizontal: 22 },
   summaryBox: { backgroundColor: '#F0EDE8', borderRadius: 16, padding: 16, marginTop: 6, marginBottom: 14, marginHorizontal: 22 },
   summaryHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   summaryIcon: { fontSize: 16 },
@@ -438,7 +453,7 @@ const cardStyles = StyleSheet.create({
     marginHorizontal: 22, marginBottom: 12, backgroundColor: '#FFF5EE',
     borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#FDDCCC',
   },
-  mealExpandedTitle: { fontSize: 13, fontWeight: '700', color: '#C2410C', marginBottom: 6 },
+  mealExpandedTitle: { fontSize: 13, fontWeight: '700', color: '#C2410C' },
   mealExpandedText: { fontSize: 14, color: '#7C3A1E', lineHeight: 22 },
 });
 
@@ -446,6 +461,26 @@ const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 const CHART_W = SW - 80;
 
 // ─── Check-in Notes Section ─────────────────────────────────────────────────
+// 长文本默认折叠为 2 行，点击展开全文
+function CollapsibleNoteText({ text, style }: { text: string; style: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const needsToggle = text.length > 48;
+  return (
+    <View>
+      <Text style={style} numberOfLines={expanded || !needsToggle ? undefined : 2}>
+        {text}
+      </Text>
+      {needsToggle && (
+        <TouchableOpacity onPress={() => setExpanded(v => !v)} hitSlop={10} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
+          <Text style={{ fontSize: 12, color: AppColors.coral.primary, fontWeight: '600' }}>
+            {expanded ? '收起 ▲' : '展开全文 ▼'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 function CheckInNotesSection({ checkIn }: { checkIn: DailyCheckIn }) {
   const morningNotes = checkIn.morningNotes?.trim();
   const eveningNotes = checkIn.eveningNotes?.trim();
@@ -457,28 +492,33 @@ function CheckInNotesSection({ checkIn }: { checkIn: DailyCheckIn }) {
 
   return (
     <View style={notesStyles.card}>
-      <Text style={notesStyles.sectionTitle}>📝 打卡补充备注</Text>
+      <View style={notesStyles.sectionTitleRow}>
+        <AppIcon name="note" color={AppColors.text.secondary} size={17} />
+        <Text style={notesStyles.sectionTitle}>打卡补充备注</Text>
+      </View>
       {hasMorning && (
         <View style={notesStyles.noteRow}>
           <View style={notesStyles.noteHeader}>
-            <View style={[notesStyles.noteDot, { backgroundColor: '#6EE7B7' }]} />
-            <Text style={notesStyles.noteLabel}>🌅 早间补充</Text>
+            <AppIcon name="sunrise" color="#C98F3D" size={15} />
+            <Text style={notesStyles.noteLabel}>早间补充</Text>
           </View>
-          <Text style={notesStyles.noteText}>
-            {morningNotes && morningNotes.length > 0 ? morningNotes : '无'}
-          </Text>
+          <CollapsibleNoteText
+            text={morningNotes && morningNotes.length > 0 ? morningNotes : '无'}
+            style={notesStyles.noteText}
+          />
         </View>
       )}
       {hasMorning && hasEvening && <View style={notesStyles.divider} />}
       {hasEvening && (
         <View style={notesStyles.noteRow}>
           <View style={notesStyles.noteHeader}>
-            <View style={[notesStyles.noteDot, { backgroundColor: '#FCA5A5' }]} />
-            <Text style={notesStyles.noteLabel}>🌙 晚间补充</Text>
+            <AppIcon name="night" color="#7A8BB5" size={15} />
+            <Text style={notesStyles.noteLabel}>晚间补充</Text>
           </View>
-          <Text style={notesStyles.noteText}>
-            {eveningNotes && eveningNotes.length > 0 ? eveningNotes : '无'}
-          </Text>
+          <CollapsibleNoteText
+            text={eveningNotes && eveningNotes.length > 0 ? eveningNotes : '无'}
+            style={notesStyles.noteText}
+          />
         </View>
       )}
     </View>
@@ -491,10 +531,10 @@ const notesStyles = StyleSheet.create({
     shadowColor: '#8B7B75', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
     borderWidth: 1, borderColor: '#EDE4DF',
   },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, marginBottom: 14 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary },
   noteRow: { gap: 6 },
   noteHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  noteDot: { width: 8, height: 8, borderRadius: 4 },
   noteLabel: { fontSize: 13, fontWeight: '700', color: AppColors.text.secondary },
   noteText: { fontSize: 14, color: AppColors.text.primary, lineHeight: 22, paddingLeft: 14 },
   divider: { height: 1, backgroundColor: '#EDE4DF', marginVertical: 12 },
@@ -514,7 +554,10 @@ function SleepDetailSection({ checkIn }: { checkIn: DailyCheckIn }) {
 
   return (
     <View style={sleepStyles.card}>
-      <Text style={sleepStyles.sectionTitle}>🌙 昨晚睡眠详情</Text>
+      <View style={sleepStyles.sectionTitleRow}>
+        <AppIcon name="moon" color={AppColors.text.secondary} size={17} />
+        <Text style={sleepStyles.sectionTitle}>昨晚睡眠详情</Text>
+      </View>
       <View style={sleepStyles.donutRow}>
         <PieChart
           donut
@@ -615,7 +658,10 @@ function WeeklySleepChart({ weeklyData }: { weeklyData: Array<{ date: string; sl
 
   return (
     <View style={sleepStyles.card}>
-      <Text style={sleepStyles.sectionTitle}>📊 近一周睡眠趋势</Text>
+      <View style={sleepStyles.sectionTitleRow}>
+        <AppIcon name="chart" color={AppColors.text.secondary} size={17} />
+        <Text style={sleepStyles.sectionTitle}>近一周睡眠趋势</Text>
+      </View>
       <View style={sleepStyles.chartLegend}>
         <View style={sleepStyles.legendItem}>
           <View style={[sleepStyles.legendDot, { backgroundColor: '#6EE7B7' }]} />
@@ -690,7 +736,10 @@ function WeeklyNapChart({ weeklyData }: { weeklyData: Array<{ date: string; napM
 
   return (
     <View style={sleepStyles.card}>
-      <Text style={sleepStyles.sectionTitle}>☀️ 近一周白天小睡趋势</Text>
+      <View style={sleepStyles.sectionTitleRow}>
+        <AppIcon name="sunrise" color={AppColors.text.secondary} size={17} />
+        <Text style={sleepStyles.sectionTitle}>近一周白天小睡趋势</Text>
+      </View>
       <View style={{ paddingRight: 10, paddingBottom: 10, width: '100%' }}>
         <BarChart
           data={napBars}
@@ -725,7 +774,8 @@ const sleepStyles = StyleSheet.create({
     shadowColor: '#8B7B75', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
     borderWidth: 1, borderColor: '#EDE4DF',
   },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary, marginBottom: 14 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: AppColors.text.primary },
   donutRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   legendRow: { flexDirection: 'row', gap: 12, marginTop: 8 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -1414,7 +1464,10 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         {/* ── Header ── */}
         <View style={styles.header}>
           <BackButton />
-          <Text style={styles.title}>📋 {params.date ? `${params.date} 打卡总结` : (viewMode === 'today' ? '今日' : '昨日') + '打卡总结'}</Text>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <AppIcon name="note" color={AppColors.text.primary} size={18} strokeWidth={1.7} />
+            <Text style={[styles.title, { flex: 0 }]}>{params.date ? `${params.date} 打卡总结` : (viewMode === 'today' ? '今日' : '昨日') + '打卡总结'}</Text>
+          </View>
           <View style={{ width: 40 }} />
         </View>
 
@@ -1463,7 +1516,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         {viewMode === 'yesterday' && !yesterdayCi ? (
           <View style={styles.missingCheckinCard}>
             <View style={styles.missingCheckinTop}>
-              <Text style={styles.missingCheckinEmoji}>📅</Text>
+              <AppIcon name="note" color="#8B7CF6" size={34} strokeWidth={1.6} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.missingCheckinTitle}>昨日暂无打卡记录</Text>
                 <Text style={styles.missingCheckinDesc}>昨日还没有完成晚间打卡，暂时无法显示昨日简报</Text>
@@ -1473,7 +1526,7 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
         ) : error ? (
           <View style={styles.missingCheckinCard}>
             <View style={styles.missingCheckinTop}>
-              <Text style={styles.missingCheckinEmoji}>🌙</Text>
+              <AppIcon name="night" color="#8B7CF6" size={34} strokeWidth={1.6} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.missingCheckinTitle}>完成今日打卡即可查看完整记录</Text>
                 <Text style={styles.missingCheckinDesc}>完成早间和晚间打卡后，今日打卡总结就会自动生成，包含睡眠、心情、用药、饮食全部记录</Text>
@@ -1521,7 +1574,9 @@ ${new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekda
                   style={styles.backfillNotice}
                 >
                   <View style={styles.backfillLeft}>
-                    <Text style={styles.backfillIcon}>🌅</Text>
+                    <View style={styles.backfillIconWrap}>
+                      <AppIcon name="sunrise" color="#C98F3D" size={26} />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.backfillTitle}>还没有早间打卡哦</Text>
                       <Text style={styles.backfillSub}>补录睡眠数据，让简报更完整</Text>
@@ -1667,7 +1722,6 @@ const styles = StyleSheet.create({
     shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 2,
   },
   missingCheckinTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
-  missingCheckinEmoji: { fontSize: 36, lineHeight: 44 },
   missingCheckinTitle: { fontSize: 16, fontWeight: '800', color: '#5B21B6', marginBottom: 6 },
   missingCheckinDesc: { fontSize: 13, color: '#6D28D9', lineHeight: 20, opacity: 0.8 },
   missingCheckinBtn: { borderRadius: 16, overflow: 'hidden' },
@@ -1680,7 +1734,7 @@ const styles = StyleSheet.create({
     shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3,
   },
   backfillLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, flexShrink: 1 },
-  backfillIcon: { fontSize: 28 },
+  backfillIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
   backfillTitle: { fontSize: 15, fontWeight: '800', color: '#92400E', marginBottom: 3 },
   backfillSub: { fontSize: 12, color: '#B45309', opacity: 0.85, lineHeight: 17 },
   backfillCtaBtn: {

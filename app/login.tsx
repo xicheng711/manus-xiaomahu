@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
-import * as AppleAuthentication from 'expo-apple-authentication';
+import { AppleLogo } from '@/components/app-icons';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -125,46 +125,39 @@ export default function LoginScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.buttonSection, { opacity: contentFade, transform: [{ translateY: contentSlide }] }]}>
-          {/* 协议勾选在前：先同意，再点登录，避免点了按钮才被提示回头勾选 */}
-          <View style={styles.agreementRow}>
-            <Animated.View style={{ transform: [{ scale: checkScale }] }}>
-              <TouchableOpacity
-                style={[styles.checkbox, agreed && styles.checkboxChecked]}
-                onPress={handleCheckToggle}
-                activeOpacity={0.7}
-              >
-                {agreed && <Text style={styles.checkMark}>✓</Text>}
-              </TouchableOpacity>
-            </Animated.View>
-            <Text style={styles.agreementText}>
-              我已阅读并同意
-              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/terms.html')}>《用户协议》</Text>
-              和
-              <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/privacy.html')}>《隐私政策》</Text>
-            </Text>
-          </View>
-
-          {Platform.OS === 'ios' ? (
-            <View
-              style={[styles.appleButtonContainer, loading === 'apple' && styles.btnLoading]}
-              pointerEvents={loading === 'apple' ? 'none' : 'auto'}
-            >
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                cornerRadius={14}
-                style={styles.appleButton}
-                onPress={handleAppleLogin}
-              />
+          {/* 协议勾选在前：先同意，再点登录，避免点了按钮才被提示回头勾选。
+              整行可点（≥44pt 热区），点链接文字则打开对应协议页面 */}
+          <TouchableOpacity
+            style={styles.agreementHit}
+            onPress={handleCheckToggle}
+            activeOpacity={0.7}
+          >
+            <View style={styles.agreementRow}>
+              <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+                <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+                  {agreed && <Text style={styles.checkMark}>✓</Text>}
+                </View>
+              </Animated.View>
+              <Text style={styles.agreementText}>
+                我已阅读并同意
+                <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/terms.html')}>《用户协议》</Text>
+                和
+                <Text style={styles.agreementLink} onPress={() => Linking.openURL('https://xtdtinthemorning.cn/privacy.html')}>《隐私政策》</Text>
+              </Text>
             </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.appleUnavailableBtn}
-              onPress={handleAppleLogin}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.appleUnavailableText}>Apple 登录仅支持 iOS 设备</Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.customAppleBtn, (loading === 'apple' || Platform.OS !== 'ios') && styles.customAppleBtnDisabled]}
+            onPress={handleAppleLogin}
+            activeOpacity={0.85}
+            disabled={loading === 'apple'}
+          >
+            <AppleLogo size={19} color="#fff" />
+            <Text style={styles.customAppleBtnText}>Apple 登录</Text>
+          </TouchableOpacity>
+          {Platform.OS !== 'ios' && (
+            <Text style={styles.iosOnlyNote}>仅支持 iOS 设备</Text>
           )}
         </Animated.View>
 
@@ -226,22 +219,16 @@ const styles = StyleSheet.create({
 
   buttonSection: { marginBottom: 24 },
 
-  appleButtonContainer: {
-    width: '100%',
-    marginBottom: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
+  customAppleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    width: '100%', minHeight: 52, borderRadius: 14, marginBottom: 10,
+    backgroundColor: '#000',
   },
-  appleButton: { width: '100%', height: 52 },
-  appleUnavailableBtn: {
-    alignItems: 'center', justifyContent: 'center',
-    minHeight: 52, marginBottom: 18,
-    borderRadius: 14, borderWidth: 1, borderColor: AppColors.border.soft,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-  },
-  appleUnavailableText: { fontSize: 14, color: AppColors.text.secondary, fontWeight: '500' },
-  btnLoading: { opacity: 0.6 },
+  customAppleBtnDisabled: { opacity: 0.55 },
+  customAppleBtnText: { fontSize: 16, color: '#fff', fontWeight: '600', letterSpacing: -0.2 },
+  iosOnlyNote: { fontSize: 12, color: AppColors.text.tertiary, textAlign: 'center', marginBottom: 18 },
 
+  agreementHit: { minHeight: 44, justifyContent: 'center', marginBottom: 14 },
   agreementRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 4 },
   checkbox: {
     width: 20, height: 20, borderRadius: 6,

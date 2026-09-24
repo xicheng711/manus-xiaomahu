@@ -666,7 +666,7 @@ describe('Warm ivory homepage visual system', () => {
   it('visually separates the tab bar and keeps inactive destinations clearly visible', () => {
     expect(tabLayout).toContain("backgroundColor: 'rgba(255,253,251,0.96)'");
     expect(tabLayout).toContain('const showActive = focused');
-    expect(tabLayout).toContain('opacity: 0.78');
+    expect(tabLayout).toContain('opacity: 0.62');
     expect(tabLayout).toContain('color: AppColors.nav.inactive');
   });
 

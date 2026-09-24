@@ -5,7 +5,8 @@ import {
   KeyboardAvoidingView, Modal, Linking,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { AppIcon } from '@/components/app-icons';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import {
@@ -100,6 +101,7 @@ function MedCard({ med, changes, onToggle, onDelete, onEdit, index, isCreator }:
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function MedicationScreenContent() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ refresh?: string }>();
   const { memberships, activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
@@ -488,12 +490,16 @@ function MedicationScreenContent() {
 
         {!isCreator && (
           <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
-            <View style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)' }}>
-              <Text style={{ fontSize: 13 }}>👁️</Text>
-              <Text style={{ fontSize: 12, color: AppColors.text.secondary, flex: 1 }}>
-                仅查看模式，如需修改请联系主照顾者
-              </Text>
-            </View>
+            {/* joiner 真实可达的下一步：跳到家庭页找主照顾者，不假设有手机号 */}
+            <TouchableOpacity
+              style={styles.joinerNotice}
+              onPress={() => router.push('/(tabs)/family' as any)}
+              activeOpacity={0.8}
+            >
+              <AppIcon name="eye" color={AppColors.text.secondary} size={17} />
+              <Text style={styles.joinerNoticeText}>仅查看模式</Text>
+              <Text style={styles.joinerNoticeLink}>去家庭页联系主照顾者 ›</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -631,16 +637,26 @@ function MedicationScreenContent() {
           ) : (
             <View style={styles.emptyState}>
               <View style={styles.emptyEmojiCircle}>
-                <Text style={styles.emptyEmoji}>💊</Text>
+                <AppIcon name="pill" color={AppColors.coral.primary} size={44} strokeWidth={1.5} />
               </View>
               <Text style={styles.emptyTitle}>还没有用药记录</Text>
               <Text style={styles.emptyText}>当前您是家庭成员身份，只能查看，不能新增或修改用药计划。</Text>
+              <TouchableOpacity
+                style={styles.joinerEmptyBtn}
+                onPress={() => router.push('/(tabs)/family' as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.joinerEmptyBtnText}>去家庭页联系主照顾者 ›</Text>
+              </TouchableOpacity>
             </View>
           )
         ) : meds.length > 0 ? (
           <View style={styles.medList}>
             <View style={styles.listTitleRow}>
-              <Text style={styles.listTitle}>📋 用药计划</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <AppIcon name="note" color={AppColors.text.secondary} size={16} />
+                <Text style={styles.listTitle}>用药计划</Text>
+              </View>
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>{activeCount} 种启用</Text>
               </View>
@@ -886,6 +902,20 @@ const styles = StyleSheet.create({
 
   // Empty
   emptyState: { alignItems: 'center', padding: 40 },
+  joinerNotice: {
+    backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 12,
+    paddingVertical: 10, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderColor: 'rgba(129,111,101,0.10)',
+  },
+  joinerNoticeText: { fontSize: 12, color: AppColors.text.secondary, fontWeight: '600' },
+  joinerNoticeLink: { fontSize: 12, color: AppColors.coral.primary, fontWeight: '700', marginLeft: 'auto' },
+  joinerEmptyBtn: {
+    marginTop: 16, paddingVertical: 10, paddingHorizontal: 20,
+    borderRadius: 20, borderWidth: 1, borderColor: AppColors.coral.primary,
+    backgroundColor: '#fff',
+  },
+  joinerEmptyBtnText: { fontSize: 13, color: AppColors.coral.primary, fontWeight: '700' },
   emptyEmojiCircle: {
     width: 100, height: 100, borderRadius: 50,
     backgroundColor: COLORS.primaryBg,

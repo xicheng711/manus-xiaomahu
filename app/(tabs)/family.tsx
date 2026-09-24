@@ -215,7 +215,7 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
           <Text style={setup.primaryBtnText}>✨ 创建家庭空间</Text>
         </TouchableOpacity>
         <TouchableOpacity style={setup.secondaryBtn} onPress={() => setMode('join')}>
-          <Text style={setup.secondaryBtnText}>🔗 加入已有空间</Text>
+          <Text style={setup.secondaryBtnText}>加入已有空间</Text>
         </TouchableOpacity>
       </View>
     );
@@ -2092,8 +2092,8 @@ const setup = StyleSheet.create({
   subtitle: { fontSize: 15, color: AppColors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: 32 },
   primaryBtn: { width: '100%', backgroundColor: AppColors.coral.primary, borderRadius: 20, padding: 16, alignItems: 'center', marginBottom: 12 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: AppColors.surface.whiteStrong },
-  secondaryBtn: { width: '100%', backgroundColor: AppColors.bg.secondary, borderRadius: 20, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: AppColors.border.soft },
-  secondaryBtnText: { fontSize: 16, fontWeight: '600', color: AppColors.text.secondary },
+  secondaryBtn: { width: '100%', backgroundColor: 'transparent', borderRadius: 20, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: AppColors.border.soft },
+  secondaryBtnText: { fontSize: 15, fontWeight: '600', color: AppColors.text.tertiary },
   inputGroup: { marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '600', color: AppColors.text.secondary, marginBottom: 8 },
   input: { backgroundColor: AppColors.bg.secondary, borderRadius: 16, padding: 16, fontSize: 16, color: AppColors.text.primary, borderWidth: 1.5, borderColor: AppColors.border.soft },
