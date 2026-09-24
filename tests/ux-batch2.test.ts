@@ -47,15 +47,16 @@ describe("ux-batch2: 首页未打卡只有一个主 CTA", () => {
 describe("ux-batch2: 登录页", () => {
   const src = read("app/login.tsx");
 
-  it("主按钮文案只写 Apple 登录", () => {
-    expect(src).toContain(">Apple 登录</Text>");
-    // 原生 Apple 按钮（文案不可控）已移除
-    expect(src).not.toContain("AppleAuthenticationButton");
+  it("使用原生 Apple 登录按钮（审核要求）", () => {
+    // 用户要求：必须用原生 AppleAuthenticationButton，否则苹果审核不通过
+    expect(src).toContain("AppleAuthentication.AppleAuthenticationButton");
+    expect(src).toContain("AppleAuthenticationButtonType.CONTINUE");
+    expect(src).toContain("AppleAuthenticationButtonStyle.BLACK");
   });
 
-  it("非 iOS 时'仅支持 iOS 设备'在按钮下方", () => {
+  it("非 iOS 时提示仅支持 iOS 设备", () => {
     expect(src).toContain("仅支持 iOS 设备");
-    expect(src).toContain("iosOnlyNote");
+    expect(src).toContain("appleUnavailableText");
   });
 
   it("协议整行热区 ≥44pt", () => {
@@ -115,9 +116,8 @@ describe("ux-batch2: 家庭页次按钮弱化", () => {
 describe("ux-batch2: 图标库", () => {
   const src = read("components/app-icons.tsx");
 
-  it("导出 AppIcon 与 AppleLogo", () => {
+  it("导出 AppIcon", () => {
     expect(src).toContain("export function AppIcon");
-    expect(src).toContain("export function AppleLogo");
   });
 
   it("C 版线条风格：stroke 圆头、无填充", () => {

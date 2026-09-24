@@ -156,7 +156,7 @@ describe("UX 修复源码断言", () => {
   it("登录页协议勾选在 Apple 按钮上方", () => {
     const login = read("app/login.tsx");
     const agreementPos = login.indexOf("styles.agreementHit");
-    const applePos = login.indexOf("styles.customAppleBtn");
+    const applePos = login.indexOf("styles.appleButtonContainer");
     expect(agreementPos).toBeGreaterThan(-1);
     expect(applePos).toBeGreaterThan(-1);
     expect(agreementPos).toBeLessThan(applePos);

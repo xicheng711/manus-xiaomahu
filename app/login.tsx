@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
-import { AppleLogo } from '@/components/app-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -147,17 +147,27 @@ export default function LoginScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.customAppleBtn, (loading === 'apple' || Platform.OS !== 'ios') && styles.customAppleBtnDisabled]}
-            onPress={handleAppleLogin}
-            activeOpacity={0.85}
-            disabled={loading === 'apple'}
-          >
-            <AppleLogo size={19} color="#fff" />
-            <Text style={styles.customAppleBtnText}>Apple 登录</Text>
-          </TouchableOpacity>
-          {Platform.OS !== 'ios' && (
-            <Text style={styles.iosOnlyNote}>仅支持 iOS 设备</Text>
+          {Platform.OS === 'ios' ? (
+            <View
+              style={[styles.appleButtonContainer, loading === 'apple' && styles.btnLoading]}
+              pointerEvents={loading === 'apple' ? 'none' : 'auto'}
+            >
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={14}
+                style={styles.appleButton}
+                onPress={handleAppleLogin}
+              />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.appleUnavailableBtn}
+              onPress={handleAppleLogin}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.appleUnavailableText}>Apple 登录仅支持 iOS 设备</Text>
+            </TouchableOpacity>
           )}
         </Animated.View>
 
@@ -219,14 +229,21 @@ const styles = StyleSheet.create({
 
   buttonSection: { marginBottom: 24 },
 
-  customAppleBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    width: '100%', minHeight: 52, borderRadius: 14, marginBottom: 10,
-    backgroundColor: '#000',
+  appleButtonContainer: {
+    width: '100%',
+    marginBottom: 18,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
   },
-  customAppleBtnDisabled: { opacity: 0.55 },
-  customAppleBtnText: { fontSize: 16, color: '#fff', fontWeight: '600', letterSpacing: -0.2 },
-  iosOnlyNote: { fontSize: 12, color: AppColors.text.tertiary, textAlign: 'center', marginBottom: 18 },
+  appleButton: { width: '100%', height: 52 },
+  appleUnavailableBtn: {
+    alignItems: 'center', justifyContent: 'center',
+    minHeight: 52, marginBottom: 18,
+    borderRadius: 14, borderWidth: 1, borderColor: AppColors.border.soft,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  appleUnavailableText: { fontSize: 14, color: AppColors.text.secondary, fontWeight: '500' },
+  btnLoading: { opacity: 0.6 },
 
   agreementHit: { minHeight: 44, justifyContent: 'center', marginBottom: 14 },
   agreementRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 4 },

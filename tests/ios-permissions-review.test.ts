@@ -25,11 +25,11 @@ describe('iOS protected resource purpose strings', () => {
     expect(npmLockfile).not.toContain('expo-av');
   });
 
-  it('uses a custom Apple login button labeled exactly "Apple 登录" (batch2 设计)', () => {
-    // batch2 决定：主按钮只写"Apple 登录"，原生按钮文案不可控，改用自定义按钮 + AppleLogo
-    expect(loginScreen).toContain('>Apple 登录</Text>');
-    expect(loginScreen).toContain('AppleLogo');
-    expect(loginScreen).not.toContain('AppleAuthentication.AppleAuthenticationButton');
+  it('uses the native Apple login button (App Store 审核要求)', () => {
+    // 用户要求：必须用原生 AppleAuthenticationButton，否则苹果审核不通过
+    expect(loginScreen).toContain('AppleAuthentication.AppleAuthenticationButton');
+    expect(loginScreen).toContain('AppleAuthenticationButtonType.CONTINUE');
+    expect(loginScreen).toContain('AppleAuthenticationButtonStyle.BLACK');
     expect(loginScreen).not.toContain('🍎');
   });
 
