@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Animated, Platform, Easing, Dimensions, Modal, Keyboard, KeyboardAvoidingView, Alert, RefreshControl,
+  type StyleProp, type TextStyle,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
@@ -257,7 +258,7 @@ const MOODS = [
 
 // ─── 日历弹窗：线条图标 + 文字行（替代 emoji 前缀） ──────────────────────────
 function PopupIconRow({ icon, iconColor, textStyle, children }: {
-  icon: AppIconName; iconColor: string; textStyle: any; children: React.ReactNode;
+  icon: AppIconName; iconColor: string; textStyle: StyleProp<TextStyle>; children: React.ReactNode;
 }) {
   return (
     <View style={calStyles.popupIconRow}>
@@ -1639,13 +1640,14 @@ function CheckinScreenContent() {
                       const h = Math.floor(absMin / 60);
                       const m = absMin % 60;
                       const durationStr = diffMin <= 0 ? '时间有误' : h > 0 ? `${h}小时${m > 0 ? m + '分钟' : ''}` : `${m}分钟`;
-                      const color = diffMin <= 0 ? '#EF4444' : diffMin >= 360 ? '#16A34A' : '#F59E0B';
+                      const isErr = diffMin <= 0;
+                      const color = isErr ? '#EF4444' : diffMin >= 360 ? '#16A34A' : '#F59E0B';
                       return (
-                        <View style={styles.segmentDurationBadge}>
+                        <View style={[styles.segmentDurationBadge, isErr && styles.segmentDurationBadgeError]}>
                           <View style={styles.segmentDurationRow}>
-                            <AppIcon name={diffMin <= 0 ? 'alert' : 'night'} color={color} size={13} />
+                            <AppIcon name={isErr ? 'alert' : 'night'} color={color} size={13} />
                             <Text style={[styles.segmentDurationText, { color }]}>
-                              {diffMin <= 0 ? '' : '睡了 '}{durationStr}
+                              {isErr ? '' : '睡了 '}{durationStr}
                             </Text>
                           </View>
                         </View>
@@ -2383,6 +2385,7 @@ const styles = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6,
     marginBottom: 6, borderWidth: 1, borderColor: '#BBF7D0',
   },
+  segmentDurationBadgeError: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
   segmentDurationText: { fontSize: 13, fontWeight: '700' },
   segmentDurationRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
 

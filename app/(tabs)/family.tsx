@@ -1933,7 +1933,7 @@ const styles = StyleSheet.create({
   sectionTabs: { flexDirection: 'row', marginHorizontal: 20, marginBottom: 10, backgroundColor: '#FEF0F4', borderRadius: 18, padding: 5, gap: 4 },
   sectionTab: { flex: 1, alignItems: 'center', borderRadius: 14, overflow: 'hidden' },
   sectionTabActive: {},
-  sectionTabGradient: { width: '100%', paddingVertical: 11, alignItems: 'center', borderRadius: 14 },
+  sectionTabGradient: { width: '100%', alignItems: 'center', borderRadius: 14 },
   sectionTabInner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 11 },
   sectionTabText: { fontSize: 14, fontWeight: '600', color: '#B8426A', paddingVertical: 11 },
   sectionTabTextActive: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
