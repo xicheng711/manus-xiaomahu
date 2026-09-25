@@ -37,7 +37,7 @@ export function PageHeader({ theme, subtitle, right, style }: PageHeaderProps) {
             end={{ x: 1, y: 1 }}
             style={styles.iconCircle}
           >
-            <AppIcon name={theme.icon} color="#fff" size={24} strokeWidth={1.7} />
+            <AppIcon name={theme.icon} color="#fff" size={28} />
           </LinearGradient>
 
           <View style={styles.textBlock}>

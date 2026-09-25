@@ -1,5 +1,5 @@
 // 小马虎统一图标库 — 版本 C「利落高级」
-// 1.6px 圆头圆角线条，24x24 视图，与底部 Tab 同风格，用于全 app 小图标统一。
+// 2px 圆头圆角线条（Lucide/Feather 标准），24x24 视图，与底部 Tab 同风格，用于全 app 小图标统一。
 import React from 'react';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 import { AppColors } from '@/lib/design-tokens';
@@ -158,7 +158,7 @@ export function AppIcon({
   name,
   color,
   size = 24,
-  strokeWidth = 1.6,
+  strokeWidth = 2,
 }: {
   name: AppIconName;
   color: string;

@@ -207,7 +207,7 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
     return (
       <View style={setup.container}>
         <View style={setup.emojiCircle}>
-          <AppIcon name="family" color={AppColors.coral.primary} size={40} strokeWidth={1.5} />
+          <AppIcon name="family" color={AppColors.coral.primary} size={40} />
         </View>
         <Text style={setup.title}>家人共享</Text>
         <Text style={setup.subtitle}>
@@ -394,11 +394,10 @@ function MemberAvatarChip({ member: m, isCurrentUser, onPress }: { member: any; 
   const displayEmoji = zodiacInfo ? zodiacInfo.emoji : (m.emoji || '👤');
   // 名字是纯 emoji 时（如主照顾者名字是 💑），用大字号显示
   const nameIsPureEmoji = isPureEmoji(m.name);
-  // 头像显示规则：
-  // - 主照顾者（isCreator=true）：有 birthYear 就显生肖 emoji，否则可以显示照片或 emoji
-  // - Joiner（isCreator=false/undefined）：只显示自选 emoji，不显示照片（避免旧照片干扰）
-  const isCreator = m.isCreator === true;
-  const showPhoto = isCreator && !!m.photoUri && !imgError && !zodiacInfo;
+  // 头像显示规则（2026-09-25 修：上传了照片就显示照片，所有成员一致）：
+  // - 有 photoUri：显示照片（优先于生肖/emoji，用户主动上传的就该看到）
+  // - 没照片：有 birthYear 显示生肖 emoji，否则显示自选 emoji
+  const showPhoto = !!m.photoUri && !imgError;
   return (
     <TouchableOpacity
       style={styles.memberChip}
@@ -1179,7 +1178,8 @@ export default function FamilyScreen() {
               <View style={styles.sectionHeaderActions}>
                 <Text style={styles.sectionCount}>{todayAnnouncements.length} 条</Text>
                 <TouchableOpacity style={styles.inlinePostButton} onPress={() => setShowCompose(true)} activeOpacity={0.8}>
-                  <Text style={styles.inlinePostButtonText}>＋ 发布</Text>
+                  <AppIcon name="plus" color="#FFFFFF" size={15} />
+                  <Text style={styles.inlinePostButtonText}>发布公告</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1188,7 +1188,7 @@ export default function FamilyScreen() {
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyEmoji}>📭</Text>
                 <Text style={styles.emptyText}>今天还没有公告</Text>
-                <Text style={styles.emptySubText}>点击右上角“发布”分享第一条公告吧！</Text>
+                <Text style={styles.emptySubText}>点击右上角“发布公告”分享第一条公告吧！</Text>
               </View>
             ) : (
               todayAnnouncements.map(ann => (
@@ -1935,7 +1935,7 @@ const styles = StyleSheet.create({
   sectionTabActive: {},
   sectionTabGradient: { width: '100%', alignItems: 'center', borderRadius: 14 },
   sectionTabInner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 11 },
-  sectionTabText: { fontSize: 14, fontWeight: '600', color: '#B8426A', paddingVertical: 11 },
+  sectionTabText: { fontSize: 14, fontWeight: '600', color: '#B8426A' },
   sectionTabTextActive: { fontSize: 14, fontWeight: '700', color: AppColors.surface.whiteStrong },
   content: { flex: 1 },
   section: { paddingHorizontal: 20, paddingTop: 8 },
@@ -1943,8 +1943,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '700', color: AppColors.text.primary },
   sectionHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionCount: { fontSize: 13, color: AppColors.text.secondary, backgroundColor: AppColors.bg.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  inlinePostButton: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 12, backgroundColor: '#B8426A', shadowColor: '#B8426A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
-  inlinePostButtonText: { fontSize: 12, fontWeight: '800', color: '#FFFFFF' },
+  inlinePostButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, backgroundColor: '#B8426A', shadowColor: '#B8426A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 3 },
+  inlinePostButtonText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   emptyCard: { alignItems: 'center', padding: 36, backgroundColor: '#FEF0F4', borderRadius: 24, gap: 8, borderWidth: 1.5, borderColor: '#EDAABB' },
   emptyEmoji: { fontSize: 44 },
   emptyText: { fontSize: 16, fontWeight: '800', color: '#B8426A' },
