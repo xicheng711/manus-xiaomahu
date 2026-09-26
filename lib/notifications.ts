@@ -1,7 +1,8 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getCurrentUserIsCreator, getFamilyProfile } from "./storage";
+import { getCurrentUserIsCreator, getFamilyProfile, getCheckInByDate } from "./storage";
+import { getCareDayKey } from "./shared-date-range";
 import Constants from "expo-constants";
 import { cloudUpdatePushToken } from "./cloud-sync";
 
@@ -107,123 +108,6 @@ export async function hasNotificationPermission(): Promise<boolean> {
   return status === "granted";
 }
 
-/**
- * Schedule the morning check-in reminder (8:00 AM daily)
- */
-export async function scheduleMorningReminder(elderNickname?: string, familyId?: string): Promise<string | null> {
-  if (Platform.OS === "web") return null;
-  
-  // Only caregivers (creators) should have local reminders scheduled
-  const isCreator = await getCurrentUserIsCreator();
-  if (!isCreator) return null;
-
-  const name = elderNickname || '家人';
-
-  // 读取自定义提醒时间（优先 FamilyProfile，默认 08:00）
-  const fp = await getFamilyProfile(familyId).catch(() => null);
-  const timeStr = fp?.reminderMorning || '08:00';
-
-  // Cancel existing morning notification first
-  const existingId = await AsyncStorage.getItem(MORNING_NOTIF_ID_KEY);
-  if (existingId) {
-    await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
-    await AsyncStorage.removeItem(MORNING_NOTIF_ID_KEY);
-  }
-
-  // If set to 'off', stop here
-  if (timeStr === 'off') return null;
-
-  const [hourStr, minStr] = timeStr.split(':');
-  const hour = parseInt(hourStr, 10) || 8;
-  const minute = parseInt(minStr, 10) || 0;
-
-  const morningMessages = [
-    { title: "早安 ☀️", body: `记录一下${name}昨晚睡得怎么样，小马虎帮你分析今天的状态` },
-    { title: "早上好 🌸", body: `${name}昨晚睡得好吗？花30秒记录一下吧` },
-    { title: "晨间小记 📝", body: `记录${name}的睡眠情况，让今天的照护更有方向` },
-    { title: "小马虎来啦 🐴", body: `早上好！来记录${name}昨晚的睡眠吧` },
-    { title: "新的一天开始了 ✨", body: `先记录${name}昨晚的睡眠，再开启美好的一天` },
-  ];
-
-  const msg = morningMessages[Math.floor(Math.random() * morningMessages.length)];
-
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: msg.title,
-      body: msg.body,
-      data: { screen: "checkin", type: "morning" },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-      channelId: "daily-checkin",
-    },
-  });
-
-  await AsyncStorage.setItem(MORNING_NOTIF_ID_KEY, id);
-  return id;
-}
-
-/**
- * Schedule the evening check-in reminder (21:00 PM daily)
- */
-export async function scheduleEveningReminder(elderNickname?: string, familyId?: string): Promise<string | null> {
-  if (Platform.OS === "web") return null;
-
-  // Only caregivers (creators) should have local reminders scheduled
-  const isCreator = await getCurrentUserIsCreator();
-  if (!isCreator) return null;
-
-  const name = elderNickname || '家人';
-
-  // 读取自定义提醒时间（优先 FamilyProfile，默认 21:00）
-  const fp = await getFamilyProfile(familyId).catch(() => null);
-  const timeStr = fp?.reminderEvening || '21:00';
-
-  // Cancel existing evening notification first
-  const existingId = await AsyncStorage.getItem(EVENING_NOTIF_ID_KEY);
-  if (existingId) {
-    await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
-    await AsyncStorage.removeItem(EVENING_NOTIF_ID_KEY);
-  }
-
-  // If set to 'off', stop here
-  if (timeStr === 'off') return null;
-
-  const [hourStr, minStr] = timeStr.split(':');
-  const hour = parseInt(hourStr, 10) || 21;
-  const minute = parseInt(minStr, 10) || 0;
-
-  const eveningMessages = [
-    { title: "今天辛苦了 🌙", body: `花1分钟记录${name}今天的状态，小马虎帮你生成今日小结` },
-    { title: "晚安前记一记 🌛", body: `${name}今天吃得好吗？心情怎么样？来记录一下吧` },
-    { title: "今日小结 📖", body: `记录${name}今天的饮食和心情，看看照护趋势` },
-    { title: "小马虎来收尾啦 🐴", body: `今天照顾得很棒！最后记录一下${name}今天的状态吧` },
-    { title: "一天快结束了 🌟", body: `记录${name}今天的情况，让家人也能看到你的付出` },
-  ];
-
-  const msg = eveningMessages[Math.floor(Math.random() * eveningMessages.length)];
-
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: msg.title,
-      body: msg.body,
-      data: { screen: "checkin", type: "evening" },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-      channelId: "daily-checkin",
-    },
-  });
-
-  await AsyncStorage.setItem(EVENING_NOTIF_ID_KEY, id);
-  return id;
-}
 
 /**
  * Schedule both morning and evening reminders
@@ -239,8 +123,8 @@ export async function scheduleAllReminders(elderNickname?: string, familyId?: st
     if (!hasPermission) return;
   }
 
-  await scheduleMorningReminder(elderNickname, familyId);
-  await scheduleEveningReminder(elderNickname, familyId);
+  // 智能提醒：按今日实际打卡状态安排（打过的不再提醒）
+  await ensureTodayReminders(elderNickname, familyId);
 }
 
 /**
@@ -257,6 +141,180 @@ export async function cancelAllReminders(): Promise<void> {
   if (eveningId) {
     await Notifications.cancelScheduledNotificationAsync(eveningId).catch(() => {});
     await AsyncStorage.removeItem(EVENING_NOTIF_ID_KEY);
+  }
+  // 同时清理智能提醒（按日期 key 存的单次提醒）
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const smartKeys = keys.filter(k =>
+      k.startsWith(MORNING_SMART_ID_PREFIX) || k.startsWith(EVENING_SMART_ID_PREFIX)
+    );
+    for (const k of smartKeys) {
+      const id = await AsyncStorage.getItem(k);
+      if (id) await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+      await AsyncStorage.removeItem(k);
+    }
+  } catch { /* 静默失败 */ }
+}
+
+// ─── 智能打卡提醒 ─────────────────────────────────────────────
+// 旧的 DAILY 常驻提醒不管打没打卡每天都响，用户学会无视后就失去了提醒意义。
+// 新逻辑：每天按实际打卡状态决定是否安排"今日一次性"提醒。
+//   - 还没打卡 + 提醒时间还没过 → 安排今日一次提醒
+//   - 已经打卡 → 取消今日未响的提醒（不再打扰）
+//   - 提醒时间已过 → 不安排（打卡页的"昨日漏打卡"卡片会接管提醒）
+// 由打卡页聚焦时和打卡保存成功后调用。
+
+const SMART_REMINDER_MIGRATED_KEY = '@xiaomahuSmartReminderV1';
+const MORNING_SMART_ID_PREFIX = '@xiaomahuMorningSmart_';
+const EVENING_SMART_ID_PREFIX = '@xiaomahuEveningSmart_';
+
+export function smartTodayKey(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+}
+
+export function parseReminderTime(timeStr: string | undefined, defaultHour: number): { hour: number; minute: number } | null {
+  const str = timeStr || '';
+  if (str === 'off') return null;
+  const [hStr, mStr] = str.split(':');
+  const hour = parseInt(hStr, 10);
+  const minute = parseInt(mStr ?? '0', 10);
+  if (!Number.isFinite(hour) || hour < 0 || hour > 23) return { hour: defaultHour, minute: 0 };
+  return { hour, minute: Number.isFinite(minute) && minute >= 0 && minute < 60 ? minute : 0 };
+}
+
+const SMART_MORNING_MESSAGES = [
+  { title: '早安 ☀️', body: (name: string) => `记录一下${name}昨晚睡得怎么样，小马虎帮你分析今天的状态` },
+  { title: '早上好 🌸', body: (name: string) => `${name}昨晚睡得好吗？花30秒记录一下吧` },
+  { title: '晨间小记 📝', body: (name: string) => `记录${name}的睡眠情况，让今天的照护更有方向` },
+];
+
+const SMART_EVENING_MESSAGES = [
+  { title: '今天辛苦了 🌙', body: (name: string) => `花1分钟记录${name}今天的状态，小马虎帮你生成今日小结` },
+  { title: '晚安前记一记 🌛', body: (name: string) => `${name}今天吃得好吗？心情怎么样？来记录一下吧` },
+  { title: '今日小结 📖', body: (name: string) => `记录${name}今天的饮食和心情，看看照护趋势` },
+];
+
+async function ensureSmartReminder(
+  period: 'morning' | 'evening',
+  done: boolean,
+  timeStr: string | undefined,
+  defaultHour: number,
+  name: string,
+): Promise<void> {
+  const prefix = period === 'morning' ? MORNING_SMART_ID_PREFIX : EVENING_SMART_ID_PREFIX;
+  const idKey = prefix + smartTodayKey();
+  const existingId = await AsyncStorage.getItem(idKey);
+
+  if (done) {
+    // 已打卡：取消今日还没响的提醒，不再打扰
+    if (existingId) {
+      await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
+      await AsyncStorage.removeItem(idKey);
+    }
+    return;
+  }
+
+  const time = parseReminderTime(timeStr, defaultHour);
+  if (!time) return; // 'off'
+
+  const fireDate = new Date();
+  fireDate.setHours(time.hour, time.minute, 0, 0);
+  // 提醒时间已过（或不足 1 分钟）：不安排，避免打开 app 瞬间就弹通知吓人
+  if (fireDate.getTime() <= Date.now() + 60_000) {
+    if (existingId) {
+      await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
+      await AsyncStorage.removeItem(idKey);
+    }
+    return;
+  }
+
+  if (existingId) return; // 今日已安排过
+
+  const messages = period === 'morning' ? SMART_MORNING_MESSAGES : SMART_EVENING_MESSAGES;
+  const msg = messages[Math.floor(Math.random() * messages.length)];
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: msg.title,
+      body: msg.body(name),
+      data: { screen: 'checkin', type: period },
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: fireDate,
+      channelId: 'daily-checkin',
+    },
+  });
+  await AsyncStorage.setItem(idKey, id);
+
+  // 清理过期（非今日）的智能提醒 key，防止无限堆积
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const todayKey = smartTodayKey();
+    for (const k of keys) {
+      if ((k.startsWith(MORNING_SMART_ID_PREFIX) || k.startsWith(EVENING_SMART_ID_PREFIX))
+        && k !== MORNING_SMART_ID_PREFIX + todayKey
+        && k !== EVENING_SMART_ID_PREFIX + todayKey) {
+        const oldId = await AsyncStorage.getItem(k);
+        if (oldId) await Notifications.cancelScheduledNotificationAsync(oldId).catch(() => {});
+        await AsyncStorage.removeItem(k);
+      }
+    }
+  } catch { /* 静默失败 */ }
+}
+
+/**
+ * 智能提醒总入口：每天按实际打卡状态安排（或取消）今日提醒。
+ * 在打卡页聚焦、App 回到前台、提醒设置变更时调用。
+ */
+export async function ensureTodayReminders(elderNickname?: string, familyId?: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const isCreator = await getCurrentUserIsCreator();
+    if (!isCreator) return; // 只有主照顾者需要打卡提醒
+
+    // 一次性迁移：取消旧的 DAILY 常驻提醒（不管打没打卡每天都响）
+    const migrated = await AsyncStorage.getItem(SMART_REMINDER_MIGRATED_KEY);
+    if (!migrated) {
+      const morningId = await AsyncStorage.getItem(MORNING_NOTIF_ID_KEY);
+      const eveningId = await AsyncStorage.getItem(EVENING_NOTIF_ID_KEY);
+      if (morningId) await Notifications.cancelScheduledNotificationAsync(morningId).catch(() => {});
+      if (eveningId) await Notifications.cancelScheduledNotificationAsync(eveningId).catch(() => {});
+      await AsyncStorage.multiRemove([MORNING_NOTIF_ID_KEY, EVENING_NOTIF_ID_KEY]).catch(() => {});
+      await AsyncStorage.setItem(SMART_REMINDER_MIGRATED_KEY, '1');
+    }
+
+    const hasPermission = await hasNotificationPermission();
+    if (!hasPermission) return;
+
+    const fp = await getFamilyProfile(familyId).catch(() => null);
+    const name = elderNickname || '家人';
+    // 按护理日查今日打卡状态（凌晨 5 点分界）
+    const checkIn = await getCheckInByDate(getCareDayKey(), familyId).catch(() => null);
+
+    await ensureSmartReminder('morning', checkIn?.morningDone ?? false, fp?.reminderMorning, 8, name);
+    await ensureSmartReminder('evening', checkIn?.eveningDone ?? false, fp?.reminderEvening, 21, name);
+  } catch (e) {
+    console.warn('[Notifications] ensureTodayReminders failed:', e);
+  }
+}
+
+/**
+ * 打卡保存成功后调用：该时段已完成，取消今日未响的提醒。
+ */
+export async function cancelTodayReminder(period: 'morning' | 'evening'): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const prefix = period === 'morning' ? MORNING_SMART_ID_PREFIX : EVENING_SMART_ID_PREFIX;
+    const idKey = prefix + smartTodayKey();
+    const id = await AsyncStorage.getItem(idKey);
+    if (id) {
+      await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+      await AsyncStorage.removeItem(idKey);
+    }
+  } catch (e) {
+    console.warn('[Notifications] cancelTodayReminder failed:', e);
   }
 }
 

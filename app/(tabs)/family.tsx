@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Animated, Platform, Alert, Share, Modal,
-  Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, RefreshControl,
+  Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, RefreshControl, AppState,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -584,6 +584,18 @@ export default function FamilyScreen() {
   }, [params.openCompose, params.openComments, params.announcementId, familyId]);
 
   useFocusEffect(loadDataCallback);
+
+  // 家人页可见时每 60 秒静默拉取云端，让"主照顾者完成打卡后，这里会自动更新"名副其实。
+  // 只在 App 前台且该 tab 聚焦时运行；loadData 内部走缓存优先，不会闪骨架屏。
+  useFocusEffect(useCallback(() => {
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') {
+        void loadData(true).catch(() => {});
+      }
+    }, 60_000);
+    return () => clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []));
 
   // 点击通知时强制刷新
   useEffect(() => {
@@ -1336,16 +1348,30 @@ export default function FamilyScreen() {
                   </>
                 ) : (
                   <View style={styles.briefingEmpty}>
-                    <Text style={styles.emptyEmoji}>🌙</Text>
-                    <Text style={styles.emptyText}>{item.label}尚无打卡记录</Text>
+                    <Text style={styles.emptyEmoji}>{isToday ? '🌙' : '⚠️'}</Text>
+                    <Text style={styles.emptyText}>
+                      {isToday ? `${item.label}尚无打卡记录` : `${item.label}未打卡`}
+                    </Text>
                     <Text style={styles.emptySubText}>
                       {isCreator
-                        ? (isToday ? '完成打卡后，这里会自动显示护理简报' : '这一天没有保存早间或晚间打卡')
-                        : '主照顾者完成打卡后，这里会自动更新'}
+                        ? (isToday
+                            ? '完成打卡后，这里会自动显示护理简报'
+                            : '这一天没有保存打卡记录，可以补一下')
+                        : (isToday
+                            ? '主照顾者完成打卡后，这里会自动更新'
+                            : `主照顾者${item.label}没有打卡`)}
                     </Text>
                     {isToday && isCreator && (
                       <TouchableOpacity style={styles.goCheckinBtn} onPress={() => router.push('/(tabs)/checkin')}>
                         <Text style={styles.goCheckinBtnText}>去打卡 →</Text>
+                      </TouchableOpacity>
+                    )}
+                    {!isToday && isCreator && (
+                      <TouchableOpacity
+                        style={styles.goCheckinBtn}
+                        onPress={() => router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: item.date } } as any)}
+                      >
+                        <Text style={styles.goCheckinBtnText}>去补打卡 →</Text>
                       </TouchableOpacity>
                     )}
                   </View>

@@ -1012,6 +1012,13 @@ function CheckinScreenContent() {
     formTargetRef.current = null;
     loadCheckInData().catch(() => {});
     syncPendingCheckIns(requestedFamilyId).catch(() => {});
+    // 智能提醒：按今日实际打卡状态安排（打过的不再提醒）
+    void (async () => {
+      try {
+        const { ensureTodayReminders } = await import('@/lib/notifications');
+        await ensureTodayReminders(elderNickname, requestedFamilyId);
+      } catch { /* 静默失败 */ }
+    })();
 
     void (async () => {
       const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
@@ -1301,6 +1308,13 @@ function CheckinScreenContent() {
     }
     await upsertCheckIn(data, familyId);
     // 注意：upsertCheckIn 内部已经调用了 cloudSyncCheckIn，无需重复调用
+    // 智能提醒：该时段已打卡，取消今日未响的提醒，不再打扰
+    void (async () => {
+      try {
+        const { cancelTodayReminder } = await import('@/lib/notifications');
+        await cancelTodayReminder(mode === 'morning' ? 'morning' : 'evening');
+      } catch { /* 静默失败 */ }
+    })();
     // 正式保存成功：游客草稿使命完成，在这里清除（恢复时不立即清，防止用户中途退出又丢）
     await clearCheckInDraft().catch(() => {});
     // 打卡修改后清除当天简报缓存，确保首页摘要和简报页都能显示最新数据
