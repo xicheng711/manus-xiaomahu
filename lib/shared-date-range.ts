@@ -43,6 +43,17 @@ export function resolveCheckInFormTargetDate(options: {
   return getCareDayKey(openedAt);
 }
 
+/** 昨天护理日的 key（用于检测漏打卡）。注意凌晨 00:00–04:59 仍属于前一护理日。 */
+export function getYesterdayCareDayKey(
+  now = new Date(),
+  rolloverHour = CARE_DAY_ROLLOVER_HOUR,
+): string {
+  const todayKey = getCareDayKey(now, rolloverHour);
+  const d = new Date(`${todayKey}T12:00:00`);
+  d.setDate(d.getDate() - 1);
+  return localDateKey(d);
+}
+
 /**
  * Announcements are point-in-time events. Unlike a caregiver's daily check-in,
  * they should appear under the calendar day of the person currently viewing them.

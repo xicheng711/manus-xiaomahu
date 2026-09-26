@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
-import { CARE_DAY_ROLLOVER_HOUR, getCareDayKey, isLateNightCareWindow, resolveCheckInFormTargetDate } from '@/lib/shared-date-range';
+import { CARE_DAY_ROLLOVER_HOUR, getCareDayKey, getYesterdayCareDayKey, isLateNightCareWindow, resolveCheckInFormTargetDate } from '@/lib/shared-date-range';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
@@ -521,6 +521,9 @@ function CheckinLanding({
   onRefresh,
   refreshing = false,
   lateNightCareWindow = false,
+  missedYesterday = false,
+  yesterdayKey = null,
+  onBackfillYesterday,
 }: {
   checkIn: DailyCheckIn | null;
   familyId?: string;
@@ -532,6 +535,9 @@ function CheckinLanding({
   onRefresh?: () => void;
   refreshing?: boolean;
   lateNightCareWindow?: boolean;
+  missedYesterday?: boolean;
+  yesterdayKey?: string | null;
+  onBackfillYesterday?: () => void;
 }) {
   const morningDone = checkIn?.morningDone ?? false;
   const eveningDone = checkIn?.eveningDone ?? false;
@@ -583,6 +589,28 @@ function CheckinLanding({
             当前为凌晨时段，{String(CARE_DAY_ROLLOVER_HOUR).padStart(2, '0')}:00 前完成的晚间记录仍计入{careDayLabel}护理日
           </Text>
         </View>
+      )}
+
+      {/* 昨日漏打卡提醒：点进去走补录流程 */}
+      {missedYesterday && yesterdayKey && (
+        <TouchableOpacity style={styles.missedCard} onPress={onBackfillYesterday} activeOpacity={0.88}>
+          <LinearGradient
+            colors={['#FFB84D', '#FF9500']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.missedIconCircle}
+          >
+            <AppIcon name="calendar" color="#fff" size={22} />
+          </LinearGradient>
+          <View style={styles.missedInfo}>
+            <Text style={styles.missedTitle}>昨天还没打卡</Text>
+            <Text style={styles.missedSubtitle}>
+              {yesterdayKey.match(/^\d{4}-(\d{2})-(\d{2})$/) ? `${Number(yesterdayKey.slice(5, 7))}月${Number(yesterdayKey.slice(8, 10))}日` : ''}的记录空着，补一下吧
+            </Text>
+          </View>
+          <View style={styles.missedButton}>
+            <Text style={styles.missedButtonText}>补打卡 ›</Text>
+          </View>
+        </TouchableOpacity>
       )}
 
       {/* Morning Card */}
@@ -809,6 +837,9 @@ function CheckinScreenContent() {
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('您');
   const [streak, setStreak] = useState<number | null>(null);
+  // 昨日漏打卡提醒：yesterdayKey 为昨天护理日，missedYesterday 为 true 时在 landing 显示补打卡卡片
+  const [yesterdayKey, setYesterdayKey] = useState<string | null>(null);
+  const [missedYesterday, setMissedYesterday] = useState(false);
   const {
     scrollRef: formScrollRef,
     keyboardVisible: formKeyboardVisible,
@@ -1069,6 +1100,12 @@ function CheckinScreenContent() {
         all.filter(c => c.eveningDone || c.morningDone).map(c => c.date)
       )].sort().reverse();
       setStreak(computeStreak(doneDates, getCareDayKey()));
+      // 昨日漏打卡检测：昨天护理日没有任何打卡记录时，landing 显示补打卡提醒卡。
+      // 新用户（没有任何打卡记录）不显示，避免第一天就被"漏打卡"打扰。
+      const yKey = getYesterdayCareDayKey();
+      const yesterdayDone = all.some(c => c.date === yKey && (c.eveningDone || c.morningDone));
+      setYesterdayKey(yKey);
+      setMissedYesterday(!backfillDate && all.length > 0 && !yesterdayDone);
       if (!keepUserInput) {
         // 恢复了草稿：直接打开对应早/晚表单，让用户继续填；
         // 否则走原来的 landing / 补录逻辑。
@@ -1480,6 +1517,11 @@ function CheckinScreenContent() {
           onRefresh={handleRefresh}
           refreshing={refreshing}
           lateNightCareWindow={!backfillDate && isLateNightCareWindow()}
+          missedYesterday={missedYesterday}
+          yesterdayKey={yesterdayKey}
+          onBackfillYesterday={() => {
+            if (yesterdayKey) router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: yesterdayKey } } as any);
+          }}
         />
       </ScreenContainer>
     );
@@ -2162,6 +2204,14 @@ const styles = StyleSheet.create({
   // Tip
   lateNightCareNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: '#F1EDFA', borderWidth: 1, borderColor: '#DDD4F3' },
   lateNightCareNoticeText: { flex: 1, fontSize: 12, lineHeight: 18, color: '#665A9C', fontWeight: '600' },
+  // 昨日漏打卡提醒卡
+  missedCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, backgroundColor: '#FFF9EF', borderWidth: 1.5, borderColor: '#F5C86E', shadowColor: '#FF9500', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 2 },
+  missedIconCircle: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  missedInfo: { flex: 1 },
+  missedTitle: { fontSize: 15, fontWeight: '800', color: '#8A5A00', marginBottom: 2 },
+  missedSubtitle: { fontSize: 12, lineHeight: 17, color: '#A07A2E', fontWeight: '600' },
+  missedButton: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: '#FF9500' },
+  missedButtonText: { fontSize: 13, fontWeight: '800', color: '#FFFFFF' },
   landingTip: { marginTop: 4, marginBottom: 24 },
   landingTipGradient: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
