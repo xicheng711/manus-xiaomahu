@@ -58,8 +58,9 @@ describe('ux-batch7: 提醒卡片 UI', () => {
     expect(src).toContain('补打卡');
   });
 
-  it('点击走 backfillDate 补录流程', () => {
-    expect(src).toMatch(/backfillDate:\s*yesterdayKey/);
+  it('点击走补打卡选择器（batch9 起用 backfillPick，不再直接 backfillDate）', () => {
+    expect(src).toContain("params: { backfillPick: '1' }");
+    expect(src).not.toMatch(/backfillDate:\s*yesterdayKey/);
   });
 
   it('CheckinLanding 接收 missedYesterday 相关 props', () => {

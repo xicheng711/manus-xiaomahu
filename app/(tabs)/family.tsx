@@ -1369,7 +1369,7 @@ export default function FamilyScreen() {
                     {!isToday && isCreator && (
                       <TouchableOpacity
                         style={styles.goCheckinBtn}
-                        onPress={() => router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: item.date } } as any)}
+                        onPress={() => router.push({ pathname: '/(tabs)/checkin', params: { backfillPick: '1' } } as any)}
                       >
                         <Text style={styles.goCheckinBtnText}>去补打卡 →</Text>
                       </TouchableOpacity>

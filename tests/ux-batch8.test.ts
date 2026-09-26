@@ -211,9 +211,10 @@ describe('ux-batch8.3: 漏打卡可见', () => {
     expect(familySrc).toMatch(/isToday \? '🌙' : '⚠️'/);
   });
 
-  it('照顾者在漏打卡日子看到"去补打卡"', () => {
+  it('照顾者在漏打卡日子看到"去补打卡"（batch9 起走选择器 backfillPick）', () => {
     expect(familySrc).toContain('去补打卡 →');
-    expect(familySrc).toMatch(/backfillDate: item\.date/);
+    expect(familySrc).toContain("params: { backfillPick: '1' }");
+    expect(familySrc).not.toMatch(/backfillDate: item\.date/);
   });
 
   it('家人看到"主照顾者昨日没有打卡"', () => {

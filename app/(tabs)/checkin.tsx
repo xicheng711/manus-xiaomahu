@@ -809,8 +809,26 @@ const MEAL_ICONS = ['🍽️', '🥢', '🚫'];
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 function CheckinScreenContent() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ backfillDate?: string; refresh?: string }>();
+  const params = useLocalSearchParams<{ backfillDate?: string; backfillPeriod?: string; backfillPick?: string; refresh?: string }>();
   const backfillDate = params.backfillDate || null;
+  // 补录时段：'morning' | 'evening'，不传则默认 evening（兼容旧入口）
+  const backfillPeriod = params.backfillPeriod === 'morning' ? 'morning' : 'evening';
+
+  // 补录标题：补昨日晚间 / 补昨日早间 / 补9月23日晚间 ……
+  function backfillTitle(): string {
+    if (!backfillDate) return '';
+    const [y, m, d] = backfillDate.split('-').map(Number);
+    const date = new Date(y, m - 1, d, 12);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday =
+      date.getFullYear() === yesterday.getFullYear() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getDate() === yesterday.getDate();
+    const dateLabel = isYesterday ? '昨日' : `${m}月${d}日`;
+    const periodLabel = backfillPeriod === 'morning' ? '早间' : '晚间';
+    return `补${dateLabel}${periodLabel}`;
+  }
   const { memberships, activeMembership, ready: familyReady } = useFamilyContext();
   const familyId = activeMembership?.familyId;
   const activeFamilyRef = useRef<string | undefined>(familyId);
@@ -840,6 +858,11 @@ function CheckinScreenContent() {
   // 昨日漏打卡提醒：yesterdayKey 为昨天护理日，missedYesterday 为 true 时在 landing 显示补打卡卡片
   const [yesterdayKey, setYesterdayKey] = useState<string | null>(null);
   const [missedYesterday, setMissedYesterday] = useState(false);
+  // 补打卡选择器：用户点"补打卡"后先选日期+时段，不再自动进昨晚表单
+  const [showBackfillPicker, setShowBackfillPicker] = useState(false);
+  const [backfillStatus, setBackfillStatus] = useState<Array<{
+    date: string; label: string; morningDone: boolean; eveningDone: boolean;
+  }>>([]);
   const {
     scrollRef: formScrollRef,
     keyboardVisible: formKeyboardVisible,
@@ -1032,7 +1055,7 @@ function CheckinScreenContent() {
         formTargetRef.current = {
           familyId: requestedFamilyId,
           date: targetDate,
-          mode: 'evening',
+          mode: backfillPeriod,
           recordId: existing?.id,
           clientId: existing?.clientId,
           serverCheckInId: existing?.serverCheckInId,
@@ -1116,7 +1139,7 @@ function CheckinScreenContent() {
       if (!keepUserInput) {
         // 恢复了草稿：直接打开对应早/晚表单，让用户继续填；
         // 否则走原来的 landing / 补录逻辑。
-        setMode(restoredDraftMode ?? (backfillDate ? 'evening' : 'landing'));
+        setMode(restoredDraftMode ?? (backfillDate ? backfillPeriod : 'landing'));
         setStep(0);
         setDone(false);
         // 数据初始化完成：打一次字段快照，用于右滑/返回时的"是否填写过"判断
@@ -1124,6 +1147,48 @@ function CheckinScreenContent() {
       }
     })();
   }, [backfillDate, familyId, familyReady, loadCheckInData]));
+
+  // 补打卡选择器入口：带 backfillPick=1 进来时，弹出日期+时段选择器让用户自己选，
+  // 而不是自动进昨晚表单。选好后走正常的 backfillDate/backfillPeriod 流程。
+  useEffect(() => {
+    if (params.backfillPick === '1' && familyReady && familyId) {
+      void (async () => {
+        try {
+          const all = await getAllCheckIns(familyId).catch(() => []);
+          const byDate = new Map<string, DailyCheckIn>();
+          for (const c of all) {
+            if (c?.date && !byDate.has(c.date)) byDate.set(c.date, c);
+          }
+          const days: Array<{ date: string; label: string; morningDone: boolean; eveningDone: boolean }> = [];
+          for (let i = 0; i < 7; i++) {
+            let key: string;
+            let label: string;
+            if (i === 0) {
+              key = getCareDayKey();
+              label = '今日';
+            } else {
+              const d = new Date();
+              d.setDate(d.getDate() - i);
+              key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              label = i === 1 ? '昨日' : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' });
+            }
+            const rec = byDate.get(key);
+            days.push({
+              date: key,
+              label,
+              morningDone: rec?.morningDone ?? false,
+              eveningDone: rec?.eveningDone ?? false,
+            });
+          }
+          setBackfillStatus(days);
+          setShowBackfillPicker(true);
+        } catch { /* 静默失败 */ }
+        // 清掉参数，避免返回时重复弹出
+        router.setParams({ backfillPick: undefined } as any);
+      })();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.backfillPick, familyReady, familyId]);
 
   // 点击通知时强制刷新
   useEffect(() => {
@@ -1399,7 +1464,7 @@ function CheckinScreenContent() {
             </View>
 
             {/* 标题 */}
-            <Text style={styles.nightTitleNew}>{backfillDate ? '昨晚记录已补录' : '晚间记录已保存'}</Text>
+            <Text style={styles.nightTitleNew}>{backfillDate ? `${backfillTitle()}已补录` : '晚间记录已保存'}</Text>
             <Text style={styles.nightSubNew}>今天的护理记录已整理完毕</Text>
 
             {/* 简报生成提示 */}
@@ -1534,9 +1599,77 @@ function CheckinScreenContent() {
           missedYesterday={missedYesterday}
           yesterdayKey={yesterdayKey}
           onBackfillYesterday={() => {
-            if (yesterdayKey) router.push({ pathname: '/(tabs)/checkin', params: { backfillDate: yesterdayKey } } as any);
+            router.push({ pathname: '/(tabs)/checkin', params: { backfillPick: '1' } } as any);
           }}
         />
+
+      {/* ── 补打卡选择器：选日期 + 选早/晚 ── */}
+      <Modal
+        visible={showBackfillPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBackfillPicker(false)}
+      >
+        <View style={backfillStyles.overlay}>
+          <TouchableOpacity
+            style={backfillStyles.overlayTouch}
+            activeOpacity={1}
+            onPress={() => setShowBackfillPicker(false)}
+          />
+          <View style={backfillStyles.sheet}>
+            <View style={backfillStyles.handle} />
+            <View style={backfillStyles.header}>
+              <View>
+                <Text style={backfillStyles.title}>补打卡</Text>
+                <Text style={backfillStyles.subtitle}>选择要补的日期和时段</Text>
+              </View>
+              <TouchableOpacity
+                style={backfillStyles.closeBtn}
+                onPress={() => setShowBackfillPicker(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={backfillStyles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={backfillStyles.list} showsVerticalScrollIndicator={false}>
+              {backfillStatus.map(day => {
+                const complete = day.morningDone && day.eveningDone;
+                return (
+                  <View key={day.date} style={backfillStyles.row}>
+                    <Text style={backfillStyles.dateLabel}>{day.label}</Text>
+                    <View style={backfillStyles.periodRow}>
+                      {(['morning', 'evening'] as const).map(period => {
+                        const done = period === 'morning' ? day.morningDone : day.eveningDone;
+                        const periodLabel = period === 'morning' ? '早间' : '晚间';
+                        if (done) {
+                          return (
+                            <View key={period} style={[backfillStyles.periodBtn, backfillStyles.periodDone]}>
+                              <Text style={backfillStyles.periodDoneText}>{periodLabel} ✅</Text>
+                            </View>
+                          );
+                        }
+                        return (
+                          <TouchableOpacity
+                            key={period}
+                            style={backfillStyles.periodBtn}
+                            onPress={() => {
+                              setShowBackfillPicker(false);
+                              router.setParams({ backfillDate: day.date, backfillPeriod: period } as any);
+                            }}
+                          >
+                            <Text style={backfillStyles.periodBtnText}>补{periodLabel}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    {complete && <Text style={backfillStyles.completeText}>已完成</Text>}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       </ScreenContainer>
     );
   }
@@ -2078,7 +2211,7 @@ function CheckinScreenContent() {
         {/* Header */}
         <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
           <View>
-            <Text style={styles.appName}>{mode === 'morning' ? '早间打卡' : backfillDate ? '补昨晚记录' : '晚间记录'}</Text>
+            <Text style={styles.appName}>{backfillDate ? `${backfillTitle()}记录` : (mode === 'morning' ? '早间打卡' : '晚间记录')}</Text>
             <Text style={styles.date}>{formDateLabel}</Text>
           </View>
           <TouchableOpacity style={styles.backToLanding} onPress={requestCloseForm}>
@@ -2735,6 +2868,47 @@ const styles = StyleSheet.create({
 });
 
 // ─── Calendar Styles ──────────────────────────────────────────────────────────
+// ─── 补打卡选择器 Styles ──────────────────────────────────────────────────────
+const backfillStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  overlayTouch: { flex: 1 },
+  sheet: {
+    backgroundColor: '#FFFDFB',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+    maxHeight: '75%',
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: '#E5DDD6',
+    alignSelf: 'center', marginBottom: 12,
+  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  title: { fontSize: 20, fontWeight: '700', color: COLORS.text },
+  subtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#F5F0EB',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  closeText: { fontSize: 14, color: '#999' },
+  list: { marginTop: 4 },
+  row: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F0EB',
+  },
+  dateLabel: { fontSize: 16, fontWeight: '600', color: COLORS.text, width: 110 },
+  periodRow: { flexDirection: 'row', gap: 8, flex: 1, justifyContent: 'flex-end' },
+  periodBtn: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: '#FFF0EC', borderWidth: 1, borderColor: '#F5C6B8',
+  },
+  periodBtnText: { fontSize: 14, fontWeight: '600', color: '#E0785A' },
+  periodDone: { backgroundColor: '#F5F5F5', borderColor: '#EDEDED' },
+  periodDoneText: { fontSize: 14, color: '#aaa' },
+  completeText: { fontSize: 12, color: '#059669', marginLeft: 8 },
+});
 const CELL_SIZE = Math.floor((width - 76) / 7);
 const calStyles = StyleSheet.create({
   sectionHeader: { marginTop: 20, marginBottom: 10, flexDirection: 'row', alignItems: 'baseline', gap: 8 },
@@ -3002,6 +3176,7 @@ function JoinerCheckinView() {
         </View>
         <MonthCalendar checkIns={allCheckIns} caregiverName="" />
       </ScrollView>
+
     </ScreenContainer>
   );
 }
