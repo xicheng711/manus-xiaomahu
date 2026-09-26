@@ -1422,6 +1422,17 @@ export default function FamilyScreen() {
         )}
       </ScrollView>
 
+      {/* 悬浮"发布公告"按钮：滚到哪里都能点到，不再随内容滚走 */}
+      {activeSection === 'broadcast' && (
+        <TouchableOpacity
+          style={[styles.fabPostButton, { bottom: Math.max(110, insets.bottom + 96) }]}
+          onPress={() => setShowCompose(true)}
+          activeOpacity={0.85}
+        >
+          <AppIcon name="plus" color="#FFFFFF" size={18} />
+          <Text style={styles.fabPostButtonText}>发布公告</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Compose Modal */}
       <Modal visible={showCompose} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => !isPostingAnnouncement && setShowCompose(false)}>
@@ -1971,6 +1982,23 @@ const styles = StyleSheet.create({
   sectionCount: { fontSize: 13, color: AppColors.text.secondary, backgroundColor: AppColors.bg.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   inlinePostButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, backgroundColor: '#B8426A', shadowColor: '#B8426A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 3 },
   inlinePostButtonText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
+  fabPostButton: {
+    position: 'absolute',
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 28,
+    backgroundColor: '#B8426A',
+    shadowColor: '#B8426A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabPostButtonText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
   emptyCard: { alignItems: 'center', padding: 36, backgroundColor: '#FEF0F4', borderRadius: 24, gap: 8, borderWidth: 1.5, borderColor: '#EDAABB' },
   emptyEmoji: { fontSize: 44 },
   emptyText: { fontSize: 16, fontWeight: '800', color: '#B8426A' },
