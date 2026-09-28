@@ -665,7 +665,9 @@ function DiaryScreenContent() {
         const ltb = b.localTimeStr || '00:00';
         return ltb.localeCompare(lta);
       });
-      const next = sorted.slice(0, 30);
+      // 删除后重新排序，确保列表顺序正确（不截断：正常加载也不限条数，
+      // 截断会导致第 31 条及更早的日记暂时消失，直到下次刷新才回来）。
+      const next = sorted;
       setEntries(next);
       if (next.length === 0) setEditMode(false);
     } catch (error: any) {

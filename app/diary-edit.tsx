@@ -222,6 +222,21 @@ function TagOption({ tag, selected, onPress }: { tag: string; selected: boolean;
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+// D3: AI 请求必须有界。地铁/电梯里网络半断开时请求可能永远挂起，
+// 不加超时的话 smartLoading/followUpLoading 永久为 true，输入和"结束并保存"全锁死。
+// 超时后走和失败一样的降级路径（本地已持久化的对话保留，用户可继续编辑或结束保存）；
+// 超时后才姗姗来迟的响应会被丢弃，不会覆盖已结束的状态。
+const AI_REQUEST_TIMEOUT_MS = 60_000;
+function withAiTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('AI_REQUEST_TIMEOUT')), AI_REQUEST_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 export default function DiaryEditScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; readOnly?: string; fromDiary?: string; roomId?: string }>();
@@ -608,31 +623,42 @@ export default function DiaryEditScreen() {
     setSubmitting(true);
     const mood = MOOD_OPTIONS[selectedMood];
     const cgMood = caregiverMoodIdx >= 0 ? CAREGIVER_MOODS[caregiverMoodIdx] : undefined;
-    const savedEntry = await saveDiaryEntry({
-      date: todayStr(),
-      moodEmoji: mood.emoji,
-      moodLabel: mood.label,
-      caregiverMoodEmoji: cgMood?.emoji,
-      caregiverMoodLabel: cgMood?.label,
-      tags: selectedTags,
-      content: content.trim(),
-      conversation: [],
-      authorName: caregiverName || undefined,
-    }, familyId ?? undefined); // 传入 familyId 确保写入正确的 storage key
-    await clearDiaryDraft(familyId);
-    setDraftRestoredAt(null);
-    setEntryId(savedEntry.id);
-    entryRef.current = savedEntry;
-    setServerDiaryId(savedEntry.serverDiaryId ?? null);
-    // 云端创建完成后立即显示家人互动区，无需离开页面再重新打开。
-    waitForServerDiaryId(savedEntry.id).then(id => {
-      if (id) {
-        setServerDiaryId(id);
-        entryRef.current = entryRef.current ? { ...entryRef.current, serverDiaryId: id } : entryRef.current;
-      }
-    }).catch(() => {});
-    setSubmitted(true);
-    setSubmitting(false);
+    // D2: 保存失败必须让按钮恢复可点并提示用户，否则永久卡在"保存中"。
+    // savedEntry 声明在 try 外：后面的 AI 回复段还要用它，catch 里 return 保证
+    // 走到后面时它一定已被赋值。
+    let savedEntry: Awaited<ReturnType<typeof saveDiaryEntry>>;
+    try {
+      savedEntry = await saveDiaryEntry({
+        date: todayStr(),
+        moodEmoji: mood.emoji,
+        moodLabel: mood.label,
+        caregiverMoodEmoji: cgMood?.emoji,
+        caregiverMoodLabel: cgMood?.label,
+        tags: selectedTags,
+        content: content.trim(),
+        conversation: [],
+        authorName: caregiverName || undefined,
+      }, familyId ?? undefined); // 传入 familyId 确保写入正确的 storage key
+      await clearDiaryDraft(familyId);
+      setDraftRestoredAt(null);
+      setEntryId(savedEntry.id);
+      entryRef.current = savedEntry;
+      setServerDiaryId(savedEntry.serverDiaryId ?? null);
+      // 云端创建完成后立即显示家人互动区，无需离开页面再重新打开。
+      waitForServerDiaryId(savedEntry.id).then(id => {
+        if (id) {
+          setServerDiaryId(id);
+          entryRef.current = entryRef.current ? { ...entryRef.current, serverDiaryId: id } : entryRef.current;
+        }
+      }).catch(() => {});
+      setSubmitted(true);
+    } catch (e: any) {
+      // D2: 存储失败必须让按钮恢复可点，并告诉用户，否则永久卡在"保存中"。
+      Alert.alert('保存失败', e?.message || '日记没能保存，请检查网络后重试，内容还保留在输入框里。');
+      return;
+    } finally {
+      setSubmitting(false);
+    }
     // 云端同步已在 saveDiaryEntry 内部完成，此处不再重复调用以避免服务端重复创建日记条目
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -646,7 +672,7 @@ export default function DiaryEditScreen() {
     const napMinutesForContext = getNapMinutes(todayCheckIn);
     let aiText = `${caregiverName}，辛苦了！您的每一份记录都是对${elderNickname}最好的关爱。照顾好自己，才能更好地照顾家人 💕`;
     try {
-      const result = await replyMutation.mutateAsync({
+      const result = await withAiTimeout(replyMutation.mutateAsync({
         elderNickname, caregiverName,
         moodEmoji: mood.emoji, moodLabel: mood.label,
         tags: selectedTags, content: content.trim(),
@@ -671,7 +697,7 @@ export default function DiaryEditScreen() {
           morningNotes: todayCheckIn.morningNotes,
           eveningNotes: todayCheckIn.eveningNotes,
         } : undefined,
-      });
+      }));
       aiText = result.reply ?? aiText;
     } catch { }
 
@@ -720,7 +746,7 @@ export default function DiaryEditScreen() {
     }
     const checkInSummary = checkInSummaryParts.length > 0 ? checkInSummaryParts.join('，') : undefined;
     try {
-      const result = await followUpMutation.mutateAsync({
+      const result = await withAiTimeout(followUpMutation.mutateAsync({
         elderNickname,
         caregiverName,
         originalContent: entryRef.current.content?.trim() || conversationRef.current[0]?.text || '已记录今日护理情况',
@@ -729,7 +755,7 @@ export default function DiaryEditScreen() {
         checkInSummary,
         history: historyForApi,
         question: q,
-      });
+      }));
       const aiMsg: ConversationMessage = { id: generateId(), role: 'ai', text: result.reply, createdAt: new Date().toISOString() };
       const conv2 = [...conv1, aiMsg];
       setConversation(conv2);
