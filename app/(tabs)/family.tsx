@@ -150,6 +150,13 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
       });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSetupComplete();
+    } catch (e) {
+      // 创建失败必须给用户明确反馈，否则按钮转一下就停、用户以为没点到而反复点。
+      console.warn('[FamilySetup] create family failed:', e);
+      Alert.alert(
+        '创建失败',
+        e instanceof Error && e.message ? e.message : '家庭创建失败，请确认已登录并重试。',
+      );
     } finally {
       setLoading(false);
     }
@@ -587,14 +594,19 @@ export default function FamilyScreen() {
 
   // 家人页可见时每 60 秒静默拉取云端，让"主照顾者完成打卡后，这里会自动更新"名副其实。
   // 只在 App 前台且该 tab 聚焦时运行；loadData 内部走缓存优先，不会闪骨架屏。
+  // 注意：loadData 是普通函数，每次渲染都闭包了当时的 activeMembership；
+  // interval 的 useCallback 只有空依赖，会永远捕获首次渲染的旧 loadData——
+  // 切家庭后旧闭包里的 isCurrentFamily 守卫会把请求挡掉，自动刷新静默死亡。
+  // 用 ref 转发，保证每次 tick 调的都是最新的 loadData。
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
   useFocusEffect(useCallback(() => {
     const timer = setInterval(() => {
       if (AppState.currentState === 'active') {
-        void loadData(true).catch(() => {});
+        void loadDataRef.current(true).catch(() => {});
       }
     }, 60_000);
     return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
   // 点击通知时强制刷新

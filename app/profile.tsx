@@ -27,8 +27,8 @@ import {
 } from '@/lib/notifications';
 import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
-import { cloudUploadPhoto, cloudUpdateMemberProfile, cloudUpdateElderProfile, cloudGetElderProfile } from '@/lib/cloud-sync';
-import { clearAllLocalData } from '@/lib/storage';
+import { cloudUploadPhoto, cloudUpdateMemberProfile, cloudUpdateElderProfile, cloudGetElderProfile, clearCloudSyncState } from '@/lib/cloud-sync';
+import { clearAllLocalData, clearCheckInDraft } from '@/lib/storage';
 import { removeSessionToken, clearUserInfo } from '@/lib/_core/auth';
 
 export default function ProfileScreen() {
@@ -87,9 +87,18 @@ export default function ProfileScreen() {
   const [showSignOutModal, setShowSignOutModal] = useState(false);
 
   async function handleSignOut() {
-    // 先取消本账号的用药提醒（必须在清本地数据之前，否则存的通知 ID 就找不到了）
+    // 先取消本账号的全部提醒（用药 + 智能打卡），必须在清本地数据之前，
+    // 否则存的通知 ID 就找不到了，旧账号的提醒会继续响。
     await cancelAllMedicationReminders().catch(() => {});
+    await cancelAllReminders().catch(() => {});
     await clearAllLocalData();
+    // 云同步状态（active room / user）不在 clearAllLocalData 的 KEYS 里，必须单独清，
+    // 否则同一设备换账号会复用旧 room/user 状态。
+    await clearCloudSyncState().catch(() => {});
+    // 游客草稿也不在 KEYS 里：登出时必须清，否则 48 小时内另一账号可能恢复
+    // 上一位用户的备注（跨用户泄露）。注意这不影响"存草稿并去登录"——
+    // 游客去登录的流程里不经过登出，草稿会保留到登录后恢复。
+    await clearCheckInDraft().catch(() => {});
     await removeSessionToken();
     await clearUserInfo();
     setShowSignOutModal(false);
@@ -110,7 +119,10 @@ export default function ProfileScreen() {
       
       // Only clear local data if server deletion succeeded
       await cancelAllMedicationReminders().catch(() => {});
+      await cancelAllReminders().catch(() => {});
       await clearAllLocalData();
+      await clearCloudSyncState().catch(() => {});
+      await clearCheckInDraft().catch(() => {});
       await removeSessionToken();
       await clearUserInfo();
       
