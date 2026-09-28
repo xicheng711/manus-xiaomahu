@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
-import { Alert, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
@@ -107,6 +107,32 @@ function NotificationNavigator() {
   return null;
 }
 
+/**
+ * App 回到前台时重排智能打卡提醒。
+ * 提醒是提前安排未来几天的：即使用户某天没点开打卡 tab，
+ * 只要打开过 App，窗口就会被刷新续上，避免提醒断档。
+ * ensureTodayReminders 是幂等的（同时间已安排过就跳过），前台切换开销很小。
+ */
+function ReminderForegroundSync() {
+  const { activeMembership } = useFamilyContext();
+  const ref = useRef({ familyId: activeMembership?.familyId, name: activeMembership?.room.elderName });
+  ref.current = { familyId: activeMembership?.familyId, name: activeMembership?.room.elderName };
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      const { familyId, name } = ref.current;
+      import("@/lib/notifications")
+        .then(({ ensureTodayReminders }) => ensureTodayReminders(name || undefined, familyId))
+        .catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+
+  return null;
+}
+
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
@@ -194,6 +220,7 @@ export default function RootLayout() {
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
           <FamilyProvider>
             <NotificationNavigator />
+            <ReminderForegroundSync />
             <WeatherProvider>
               <Stack screenOptions={{
                   headerShown: false,

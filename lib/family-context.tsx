@@ -322,6 +322,18 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
     }
     setActiveMembership({ ...target, room: target.room });
 
+    // 智能打卡提醒是按日期 key 存的设备级提醒：切家庭后旧家庭的提醒文案/状态已失效，
+    // 先全部取消，再按新家庭的打卡状态和提醒设置重排，避免 A 家庭的提醒顶着 B 家庭老人的名字响。
+    void (async () => {
+      try {
+        const { cancelAllReminders, ensureTodayReminders } = await import('./notifications');
+        await cancelAllReminders();
+        await ensureTodayReminders(target.room.elderName || undefined, familyId);
+      } catch {
+        // 静默失败：提醒重排失败不阻塞切换家庭
+      }
+    })();
+
     // Step 3: 后台异步刷新云端数据（不阻塞 UI）
     ;(async () => {
       // 拉取最新 room detail
