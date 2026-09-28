@@ -1160,6 +1160,7 @@ function CheckinScreenContent() {
             if (c?.date && !byDate.has(c.date)) byDate.set(c.date, c);
           }
           const days: Array<{ date: string; label: string; morningDone: boolean; eveningDone: boolean }> = [];
+          const seenKeys = new Set<string>();
           for (let i = 0; i < 7; i++) {
             let key: string;
             let label: string;
@@ -1172,6 +1173,9 @@ function CheckinScreenContent() {
               key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
               label = i === 1 ? '昨日' : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' });
             }
+            // 凌晨 00:00–04:59 护理日仍是昨天，会和 i=1 的日历昨天重复：去重
+            if (seenKeys.has(key)) continue;
+            seenKeys.add(key);
             const rec = byDate.get(key);
             days.push({
               date: key,
@@ -1436,6 +1440,82 @@ function CheckinScreenContent() {
   }
 
   // ── Done State ──
+  // 补打卡选择器弹窗：landing 和表单两个 return 都要渲染，
+  // 否则表单开着时从家人页点"去补打卡"会看不到选择器。
+  function renderBackfillPicker() {
+    return (
+      <>
+      {/* ── 补打卡选择器：选日期 + 选早/晚 ── */}
+<Modal
+  visible={showBackfillPicker}
+  transparent
+  animationType="slide"
+  onRequestClose={() => setShowBackfillPicker(false)}
+>
+  <View style={backfillStyles.overlay}>
+    <TouchableOpacity
+      style={backfillStyles.overlayTouch}
+      activeOpacity={1}
+      onPress={() => setShowBackfillPicker(false)}
+    />
+    <View style={backfillStyles.sheet}>
+      <View style={backfillStyles.handle} />
+      <View style={backfillStyles.header}>
+        <View>
+          <Text style={backfillStyles.title}>补打卡</Text>
+          <Text style={backfillStyles.subtitle}>选择要补的日期和时段</Text>
+        </View>
+        <TouchableOpacity
+          style={backfillStyles.closeBtn}
+          onPress={() => setShowBackfillPicker(false)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={backfillStyles.closeText}>✕</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView style={backfillStyles.list} showsVerticalScrollIndicator={false}>
+        {backfillStatus.map(day => {
+          const complete = day.morningDone && day.eveningDone;
+          return (
+            <View key={day.date} style={backfillStyles.row}>
+              <Text style={backfillStyles.dateLabel}>{day.label}</Text>
+              <View style={backfillStyles.periodRow}>
+                {(['morning', 'evening'] as const).map(period => {
+                  const done = period === 'morning' ? day.morningDone : day.eveningDone;
+                  const periodLabel = period === 'morning' ? '早间' : '晚间';
+                  if (done) {
+                    return (
+                      <View key={period} style={[backfillStyles.periodBtn, backfillStyles.periodDone]}>
+                        <Text style={backfillStyles.periodDoneText}>{periodLabel} ✅</Text>
+                      </View>
+                    );
+                  }
+                  return (
+                    <TouchableOpacity
+                      key={period}
+                      style={backfillStyles.periodBtn}
+                      onPress={() => {
+                        setShowBackfillPicker(false);
+                        router.setParams({ backfillDate: day.date, backfillPeriod: period } as any);
+                      }}
+                    >
+                      <Text style={backfillStyles.periodBtnText}>补{periodLabel}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {complete && <Text style={backfillStyles.completeText}>已完成</Text>}
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  </View>
+</Modal>
+      </>
+    );
+  }
+
   if (done) {
     const isMorning = mode === 'morning';
 
@@ -1537,6 +1617,7 @@ function CheckinScreenContent() {
       );
     }
 
+
     return (
       <ScreenContainer containerClassName="bg-[#F0FDF4]">
         <Animated.View style={[styles.morningDoneContainer, { opacity: doneFade, transform: [{ scale: doneScale }] }]}>
@@ -1603,73 +1684,7 @@ function CheckinScreenContent() {
           }}
         />
 
-      {/* ── 补打卡选择器：选日期 + 选早/晚 ── */}
-      <Modal
-        visible={showBackfillPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowBackfillPicker(false)}
-      >
-        <View style={backfillStyles.overlay}>
-          <TouchableOpacity
-            style={backfillStyles.overlayTouch}
-            activeOpacity={1}
-            onPress={() => setShowBackfillPicker(false)}
-          />
-          <View style={backfillStyles.sheet}>
-            <View style={backfillStyles.handle} />
-            <View style={backfillStyles.header}>
-              <View>
-                <Text style={backfillStyles.title}>补打卡</Text>
-                <Text style={backfillStyles.subtitle}>选择要补的日期和时段</Text>
-              </View>
-              <TouchableOpacity
-                style={backfillStyles.closeBtn}
-                onPress={() => setShowBackfillPicker(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={backfillStyles.closeText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={backfillStyles.list} showsVerticalScrollIndicator={false}>
-              {backfillStatus.map(day => {
-                const complete = day.morningDone && day.eveningDone;
-                return (
-                  <View key={day.date} style={backfillStyles.row}>
-                    <Text style={backfillStyles.dateLabel}>{day.label}</Text>
-                    <View style={backfillStyles.periodRow}>
-                      {(['morning', 'evening'] as const).map(period => {
-                        const done = period === 'morning' ? day.morningDone : day.eveningDone;
-                        const periodLabel = period === 'morning' ? '早间' : '晚间';
-                        if (done) {
-                          return (
-                            <View key={period} style={[backfillStyles.periodBtn, backfillStyles.periodDone]}>
-                              <Text style={backfillStyles.periodDoneText}>{periodLabel} ✅</Text>
-                            </View>
-                          );
-                        }
-                        return (
-                          <TouchableOpacity
-                            key={period}
-                            style={backfillStyles.periodBtn}
-                            onPress={() => {
-                              setShowBackfillPicker(false);
-                              router.setParams({ backfillDate: day.date, backfillPeriod: period } as any);
-                            }}
-                          >
-                            <Text style={backfillStyles.periodBtnText}>补{periodLabel}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                    {complete && <Text style={backfillStyles.completeText}>已完成</Text>}
-                  </View>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        {renderBackfillPicker()}
       </ScreenContainer>
     );
   }
@@ -2277,6 +2292,7 @@ function CheckinScreenContent() {
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
+      {renderBackfillPicker()}
     </ScreenContainer>
     </GestureDetector>
   );
