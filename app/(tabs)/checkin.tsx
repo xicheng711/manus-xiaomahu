@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFamilyContext } from '@/lib/family-context';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
 import { scoreSleepInput } from '@/lib/sleep-scoring';
-import { CARE_DAY_ROLLOVER_HOUR, getCareDayKey, getYesterdayCareDayKey, isLateNightCareWindow, resolveCheckInFormTargetDate } from '@/lib/shared-date-range';
+import { CARE_DAY_ROLLOVER_HOUR, getCareDayKey, getYesterdayCareDayKey, isLateNightCareWindow, parseDateKeyAtNoon, resolveCheckInFormTargetDate } from '@/lib/shared-date-range';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
@@ -1124,6 +1124,25 @@ function CheckinScreenContent() {
         }
       }
 
+      // refocus 后重建表单锁定目标：
+      // useFocusEffect 开头把 formTargetRef 置空后，只给补录（backfillDate）重建了，
+      // 普通表单和刚恢复的游客草稿没有重建——切 tab 回来再点保存会被守卫拦掉
+      // （"打卡目标已变化"），内容填了也存不上。这里按当前实际状态补上。
+      if (!backfillDate) {
+        const activeMode = restoredDraftMode
+          ?? (modeRef.current === 'morning' || modeRef.current === 'evening' ? modeRef.current : null);
+        if (activeMode) {
+          formTargetRef.current = {
+            familyId: requestedFamilyId,
+            date: targetDate,
+            mode: activeMode,
+            recordId: existing?.id,
+            clientId: existing?.clientId,
+            serverCheckInId: existing?.serverCheckInId,
+          };
+        }
+      }
+
       const all = await getAllCheckIns(requestedFamilyId);
       if (!isCurrentFamily()) return;
       const doneDates = [...new Set(
@@ -1146,7 +1165,7 @@ function CheckinScreenContent() {
         needsSnapshotRef.current = true;
       }
     })();
-  }, [backfillDate, familyId, familyReady, loadCheckInData]));
+  }, [backfillDate, backfillPeriod, familyId, familyReady, loadCheckInData]));
 
   // 补打卡选择器入口：带 backfillPick=1 进来时，弹出日期+时段选择器让用户自己选，
   // 而不是自动进昨晚表单。选好后走正常的 backfillDate/backfillPeriod 流程。
@@ -1160,22 +1179,17 @@ function CheckinScreenContent() {
             if (c?.date && !byDate.has(c.date)) byDate.set(c.date, c);
           }
           const days: Array<{ date: string; label: string; morningDone: boolean; eveningDone: boolean }> = [];
-          const seenKeys = new Set<string>();
+          // 以当前护理日为锚点连续倒推 7 天：凌晨 00:00–04:59 护理日仍是昨天，
+          // 若用"第 0 天护理日 + 其余自然日"混算，i=1 的自然日会和护理日重复导致少一天。
+          // parseDateKeyAtNoon 按中午解析，避免夏令时切换日的边界问题。
+          const anchorDate = parseDateKeyAtNoon(getCareDayKey()) ?? new Date();
           for (let i = 0; i < 7; i++) {
-            let key: string;
-            let label: string;
-            if (i === 0) {
-              key = getCareDayKey();
-              label = '今日';
-            } else {
-              const d = new Date();
-              d.setDate(d.getDate() - i);
-              key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-              label = i === 1 ? '昨日' : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' });
-            }
-            // 凌晨 00:00–04:59 护理日仍是昨天，会和 i=1 的日历昨天重复：去重
-            if (seenKeys.has(key)) continue;
-            seenKeys.add(key);
+            const d = new Date(anchorDate);
+            d.setDate(d.getDate() - i);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const label = i === 0 ? '今日'
+              : i === 1 ? '昨日'
+              : d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', weekday: 'short' });
             const rec = byDate.get(key);
             days.push({
               date: key,
@@ -1228,6 +1242,11 @@ function CheckinScreenContent() {
 
   function closeCheckInForm() {
     formTargetRef.current = null;
+    // 清掉补录路由参数：否则"查看打卡状态"回到 landing 后，
+    // backfillDate 残留会导致 landing 显示旧日期的记录，且下一次打卡被锁定到旧日期。
+    if (backfillDate || backfillPeriod) {
+      router.setParams({ backfillDate: undefined, backfillPeriod: undefined } as any);
+    }
     setMode('landing');
   }
 
@@ -1377,11 +1396,12 @@ function CheckinScreenContent() {
     }
     await upsertCheckIn(data, familyId);
     // 注意：upsertCheckIn 内部已经调用了 cloudSyncCheckIn，无需重复调用
-    // 智能提醒：该时段已打卡，取消今日未响的提醒，不再打扰
+    // 智能提醒：该时段已打卡，取消该打卡日期未响的提醒，不再打扰。
+    // 注意必须按记录的实际日期取消：补打卡（过去日期）不能取消今天的提醒。
     void (async () => {
       try {
-        const { cancelTodayReminder } = await import('@/lib/notifications');
-        await cancelTodayReminder(mode === 'morning' ? 'morning' : 'evening');
+        const { cancelReminderForDate } = await import('@/lib/notifications');
+        await cancelReminderForDate(formTarget.mode === 'morning' ? 'morning' : 'evening', formTarget.date);
       } catch { /* 静默失败 */ }
     })();
     // 正式保存成功：游客草稿使命完成，在这里清除（恢复时不立即清，防止用户中途退出又丢）
