@@ -233,8 +233,10 @@ describe('Check-in resilience, permissions, and cross-timezone viewing', () => {
     expect(storage).toContain('export async function syncPendingCheckIns');
     expect(storage).toContain('syncPending: true');
     expect(checkin).toContain('syncPendingCheckIns(requestedFamilyId)');
-    expect(router).toContain('previous?.eveningDone !== true');
-    expect(router).toContain('previous?.morningDone !== true');
+    expect(router).toContain('effectivePrevious?.eveningDone !== true');
+    expect(router).toContain('effectivePrevious?.morningDone !== true');
+    // 单调合并已抽成辅助函数（S2 重构）
+    expect(router).toContain('function applyMonotonicCheckInMerge');
   });
 
   it('enforces creator-only writes and derives the screen role from activeMembership', () => {
@@ -869,13 +871,20 @@ describe('Evening check-in durability and instant family-tab loading', () => {
     expect(storage).toContain('mergeDuplicateCloudCheckIns(cloudEntries).map');
   });
 
-  it('enforces one server check-in per family/date and ignores stale phase snapshots', () => {
+  it('enforces one server check-in per family/date and merges stale snapshots monotonically', () => {
     expect(schema).toContain('uniqueIndex("uq_check_ins_room_date").on(table.roomId, table.date)');
     expect(db).toContain("INDEX_NAME = 'uq_check_ins_room_date'");
     expect(db).toContain('merged duplicate check-ins and added room/date unique index');
     expect(familyDb).toContain('onDuplicateKeyUpdate({ set: data })');
-    expect(familyRouter).toContain('input.completedAt < previous.completedAt');
-    expect(familyRouter).toContain('if (previous?.eveningDone === true && input.eveningDone !== true)');
+    // S1: 旧快照不再无条件整单丢弃——只在"没带来任何新完成时段"时才 staleIgnored，
+    // 迟到的早间快照能经单调合并写入，不再丢数据。
+    expect(familyRouter).toContain('inputBringsNewMorning');
+    expect(familyRouter).toContain('inputBringsNewEvening');
+    expect(familyRouter).toContain('staleIgnored: true');
+    // S2: 写入前按日期重查 + 唯一冲突时走合并更新，不用本机快照整行覆盖
+    expect(familyRouter).toContain('isDuplicateKeyError');
+    expect(familyRouter).toContain('applyMonotonicCheckInMerge');
+    expect(familyRouter).toContain('if (previous.eveningDone === true && input.eveningDone !== true)');
   });
 
   it('renders room-scoped local family content before starting cloud work', () => {
