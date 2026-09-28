@@ -80,14 +80,17 @@ function TypingIndicator() {
   const dot2 = useRef(new Animated.Value(0)).current;
   const dots = [dot0, dot1, dot2];
   useEffect(() => {
-    dots.forEach((dot, i) => {
+    // A5: 3 个 dot 的无限 loop 加 cleanup；原来每次 AI 回复挂载→卸载一次就泄漏 3 个 native 循环。
+    const loops = dots.map((dot, i) =>
       Animated.loop(
         Animated.sequence([
           Animated.timing(dot, { toValue: -6, duration: 300, delay: i * 150, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(dot, { toValue: 0, duration: 300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ])
-      ).start();
-    });
+      )
+    );
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
   }, []);
   return (
     <View style={styles.typingRow}>
@@ -281,9 +284,12 @@ export default function DiaryEditScreen() {
   const draftLoadedFamilyRef = useRef<string | null>(null);
   useEffect(() => {
     fadeInUp(formFade, formSlide, { duration: 400 });
-    Animated.loop(
+    // A6: 注释写"只运行一次"实际是无限 loop；加 cleanup，加载完/卸载后停掉。
+    const shimmer = Animated.loop(
       Animated.timing(shimmerAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
-    ).start();
+    );
+    shimmer.start();
+    return () => shimmer.stop();
   }, []);
 
   // 通知可能来自另一个家庭：先切换到通知对应家庭，避免从错误的缓存和房间读取日记。

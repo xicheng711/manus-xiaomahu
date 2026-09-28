@@ -94,6 +94,10 @@ function ShareLoadingScreen() {
   const titleY = useRef(new Animated.Value(18)).current;
 
   useEffect(() => {
+    // A9: 无限动画（badge loop、shimmerX loop、3 个 pulse、递归 runProgress）全部加 cleanup；
+    // 原来分享生成结束、loading 屏卸载时约 7 个动画泄漏到 native 侧。
+    const infinite: Animated.CompositeAnimation[] = [];
+    let alive = true;
     Animated.parallel([
       Animated.timing(cardScale, { toValue: 1, duration: 450, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
       Animated.timing(cardOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
@@ -103,7 +107,7 @@ function ShareLoadingScreen() {
       Animated.timing(bar2, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
       Animated.timing(bar3, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: false }),
     ]).start();
-    Animated.loop(Animated.sequence([
+    const badgeLoop = Animated.loop(Animated.sequence([
       Animated.parallel([
         Animated.timing(badgeY, { toValue: -10, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(badgeRot, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -112,27 +116,38 @@ function ShareLoadingScreen() {
         Animated.timing(badgeY, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(badgeRot, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ]),
-    ])).start();
+    ]));
+    infinite.push(badgeLoop);
+    badgeLoop.start();
     const runProgress = () => {
+      if (!alive) return;
       progressVal.setValue(0);
       Animated.timing(progressVal, { toValue: 1, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: false })
-        .start(({ finished }) => { if (finished) runProgress(); });
+        .start(({ finished }) => { if (finished && alive) runProgress(); });
     };
     runProgress();
-    Animated.loop(Animated.timing(shimmerX, { toValue: 2, duration: 1500, easing: Easing.linear, useNativeDriver: false })).start();
+    const shimmerLoop = Animated.loop(Animated.timing(shimmerX, { toValue: 2, duration: 1500, easing: Easing.linear, useNativeDriver: false }));
+    infinite.push(shimmerLoop);
+    shimmerLoop.start();
     const makePulse = (anim: Animated.Value, delay: number) =>
       Animated.loop(Animated.sequence([
         Animated.delay(delay),
         Animated.timing(anim, { toValue: 1, duration: 1000, useNativeDriver: true }),
         Animated.timing(anim, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
       ]));
-    makePulse(pulse1, 0).start();
-    makePulse(pulse2, 500).start();
-    makePulse(pulse3, 1000).start();
+    [pulse1, pulse2, pulse3].forEach((p, i) => {
+      const loop = makePulse(p, i * 500);
+      infinite.push(loop);
+      loop.start();
+    });
     Animated.parallel([
       Animated.timing(titleOpacity, { toValue: 1, duration: 600, delay: 300, useNativeDriver: true }),
       Animated.timing(titleY, { toValue: 0, duration: 600, delay: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start();
+    return () => {
+      alive = false;
+      infinite.forEach((a) => a.stop());
+    };
   }, []);
 
   const badgeSpin = badgeRot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '5deg'] });
@@ -825,10 +840,13 @@ export default function ShareScreen() {
   const sharePulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.loop(Animated.sequence([
+    // A10: loop 加 cleanup。
+    const pulse = Animated.loop(Animated.sequence([
       Animated.timing(sharePulse, { toValue: 1.02, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       Animated.timing(sharePulse, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ])).start();
+    ]));
+    pulse.start();
+    return () => pulse.stop();
   }, []);
 
   const generateBriefingMutation = trpc.ai.generateBriefing.useMutation();

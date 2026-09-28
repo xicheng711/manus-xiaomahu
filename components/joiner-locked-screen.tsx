@@ -22,12 +22,15 @@ export function JoinerLockedScreen({ icon, title, description }: Props) {
       Animated.timing(fade, { toValue: 1, duration: 450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       Animated.timing(slide, { toValue: 0, duration: 450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
-    Animated.loop(
+    // A11: pulse loop 加 cleanup。
+    const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(pulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
-    ).start();
+    );
+    pulseLoop.start();
+    return () => pulseLoop.stop();
   }, []);
 
   return (

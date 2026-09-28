@@ -235,12 +235,15 @@ function EmptyState({ onStart }: { onStart: () => void }) {
 
   useEffect(() => {
     fadeInUp(fadeAnim, slideAnim, { duration: 600 });
-    Animated.loop(
+    // A8: pulse loop 加 cleanup；发布第一篇日记后组件卸载，原来泄漏一个 native 循环。
+    const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.08, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
-    ).start();
+    );
+    pulse.start();
+    return () => pulse.stop();
   }, []);
 
   return (

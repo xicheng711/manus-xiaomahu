@@ -53,13 +53,23 @@ function FloatingCloud({ top = 0, left = 0, delay = 0 }: { top?: number; left?: 
   const floatY = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    setTimeout(() => {
-      Animated.timing(fadeIn, { toValue: 0.55, duration: 1000, useNativeDriver: true }).start();
-      Animated.loop(Animated.sequence([
+    // A2: setTimeout + loop 都要有 cleanup，否则切 tab/登出时在 native 侧空转泄漏。
+    let loop: Animated.CompositeAnimation | undefined;
+    let fade: Animated.CompositeAnimation | undefined;
+    const timer = setTimeout(() => {
+      fade = Animated.timing(fadeIn, { toValue: 0.55, duration: 1000, useNativeDriver: true });
+      fade.start();
+      loop = Animated.loop(Animated.sequence([
         Animated.timing(floatY, { toValue: -8, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(floatY, { toValue: 0, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])).start();
+      ]));
+      loop.start();
     }, delay);
+    return () => {
+      clearTimeout(timer);
+      loop?.stop();
+      fade?.stop();
+    };
   }, []);
   return (
     <Animated.Text style={{ position: 'absolute', top, left, fontSize: 28, opacity: fadeIn, transform: [{ translateY: floatY }] }}>
@@ -75,12 +85,19 @@ function FloatingSparkle({ top = 0, left = 0, delay = 0, size = 9 }: {
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    setTimeout(() => {
-      Animated.loop(Animated.sequence([
+    // A2: 同 FloatingCloud，timeout + loop 都要有 cleanup。
+    let loop: Animated.CompositeAnimation | undefined;
+    const timer = setTimeout(() => {
+      loop = Animated.loop(Animated.sequence([
         Animated.timing(opacity, { toValue: 0.55, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(opacity, { toValue: 0.08, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])).start();
+      ]));
+      loop.start();
     }, delay);
+    return () => {
+      clearTimeout(timer);
+      loop?.stop();
+    };
   }, []);
   return <Animated.Text style={{ position: 'absolute', top, left, fontSize: size, opacity, color: '#D4A8C8' }}>✦</Animated.Text>;
 }
@@ -114,30 +131,40 @@ function EnhancedCheckinBanner({
   ], []);
 
   useEffect(() => {
+    // A1: 无限动画必须在 effect 重跑/组件卸载时停掉。
+    // 原来无 cleanup：morningDone 翻转 → effect 重跑 → 旧的 3 个 loop + 4 条星星递归链
+    // 永久在 native 侧空转；登出卸载时全部泄漏。
+    const loops: Animated.CompositeAnimation[] = [];
+    let alive = true;
+    const startLoop = (anim: Animated.CompositeAnimation) => {
+      loops.push(anim);
+      anim.start();
+    };
     if (!morningDone) {
-      Animated.loop(Animated.sequence([
+      startLoop(Animated.loop(Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.02, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])).start();
+      ])));
 
-      Animated.loop(Animated.parallel([
+      startLoop(Animated.loop(Animated.parallel([
         Animated.sequence([
           Animated.timing(wave1Scale, { toValue: 1.4, duration: 6000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(wave1Scale, { toValue: 1, duration: 6000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ]),
         Animated.timing(wave1Rotate, { toValue: 1, duration: 12000, easing: Easing.linear, useNativeDriver: true }),
-      ])).start();
+      ])));
 
-      Animated.loop(Animated.parallel([
+      startLoop(Animated.loop(Animated.parallel([
         Animated.sequence([
           Animated.timing(wave2Scale, { toValue: 1.5, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(wave2Scale, { toValue: 1, duration: 5000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ]),
         Animated.timing(wave2Rotate, { toValue: 1, duration: 10000, easing: Easing.linear, useNativeDriver: true }),
-      ])).start();
+      ])));
 
       starAnimations.forEach((star, i) => {
         const runStar = () => {
+          if (!alive) return;
           star.scale.setValue(0); star.opacity.setValue(0); star.rotate.setValue(0);
           Animated.sequence([
             Animated.delay(i * 500),
@@ -153,11 +180,15 @@ function EnhancedCheckinBanner({
               Animated.timing(star.rotate, { toValue: 1, duration: 800, useNativeDriver: true }),
             ]),
             Animated.delay(2000),
-          ]).start(() => runStar());
+          ]).start(() => { if (alive) runStar(); });
         };
         runStar();
       });
     }
+    return () => {
+      alive = false;
+      loops.forEach((l) => l.stop());
+    };
   }, [morningDone]);
 
   const wave1Rot = wave1Rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '120deg'] });
@@ -255,13 +286,18 @@ function EnhancedSmartCard({
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.loop(Animated.sequence([
+    // A3: 两个无限 loop 加 cleanup，卸载时停掉。
+    const scaleLoop = Animated.loop(Animated.sequence([
       Animated.timing(iconScale, { toValue: 1.15, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       Animated.timing(iconScale, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ])).start();
-
-    Animated.loop(Animated.timing(iconRotate, { toValue: 1, duration: 4000, easing: Easing.inOut(Easing.ease), useNativeDriver: true })).start();
-
+    ]));
+    const rotateLoop = Animated.loop(Animated.timing(iconRotate, { toValue: 1, duration: 4000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }));
+    scaleLoop.start();
+    rotateLoop.start();
+    return () => {
+      scaleLoop.stop();
+      rotateLoop.stop();
+    };
   }, []);
 
   const iconRotation = iconRotate.interpolate({
@@ -348,25 +384,39 @@ function QuickActionCard({
   const emojiRotate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
+    // A4: 入场动画是一次性的；两个 setTimeout 延迟启动的无限 loop 要能停掉，
+    // 否则每个快捷卡片泄漏 1-2 个 native 循环。
+    const entrance = Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 420, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]).start();
+    ]);
+    entrance.start();
 
-    setTimeout(() => {
-      Animated.loop(Animated.timing(emojiRotate, {
+    let emojiLoop: Animated.CompositeAnimation | undefined;
+    let pulseLoop: Animated.CompositeAnimation | undefined;
+    const t1 = setTimeout(() => {
+      emojiLoop = Animated.loop(Animated.timing(emojiRotate, {
         toValue: 1, duration: 3200, easing: Easing.inOut(Easing.ease), useNativeDriver: true,
-      })).start();
+      }));
+      emojiLoop.start();
     }, delay + 600);
 
+    let t2: ReturnType<typeof setTimeout> | undefined;
     if (pulse) {
-      setTimeout(() => {
-        Animated.loop(Animated.sequence([
+      t2 = setTimeout(() => {
+        pulseLoop = Animated.loop(Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.028, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(pulseAnim, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ])).start();
+        ]));
+        pulseLoop.start();
       }, delay + 1200);
     }
+    return () => {
+      clearTimeout(t1);
+      if (t2) clearTimeout(t2);
+      emojiLoop?.stop();
+      pulseLoop?.stop();
+    };
   }, []);
 
   const emojiRot = emojiRotate.interpolate({
@@ -546,56 +596,62 @@ function CreatorHomeScreen() {
     // Use whichever is a valid https:// URL, or fall back to any non-null value
     const member = requestedMembership.room.members.find(m => m.id === requestedMembership.myMemberId) ?? null;
     setMemberAvatarEmoji(getMemberDisplayEmoji(member));
-    // 头像加载：主动从云端拉取最新 room detail，确保头像是最新的
-    let resolvedPhotoUri: string | null = null;
-    let serverHasPhoto = false;
+    // C: 头像的云端刷新不能阻塞首屏。原来这里 await cloudGetRoomDetail，
+    // 弱网下打卡横幅/趋势图/日记都要等头像接口返回。
+    // 改为：先按本地缓存立刻渲染头像，云端 detail 在后台刷新、拿到更新后再升级。
     const roomId = parseInt(requestedFamilyId);
-    try {
-      if (roomId && !isNaN(roomId)) {
-        const detail = await cloudGetRoomDetail(roomId);
-        if (!isCurrentFamily()) return;
-        if (detail?.members) {
-          const freshMember = detail.members.find(
-            (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(requestedMembership.myMemberId)
-          );
-          if (freshMember?.photoUri && !freshMember.photoUri.startsWith('file://')) {
-            resolvedPhotoUri = freshMember.photoUri;
-            serverHasPhoto = true;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[Home] cloudGetRoomDetail for avatar failed:', e);
-    }
-    // 降级顺序：云端最新 > activeMembership 缓存 > caregiverPhotoUri > member.photoUri
-    // 允许 file:// 路径作为最后的 fallback（本地照片在同一设备上可以正常显示）
-    if (!resolvedPhotoUri) {
+    // 本地头像解析（降级顺序：membership 缓存 > caregiverPhotoUri > member.photoUri；
+    // 优先非 file:// 的云端 URL，file:// 本地路径做最后 fallback）
+    const resolveLocalPhotoUri = (): string | null => {
       const cachedMember = requestedMembership.room.members.find(
         (m: any) => m.isCurrentUser || (member?.id && String(m.id) === String(member.id))
       );
       const cachedPhotoUri = cachedMember?.photoUri;
       const caregiverPhotoUri = userProfile?.caregiverPhotoUri || legacyProfile?.caregiverPhotoUri;
       const memberPhotoUriVal = member?.photoUri;
-      // 优先用非 file:// 的 URL（云端 URL）
-      resolvedPhotoUri =
+      return (
         (cachedPhotoUri && !cachedPhotoUri.startsWith('file://') ? cachedPhotoUri : null) ??
         (caregiverPhotoUri && !caregiverPhotoUri.startsWith('file://') ? caregiverPhotoUri : null) ??
         (memberPhotoUriVal && !memberPhotoUriVal.startsWith('file://') ? memberPhotoUriVal : null) ??
-        // 如果没有云端 URL，允许 file:// 本地路径作为 fallback
-        cachedPhotoUri ?? caregiverPhotoUri ?? memberPhotoUriVal ?? null;
-    }
-    // 如果服务器端没有头像但本地有非 file:// 的 URL，自动同步到服务器（修复旧版上传失败的情况）
-    if (!serverHasPhoto && resolvedPhotoUri && !resolvedPhotoUri.startsWith('file://') && roomId && !isNaN(roomId)) {
-      const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
-      cloudUpdateMemberProfile({ roomId, photoUri: resolvedPhotoUri }).catch(() => {});
-    }
-    if (!isCurrentFamily()) return;
-    setMemberPhotoUri(resolvedPhotoUri);
-    if (resolvedPhotoUri) { setPhotoLoadError(false); }
+        cachedPhotoUri ?? caregiverPhotoUri ?? memberPhotoUriVal ?? null
+      );
+    };
+    const localPhotoUri = resolveLocalPhotoUri();
+    setMemberPhotoUri(localPhotoUri);
+    if (localPhotoUri) { setPhotoLoadError(false); }
     setCaregiverName(cgName);
     // 刷新天气数据（weather-context 会自动读取城市）
     refreshWeather();
     setGreeting(buildGreeting(cgName || undefined));
+    // 后台刷新头像：拿到云端最新 photoUri 后再升级；服务器没有但本地有时则同步上去。
+    // 不 await，不阻塞下面的打卡/日记本地读取。
+    if (roomId && !isNaN(roomId)) {
+      cloudGetRoomDetail(roomId).then(async (detail) => {
+        if (!isCurrentFamily()) return;
+        let serverPhoto: string | null = null;
+        if (detail?.members) {
+          const freshMember = detail.members.find(
+            (m: any) => String(m.id) === String(member?.id) || String(m.id) === String(requestedMembership.myMemberId)
+          );
+          if (freshMember?.photoUri && !freshMember.photoUri.startsWith('file://')) {
+            serverPhoto = freshMember.photoUri;
+          }
+        }
+        if (serverPhoto) {
+          setMemberPhotoUri(serverPhoto);
+          setPhotoLoadError(false);
+        } else {
+          // 如果服务器端没有头像但本地有非 file:// 的 URL，自动同步到服务器（修复旧版上传失败的情况）
+          const local = resolveLocalPhotoUri();
+          if (local && !local.startsWith('file://')) {
+            const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
+            cloudUpdateMemberProfile({ roomId, photoUri: local }).catch(() => {});
+          }
+        }
+      }).catch((e) => {
+        console.warn('[Home] cloudGetRoomDetail for avatar failed:', e);
+      });
+    }
     const fid = requestedFamilyId;
     const today = await getTodayCheckIn(fid);
     if (!isCurrentFamily()) return;

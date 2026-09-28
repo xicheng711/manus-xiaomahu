@@ -39,12 +39,15 @@ export default function LoginScreen() {
         ]),
       ]).start();
 
-      Animated.loop(
+      // A12: breathe loop 加 cleanup；登录成功 router.replace 后原来泄漏。
+      const breatheLoop = Animated.loop(
         Animated.sequence([
           Animated.timing(breathe, { toValue: 1.04, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
           Animated.timing(breathe, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ])
-      ).start();
+      );
+      breatheLoop.start();
+      return () => breatheLoop.stop();
     }
   }, []);
 

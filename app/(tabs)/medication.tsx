@@ -15,7 +15,7 @@ import {
   mergeCloudMedicationChanges, createMedicationChangeEvent, medicationSnapshot,
   getProfile, getFamilyProfile,
 } from '@/lib/storage';
-import { cloudGetMedications, cloudGetMedicationChanges } from '@/lib/cloud-sync';
+import { cloudGetMedications, cloudGetMedicationChanges, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { MedicationHistory, MedicationItemHistory } from '@/components/medication-history';
 import { useFamilyContext } from '@/lib/family-context';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -160,7 +160,7 @@ function MedicationScreenContent() {
 
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadMeds = useCallback(async () => {
+  const loadMeds = useCallback(async (forceCloud = false) => {
     const requestedFamilyId = familyId;
     if (!familyReady || !requestedFamilyId) {
       setMeds([]);
@@ -184,6 +184,11 @@ function MedicationScreenContent() {
     }
 
     // 云端刷新失败不影响本地已显示的数据，只记录日志（页面支持离线使用）。
+    // D: 原来每次 focus 都无条件打 2 个云端请求；加缓存门控，只在过期/手动刷新/通知跳转时拉云端。
+    const roomIdNum = Number(requestedFamilyId);
+    if (!Number.isFinite(roomIdNum) || !await shouldRefreshCloudCache(roomIdNum, 'medication', undefined, forceCloud)) {
+      return;
+    }
     try {
       const [cloudMeds, cloudChanges, fp, lp] = await Promise.all([
         cloudGetMedications(Number(requestedFamilyId)),
@@ -205,6 +210,7 @@ function MedicationScreenContent() {
 
       const allowLegacyFallback = memberships.length === 1;
       setElderNickname(fp?.nickname || fp?.name || activeMembership?.room.elderName || (allowLegacyFallback ? lp?.nickname || lp?.name : undefined) || '家人');
+      await markCloudCacheFresh(roomIdNum, 'medication');
     } catch (e) {
       console.warn('[medication] 云端刷新失败，已显示本地数据', e);
     }
@@ -212,7 +218,7 @@ function MedicationScreenContent() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await loadMeds(); } finally { setRefreshing(false); }
+    try { await loadMeds(true); } finally { setRefreshing(false); }
   }, [loadMeds]);
 
   useFocusEffect(useCallback(() => {
@@ -776,12 +782,15 @@ function EmptyMedState({ onAdd, elderNickname = '家人' }: { onAdd: () => void;
 
   useEffect(() => {
     fadeInUp(fadeAnim, slideAnim, { duration: 600 });
-    Animated.loop(
+    // A7: pulse loop 加 cleanup；添加第一种药物后组件卸载，原来泄漏一个 native 循环。
+    const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.08, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
-    ).start();
+    );
+    pulse.start();
+    return () => pulse.stop();
   }, []);
 
   return (

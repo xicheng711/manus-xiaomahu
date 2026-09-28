@@ -735,148 +735,163 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   const [period, setPeriod] = useState<Period>('7d');
   const [offset, setOffset] = useState(0);
 
-  const checkInMap = new Map(checkIns.map(c => [c.date, c]));
+  // B: 趋势派生数据（365 条 × 十几次 filter × 正则）在 render 里裸算，
+  // 父组件每次 setState 都全量重算。包进 useMemo，只在数据源/周期/今天变化时重算。
+  const todayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+  // 锚点日期很便宜（一次遍历取最大日期），留在 memo 外供 useState/useEffect 用。
   const anchorDate = resolveSharedDataAnchorDate(checkIns);
-
   const currentYear = anchorDate.getFullYear();
   const anchorMonth = anchorDate.getMonth();
   const yearLabel = `${currentYear}年`;
   const [selectedYearMonth, setSelectedYearMonth] = useState(anchorMonth);
   useEffect(() => {
     setSelectedYearMonth(anchorMonth);
-  }, [currentYear, anchorMonth]);
+  }, [anchorMonth]);
 
-  const yearSleepData = Array.from({ length: 12 }, (_, m) => {
-    const label = `${m + 1}月`;
-    const monthCheckIns = checkIns.filter(c => {
-      const parts = getDateKeyYearMonth(c.date);
-      return parts?.year === currentYear && parts.month === m;
+  const derived = React.useMemo(() => {
+    const checkInMap = new Map(checkIns.map(c => [c.date, c]));
+
+    const yearSleepData = Array.from({ length: 12 }, (_, m) => {
+      const label = `${m + 1}月`;
+      const monthCheckIns = checkIns.filter(c => {
+        const parts = getDateKeyYearMonth(c.date);
+        return parts?.year === currentYear && parts.month === m;
+      });
+      const withSleep = monthCheckIns.filter(c => c.sleepHours > 0);
+      const avg = withSleep.length > 0
+        ? withSleep.reduce((s, c) => s + c.sleepHours, 0) / withSleep.length
+        : 0;
+      return { label, value: parseFloat(avg.toFixed(1)), hasData: withSleep.length > 0 };
     });
-    const withSleep = monthCheckIns.filter(c => c.sleepHours > 0);
-    const avg = withSleep.length > 0
-      ? withSleep.reduce((s, c) => s + c.sleepHours, 0) / withSleep.length
-      : 0;
-    return { label, value: parseFloat(avg.toFixed(1)), hasData: withSleep.length > 0 };
-  });
 
-  const yearMedData = Array.from({ length: 12 }, (_, m) => {
-    const label = `${m + 1}月`;
-    const monthCheckIns = checkIns.filter(c => {
-      const parts = getDateKeyYearMonth(c.date);
-      return parts?.year === currentYear && parts.month === m && c.medicationTaken !== null;
+    const yearMedData = Array.from({ length: 12 }, (_, m) => {
+      const label = `${m + 1}月`;
+      const monthCheckIns = checkIns.filter(c => {
+        const parts = getDateKeyYearMonth(c.date);
+        return parts?.year === currentYear && parts.month === m && c.medicationTaken !== null;
+      });
+      const taken = monthCheckIns.filter(c => c.medicationTaken === true).length;
+      const total = monthCheckIns.length;
+      return { label, taken: total > 0 ? taken >= total / 2 : null };
     });
-    const taken = monthCheckIns.filter(c => c.medicationTaken === true).length;
-    const total = monthCheckIns.length;
-    return { label, taken: total > 0 ? taken >= total / 2 : null };
-  });
 
-  const range = getWeekRange(offset, anchorDate);
-  const dateRange = buildDateRange(range.start, range.end);
-  const periodLabel = offset === 0 ? '近7天' : `${Math.abs(offset) * 7}天前`;
+    const range = getWeekRange(offset, anchorDate);
+    const dateRange = buildDateRange(range.start, range.end);
+    const periodLabel = offset === 0 ? '近7天' : `${Math.abs(offset) * 7}天前`;
 
-  const periodCheckIns = dateRange.map(d => checkInMap.get(d)).filter(Boolean) as DailyCheckIn[];
+    const periodCheckIns = dateRange.map(d => checkInMap.get(d)).filter(Boolean) as DailyCheckIn[];
 
-  const todayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
-  const DAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+    const DAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 
-  const sleepData = period === 'year' ? yearSleepData : dateRange.map(date => {
-    const c = checkInMap.get(date);
-    const d = new Date(date + 'T12:00:00');
-    const wakeTime = c?.nightAwakeTime;
-    const wakeShort = wakeTime === '10-30分钟' ? '<30分'
-      : wakeTime === '30-60分钟' ? '<1h'
-      : wakeTime === '1小时以上' ? '>1h'
-      : null;
+    const sleepData = period === 'year' ? yearSleepData : dateRange.map(date => {
+      const c = checkInMap.get(date);
+      const d = new Date(date + 'T12:00:00');
+      const wakeTime = c?.nightAwakeTime;
+      const wakeShort = wakeTime === '10-30分钟' ? '<30分'
+        : wakeTime === '30-60分钟' ? '<1h'
+        : wakeTime === '1小时以上' ? '>1h'
+        : null;
+      return {
+        label: DAY_LABELS[d.getDay()],
+        value: c?.sleepHours ?? 0,
+        hasData: !!c && c.sleepHours > 0,
+        isToday: date === todayStr,
+        nightWakings: c?.nightWakings ?? 0,
+        nightAwakeShort: wakeShort,
+        awakeHours: c?.awakeHours ?? 0,
+      };
+    });
+
+    const medData = period === 'year' ? yearMedData : dateRange.map(date => {
+      const c = checkInMap.get(date);
+      const d = new Date(date + 'T12:00:00');
+      return { label: DAY_LABELS[d.getDay()], taken: c ? c.medicationTaken : null };
+    });
+
+    const relevantCheckIns = period === 'year'
+      ? checkIns.filter(c => getDateKeyYearMonth(c.date)?.year === currentYear)
+      : periodCheckIns;
+    const sleepWithData = relevantCheckIns.filter(c => c.sleepHours > 0);
+    const avgSleep = sleepWithData.length > 0
+      ? sleepWithData.reduce((s, c) => s + c.sleepHours, 0) / sleepWithData.length : 0;
+    const sleepSubtitle = avgSleep > 0
+      ? `${period === 'year' ? yearLabel : periodLabel}平均 ${avgSleep.toFixed(1)}h · ${avgSleep >= 7 ? '睡眠充足 ✅' : '睡眠不足 ⚠️'}`
+      : `${period === 'year' ? yearLabel : periodLabel}暂无睡眠记录`;
+
+    // 白天小睡数据
+    const yearNapData = Array.from({ length: 12 }, (_, m) => {
+      const label = `${m + 1}月`;
+      const monthCheckIns = checkIns.filter(c => {
+        const parts = getDateKeyYearMonth(c.date);
+        return parts?.year === currentYear && parts.month === m;
+      });
+      const recorded = monthCheckIns.filter(hasRecordedNap);
+      const withNap = recorded.filter(c => getNapMinutes(c) > 0);
+      const avg = withNap.length > 0
+        ? withNap.reduce((s, c) => s + getNapMinutes(c), 0) / withNap.length
+        : 0;
+      return { label, value: Math.round(avg), hasData: recorded.length > 0 };
+    });
+
+    const napData = period === 'year' ? yearNapData : dateRange.map(date => {
+      const c = checkInMap.get(date);
+      const d = new Date(date + 'T12:00:00');
+      const napMins = getNapMinutes(c);
+      return {
+        label: DAY_LABELS[d.getDay()],
+        value: napMins,
+        hasData: hasRecordedNap(c),
+        isToday: date === todayStr,
+      };
+    });
+
+    const napScope = period === 'year'
+      ? checkIns.filter(c => getDateKeyYearMonth(c.date)?.year === currentYear)
+      : periodCheckIns;
+    const napRecorded = napScope.filter(hasRecordedNap);
+    const napWithData = napRecorded.filter(c => getNapMinutes(c) > 0);
+    const avgNap = napWithData.length > 0
+      ? napWithData.reduce((s, c) => s + getNapMinutes(c), 0) / napWithData.length : 0;
+    const yearNapMaxValue = Math.max(
+      120,
+      Math.ceil(Math.max(...yearNapData.filter(item => item.hasData).map(item => item.value), 0) / 60) * 60,
+    );
+    const scopeLabel = period === 'year' ? yearLabel : periodLabel;
+    const napSubtitle = napRecorded.length === 0
+      ? `${scopeLabel}暂未填写小睡记录`
+      : napWithData.length === 0
+        ? `${scopeLabel}已记录 ${napRecorded.length} 天 · 均未小睡`
+        : `${scopeLabel}已记录 ${napRecorded.length} 天 · 小睡 ${napWithData.length} 天 · 平均 ${avgNap >= 60 ? (avgNap / 60).toFixed(1) + 'h' : Math.round(avgNap) + '分钟'}`;
+
+
+    // 心情分数：优先用晚间打卡的 moodScore（照顾者真实心情），其次用日记 caregiverMoodEmoji，最后兜底旧 caregiverMoodScore
+    function getMoodScore(d: string): number {
+      const ci = checkInMap.get(d);
+      if (ci?.moodScore && ci.moodScore > 0) return ci.moodScore;
+      if (diaryMoodMap[d] && diaryMoodMap[d] > 0) return diaryMoodMap[d];
+      if (ci?.caregiverMoodScore && ci.caregiverMoodScore > 0) return ci.caregiverMoodScore;
+      return 0;
+    }
+    const cgMoodDates = dateRange.filter(d => getMoodScore(d) > 0);
+    const avgCaregiverMood = cgMoodDates.length > 0
+      ? cgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / cgMoodDates.length : 0;
+
+    const prevRange = getWeekRange(offset - 1, anchorDate);
+    const prevDateRange = buildDateRange(prevRange.start, prevRange.end);
+    const prevCgMoodDates = prevDateRange.filter(d => getMoodScore(d) > 0);
+    const prevAvgCaregiverMood = prevCgMoodDates.length > 0
+      ? prevCgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / prevCgMoodDates.length : null;
     return {
-      label: DAY_LABELS[d.getDay()],
-      value: c?.sleepHours ?? 0,
-      hasData: !!c && c.sleepHours > 0,
-      isToday: date === todayStr,
-      nightWakings: c?.nightWakings ?? 0,
-      nightAwakeShort: wakeShort,
-      awakeHours: c?.awakeHours ?? 0,
+      range, periodLabel, sleepData, sleepSubtitle,
+      medData, yearSleepData, yearNapData, napData, napSubtitle, yearNapMaxValue,
+      avgCaregiverMood, prevAvgCaregiverMood,
     };
-  });
-
-  const medData = period === 'year' ? yearMedData : dateRange.map(date => {
-    const c = checkInMap.get(date);
-    const d = new Date(date + 'T12:00:00');
-    return { label: DAY_LABELS[d.getDay()], taken: c ? c.medicationTaken : null };
-  });
-
-  const relevantCheckIns = period === 'year'
-    ? checkIns.filter(c => getDateKeyYearMonth(c.date)?.year === currentYear)
-    : periodCheckIns;
-  const sleepWithData = relevantCheckIns.filter(c => c.sleepHours > 0);
-  const avgSleep = sleepWithData.length > 0
-    ? sleepWithData.reduce((s, c) => s + c.sleepHours, 0) / sleepWithData.length : 0;
-  const sleepSubtitle = avgSleep > 0
-    ? `${period === 'year' ? yearLabel : periodLabel}平均 ${avgSleep.toFixed(1)}h · ${avgSleep >= 7 ? '睡眠充足 ✅' : '睡眠不足 ⚠️'}`
-    : `${period === 'year' ? yearLabel : periodLabel}暂无睡眠记录`;
-
-  // 白天小睡数据
-  const yearNapData = Array.from({ length: 12 }, (_, m) => {
-    const label = `${m + 1}月`;
-    const monthCheckIns = checkIns.filter(c => {
-      const parts = getDateKeyYearMonth(c.date);
-      return parts?.year === currentYear && parts.month === m;
-    });
-    const recorded = monthCheckIns.filter(hasRecordedNap);
-    const withNap = recorded.filter(c => getNapMinutes(c) > 0);
-    const avg = withNap.length > 0
-      ? withNap.reduce((s, c) => s + getNapMinutes(c), 0) / withNap.length
-      : 0;
-    return { label, value: Math.round(avg), hasData: recorded.length > 0 };
-  });
-
-  const napData = period === 'year' ? yearNapData : dateRange.map(date => {
-    const c = checkInMap.get(date);
-    const d = new Date(date + 'T12:00:00');
-    const napMins = getNapMinutes(c);
-    return {
-      label: DAY_LABELS[d.getDay()],
-      value: napMins,
-      hasData: hasRecordedNap(c),
-      isToday: date === todayStr,
-    };
-  });
-
-  const napScope = period === 'year'
-    ? checkIns.filter(c => getDateKeyYearMonth(c.date)?.year === currentYear)
-    : periodCheckIns;
-  const napRecorded = napScope.filter(hasRecordedNap);
-  const napWithData = napRecorded.filter(c => getNapMinutes(c) > 0);
-  const avgNap = napWithData.length > 0
-    ? napWithData.reduce((s, c) => s + getNapMinutes(c), 0) / napWithData.length : 0;
-  const yearNapMaxValue = Math.max(
-    120,
-    Math.ceil(Math.max(...yearNapData.filter(item => item.hasData).map(item => item.value), 0) / 60) * 60,
-  );
-  const scopeLabel = period === 'year' ? yearLabel : periodLabel;
-  const napSubtitle = napRecorded.length === 0
-    ? `${scopeLabel}暂未填写小睡记录`
-    : napWithData.length === 0
-      ? `${scopeLabel}已记录 ${napRecorded.length} 天 · 均未小睡`
-      : `${scopeLabel}已记录 ${napRecorded.length} 天 · 小睡 ${napWithData.length} 天 · 平均 ${avgNap >= 60 ? (avgNap / 60).toFixed(1) + 'h' : Math.round(avgNap) + '分钟'}`;
-
-
-  // 心情分数：优先用晚间打卡的 moodScore（照顾者真实心情），其次用日记 caregiverMoodEmoji，最后兜底旧 caregiverMoodScore
-  function getMoodScore(d: string): number {
-    const ci = checkInMap.get(d);
-    if (ci?.moodScore && ci.moodScore > 0) return ci.moodScore;
-    if (diaryMoodMap[d] && diaryMoodMap[d] > 0) return diaryMoodMap[d];
-    if (ci?.caregiverMoodScore && ci.caregiverMoodScore > 0) return ci.caregiverMoodScore;
-    return 0;
-  }
-  const cgMoodDates = dateRange.filter(d => getMoodScore(d) > 0);
-  const avgCaregiverMood = cgMoodDates.length > 0
-    ? cgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / cgMoodDates.length : 0;
-
-  const prevRange = getWeekRange(offset - 1, anchorDate);
-  const prevDateRange = buildDateRange(prevRange.start, prevRange.end);
-  const prevCgMoodDates = prevDateRange.filter(d => getMoodScore(d) > 0);
-  const prevAvgCaregiverMood = prevCgMoodDates.length > 0
-    ? prevCgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / prevCgMoodDates.length : null;
+  }, [checkIns, diaryMoodMap, period, offset, todayStr, currentYear, anchorMonth, yearLabel]);
+  const {
+    range, periodLabel, sleepData, sleepSubtitle,
+    medData, yearSleepData, yearNapData, napData, napSubtitle, yearNapMaxValue,
+    avgCaregiverMood, prevAvgCaregiverMood,
+  } = derived;
 
   return (
     <View style={styles.container}>
