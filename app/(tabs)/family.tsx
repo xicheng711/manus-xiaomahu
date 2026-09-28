@@ -999,7 +999,9 @@ export default function FamilyScreen() {
       await new Promise(resolve => setTimeout(resolve, 300));
       if (Platform.OS === 'web') {
         // Web fallback: share text
-        const date = new Date(selectedItem.date).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
+        // B4: 'YYYY-MM-DD' 不能直接 new Date（按 UTC 解析，美东会少一天），用正午本地解析。
+        const [wy, wm, wd] = selectedItem.date.split('-').map(Number);
+        const date = new Date(wy, wm - 1, wd, 12).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
         let text = `🌸 护理简报 · ${date}\n\n`;
         if (selectedItem.checkIn) {
           const moodLabel = selectedItem.checkIn.eveningDone && selectedItem.checkIn.moodScore != null
@@ -1543,7 +1545,9 @@ export default function FamilyScreen() {
         const selectedItem = briefingHistory.find(item => item.date === selectedBriefingDate);
         if (!selectedItem) return null;
         const profile = briefingData?.profile;
-        const dateLabel = new Date(selectedItem.date).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+        // B4: 同上，用正午本地解析避免 UTC 偏移导致美东少一天。
+        const [hy, hm, hd] = selectedItem.date.split('-').map(Number);
+        const dateLabel = new Date(hy, hm - 1, hd, 12).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
         return (
           <View
             ref={briefingCardRef}
@@ -1581,16 +1585,17 @@ export default function FamilyScreen() {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                   <View style={{ flex: 1, minWidth: 140, backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 12 }}>
                     <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>💤 睡眠</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.sleepHours != null ? `${selectedItem.checkIn.sleepHours} 小时` : '未记录'}</Text>
+                    {/* B5: 与可见简报卡一致，睡眠要求 morningDone，否则晚间先打卡的记录会显示虚假的"7 小时" */}
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.morningDone && selectedItem.checkIn.sleepHours != null ? `${selectedItem.checkIn.sleepHours} 小时` : '未记录'}</Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 140, backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 12 }}>
-                    <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>{selectedItem.checkIn.moodEmoji || '🙂'} 心情</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.moodScore != null ? `${selectedItem.checkIn.moodScore} / 10` : '未记录'}</Text>
+                    <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>{selectedItem.checkIn.eveningDone ? (selectedItem.checkIn.moodEmoji || '🙂') : '—'} 心情</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: AppColors.text.primary }}>{selectedItem.checkIn.eveningDone && selectedItem.checkIn.moodScore != null ? `${selectedItem.checkIn.moodScore} / 10` : '未记录'}</Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 140, backgroundColor: AppColors.coral.soft, borderRadius: 12, padding: 12 }}>
                     <Text style={{ fontSize: 12, color: AppColors.text.tertiary, marginBottom: 2 }}>💊 用药</Text>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: selectedItem.checkIn.medicationTaken != null ? (selectedItem.checkIn.medicationTaken ? '#16A34A' : '#DC2626') : AppColors.text.tertiary }}>
-                      {selectedItem.checkIn.medicationTaken != null ? (selectedItem.checkIn.medicationTaken ? '✅ 按时' : '⚠️ 未服') : '未记录'}
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: selectedItem.checkIn.eveningDone && selectedItem.checkIn.medicationTaken != null ? (selectedItem.checkIn.medicationTaken ? '#16A34A' : '#DC2626') : AppColors.text.tertiary }}>
+                      {selectedItem.checkIn.eveningDone && selectedItem.checkIn.medicationTaken != null ? (selectedItem.checkIn.medicationTaken ? '✅ 按时' : '⚠️ 未服') : '未记录'}
                     </Text>
                   </View>
                 </View>

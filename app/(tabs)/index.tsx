@@ -27,7 +27,9 @@ const { width } = Dimensions.get('window');
 function getDailyStatusHint(checkIn: DailyCheckIn | null): string {
   if (!checkIn) return '完成今日打卡后，自动生成昨晚睡眠与今日状态摘要';
   const parts: string[] = [];
-  if (checkIn.sleepHours != null) {
+  // B1: 睡眠数据只在早间打卡完成后可信。晚间先打卡的新建记录 morningDone=false，
+  // 不能把默认值当成真实睡眠时长显示。
+  if (checkIn.morningDone && checkIn.sleepHours != null) {
     if (checkIn.sleepHours >= 8) parts.push(`昨晚睡眠 ${checkIn.sleepHours} 小时，休息充足`);
     else if (checkIn.sleepHours >= 6) parts.push(`昨晚睡眠 ${checkIn.sleepHours} 小时，基本达标`);
     else if (checkIn.sleepHours >= 4) parts.push(`昨晚睡眠仅 ${checkIn.sleepHours} 小时，建议今日安排适当午休`);
@@ -255,7 +257,7 @@ function EnhancedCheckinBanner({
         <View style={{ flex: 1 }}>
           <Text style={styles.checkinTitleDone}>今日记录 {checkinProgress}/2</Text>
           <Text style={styles.checkinSubDone}>早间已完成{eveningDone ? ' · 晚间已完成' : ' · 晚间待完成'}</Text>
-          {todayCheckIn?.sleepHours != null && (
+          {todayCheckIn?.morningDone && todayCheckIn?.sleepHours != null && (
             <View style={styles.careScoreBadge}>
               <AppIcon name="moon" color={AppColors.green.strong} size={12} strokeWidth={1.8} />
               <Text style={{ fontSize: 11 }}>{elderNickname}睡了 {todayCheckIn.sleepHours}h</Text>

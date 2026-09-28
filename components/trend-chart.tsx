@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
 import { DailyCheckIn, DiaryEntry, getNapMinutes, hasRecordedNap } from '@/lib/storage';
 import { AppColors } from '@/lib/design-tokens';
-import { resolveSharedDataAnchorDate } from '@/lib/shared-date-range';
+import { resolveSharedDataAnchorDate, resolveCareTodayKey } from '@/lib/shared-date-range';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -125,186 +125,7 @@ const gaugeStyles = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 4 },
 });
 
-const MOOD_EMOJIS: Record<string, { emoji: string; label: string }> = {
-  '😄': { emoji: '😄', label: '很开心' },
-  '😊': { emoji: '😊', label: '还不错' },
-  '😌': { emoji: '😌', label: '平静' },
-  '😕': { emoji: '😕', label: '有点累' },
-  '😢': { emoji: '😢', label: '不太好' },
-  '😤': { emoji: '😤', label: '烦躁' },
-};
-
-function MoodDistribution({ checkIns }: { checkIns: DailyCheckIn[] }) {
-  const counts: Record<string, number> = {};
-  checkIns.forEach(c => {
-    if (c.moodEmoji) {
-      counts[c.moodEmoji] = (counts[c.moodEmoji] || 0) + 1;
-    }
-  });
-
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const total = sorted.reduce((s, [, n]) => s + n, 0);
-  const topMood = sorted[0];
-
-  if (sorted.length === 0) {
-    return (
-      <View style={distStyles.card}>
-        <Text style={distStyles.title}>心情分布</Text>
-        <Text style={distStyles.empty}>暂无数据</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={distStyles.card}>
-      <Text style={distStyles.title}>心情分布</Text>
-      <View style={distStyles.emojiRow}>
-        {sorted.slice(0, 5).map(([emoji, count]) => (
-          <View key={emoji} style={distStyles.emojiItem}>
-            <View style={distStyles.emojiCircle}>
-              <Text style={distStyles.emoji}>{emoji}</Text>
-              <View style={distStyles.countBadge}>
-                <Text style={distStyles.countText}>{count}</Text>
-              </View>
-            </View>
-            <Text style={distStyles.emojiLabel}>{MOOD_EMOJIS[emoji]?.label ?? ''}</Text>
-          </View>
-        ))}
-      </View>
-      <View style={distStyles.summaryRow}>
-        <Text style={distStyles.summaryText}>共记录心情：{total}条</Text>
-        {topMood && (
-          <Text style={distStyles.summaryText}>最多心情：{MOOD_EMOJIS[topMood[0]]?.label ?? topMood[0]}</Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
-const distStyles = StyleSheet.create({
-  card: { backgroundColor: AppColors.surface.whiteStrong, borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: AppColors.border.soft },
-  title: { fontSize: 14, fontWeight: '700', color: AppColors.text.primary, marginBottom: 14 },
-  empty: { fontSize: 13, color: AppColors.text.tertiary, textAlign: 'center', paddingVertical: 16 },
-  emojiRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 14 },
-  emojiItem: { alignItems: 'center', gap: 4 },
-  emojiCircle: { position: 'relative' },
-  emoji: { fontSize: 32 },
-  countBadge: {
-    position: 'absolute', top: -4, right: -8,
-    backgroundColor: AppColors.coral.primary, borderRadius: 10, minWidth: 18, height: 18,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
-  },
-  countText: { fontSize: 10, fontWeight: '800', color: '#fff' },
-  emojiLabel: { fontSize: 11, color: AppColors.text.tertiary, fontWeight: '500' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: AppColors.bg.secondary, paddingTop: 10 },
-  summaryText: { fontSize: 12, color: AppColors.text.tertiary },
-});
-
-function SmoothCurveChart({ data, color }: {
-  data: { label: string; value: number; hasData: boolean }[];
-  color: string;
-}) {
-  const chartH = 100;
-  const maxVal = 10;
-  const validData = data.filter(d => d.hasData);
-
-  if (validData.length < 2) {
-    return (
-      <View style={[curveStyles.emptyChart, { height: chartH }]}>
-        <Text style={curveStyles.emptyText}>需要至少2天数据才能显示趋势</Text>
-      </View>
-    );
-  }
-
-  const points = data.map((d, i) => ({
-    x: (i / (data.length - 1)) * CHART_W,
-    y: d.hasData ? chartH - (d.value / maxVal) * chartH : -1,
-    hasData: d.hasData,
-    value: d.value,
-    label: d.label,
-  }));
-
-  const yLabels = ['😄', '😊', '😐', '😕', '😢'];
-
-  return (
-    <View>
-      <View style={curveStyles.chartContainer}>
-        <View style={curveStyles.yAxis}>
-          {yLabels.map((e, i) => (
-            <Text key={i} style={curveStyles.yEmoji}>{e}</Text>
-          ))}
-        </View>
-        <View style={[curveStyles.chartArea, { height: chartH }]}>
-          {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
-            <View key={i} style={[curveStyles.gridLine, { bottom: `${pct * 100}%` }]} />
-          ))}
-          {points.map((p, i) => {
-            if (!p.hasData) return null;
-            return (
-              <View key={i}>
-                <View style={[curveStyles.dot, {
-                  left: p.x - 5,
-                  bottom: (p.value / maxVal) * chartH - 5,
-                  backgroundColor: color,
-                }]} />
-                <View style={[curveStyles.valueLabel, {
-                  left: p.x - 12,
-                  bottom: (p.value / maxVal) * chartH + 8,
-                }]}>
-                  <Text style={[curveStyles.valueLabelText, { color }]}>{p.value}</Text>
-                </View>
-              </View>
-            );
-          })}
-          {points.reduce<React.ReactNode[]>((acc, p, i) => {
-            if (i === 0 || !p.hasData) return acc;
-            const prev = points.slice(0, i).reverse().find(pp => pp.hasData);
-            if (!prev) return acc;
-            const dx = p.x - prev.x;
-            const dy = (p.value / maxVal) * chartH - (prev.value / maxVal) * chartH;
-            const len = Math.sqrt(dx * dx + dy * dy);
-            const angle = Math.atan2(-dy, dx) * (180 / Math.PI);
-            acc.push(
-              <View
-                key={`line-${i}`}
-                style={[curveStyles.line, {
-                  width: len,
-                  left: prev.x,
-                  bottom: (prev.value / maxVal) * chartH - 1,
-                  backgroundColor: color + '60',
-                  transform: [{ rotate: `${angle}deg` }],
-                  transformOrigin: 'left center',
-                }]}
-              />
-            );
-            return acc;
-          }, [])}
-        </View>
-      </View>
-      <View style={curveStyles.xAxis}>
-        {data.map((d, i) => (
-          <Text key={i} style={curveStyles.xLabel} numberOfLines={1}>{d.label}</Text>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-const curveStyles = StyleSheet.create({
-  chartContainer: { flexDirection: 'row' },
-  yAxis: { width: 24, justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-  yEmoji: { fontSize: 14 },
-  chartArea: { flex: 1, position: 'relative', marginLeft: 8 },
-  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: AppColors.border.soft },
-  dot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: AppColors.surface.whiteStrong },
-  valueLabel: { position: 'absolute' },
-  valueLabelText: { fontSize: 10, fontWeight: '700', textAlign: 'center', width: 24 },
-  line: { position: 'absolute', height: 2.5, borderRadius: 1.5 },
-  emptyChart: { alignItems: 'center', justifyContent: 'center', backgroundColor: AppColors.bg.secondary, borderRadius: 12 },
-  emptyText: { fontSize: 13, color: AppColors.text.tertiary },
-  xAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, paddingLeft: 32 },
-  xLabel: { fontSize: 10, color: AppColors.text.tertiary, textAlign: 'center', flex: 1 },
-});
+// B11: 已删除未使用的 MoodDistribution / SmoothCurveChart（含 MOOD_EMOJIS，约 180 行死代码）。
 
 type MonthlyTrendPoint = { label: string; value: number; hasData: boolean };
 
@@ -737,7 +558,8 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
 
   // B: 趋势派生数据（365 条 × 十几次 filter × 正则）在 render 里裸算，
   // 父组件每次 setState 都全量重算。包进 useMemo，只在数据源/周期/今天变化时重算。
-  const todayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+  // B6: isToday 按"照护的今天"（创建者时区的护理日 key）判定，不用查看者本地自然日。
+  const careTodayKey = resolveCareTodayKey(checkIns);
   // 锚点日期很便宜（一次遍历取最大日期），留在 memo 外供 useState/useEffect 用。
   const anchorDate = resolveSharedDataAnchorDate(checkIns);
   const currentYear = anchorDate.getFullYear();
@@ -757,7 +579,8 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
         const parts = getDateKeyYearMonth(c.date);
         return parts?.year === currentYear && parts.month === m;
       });
-      const withSleep = monthCheckIns.filter(c => c.sleepHours > 0);
+      // B1: 睡眠只统计早间已完成的记录；晚间先打卡的新建记录没有真实睡眠数据。
+      const withSleep = monthCheckIns.filter(c => c.morningDone && c.sleepHours > 0);
       const avg = withSleep.length > 0
         ? withSleep.reduce((s, c) => s + c.sleepHours, 0) / withSleep.length
         : 0;
@@ -768,7 +591,8 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       const label = `${m + 1}月`;
       const monthCheckIns = checkIns.filter(c => {
         const parts = getDateKeyYearMonth(c.date);
-        return parts?.year === currentYear && parts.month === m && c.medicationTaken !== null;
+        // B1: 用药只统计晚间已完成的记录；新建记录 medicationTaken 默认 true 会污染统计。
+        return parts?.year === currentYear && parts.month === m && c.eveningDone && c.medicationTaken !== null;
       });
       const taken = monthCheckIns.filter(c => c.medicationTaken === true).length;
       const total = monthCheckIns.length;
@@ -794,8 +618,8 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       return {
         label: DAY_LABELS[d.getDay()],
         value: c?.sleepHours ?? 0,
-        hasData: !!c && c.sleepHours > 0,
-        isToday: date === todayStr,
+        hasData: !!c && c.morningDone && c.sleepHours > 0,
+        isToday: date === careTodayKey,
         nightWakings: c?.nightWakings ?? 0,
         nightAwakeShort: wakeShort,
         awakeHours: c?.awakeHours ?? 0,
@@ -811,7 +635,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
     const relevantCheckIns = period === 'year'
       ? checkIns.filter(c => getDateKeyYearMonth(c.date)?.year === currentYear)
       : periodCheckIns;
-    const sleepWithData = relevantCheckIns.filter(c => c.sleepHours > 0);
+    const sleepWithData = relevantCheckIns.filter(c => c.morningDone && c.sleepHours > 0);
     const avgSleep = sleepWithData.length > 0
       ? sleepWithData.reduce((s, c) => s + c.sleepHours, 0) / sleepWithData.length : 0;
     const sleepSubtitle = avgSleep > 0
@@ -841,7 +665,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
         label: DAY_LABELS[d.getDay()],
         value: napMins,
         hasData: hasRecordedNap(c),
-        isToday: date === todayStr,
+        isToday: date === careTodayKey,
       };
     });
 
@@ -886,7 +710,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       medData, yearSleepData, yearNapData, napData, napSubtitle, yearNapMaxValue,
       avgCaregiverMood, prevAvgCaregiverMood,
     };
-  }, [checkIns, diaryMoodMap, period, offset, todayStr, currentYear, anchorMonth, yearLabel]);
+  }, [checkIns, diaryMoodMap, period, offset, careTodayKey, currentYear, anchorMonth, yearLabel]);
   const {
     range, periodLabel, sleepData, sleepSubtitle,
     medData, yearSleepData, yearNapData, napData, napSubtitle, yearNapMaxValue,

@@ -37,10 +37,20 @@ function LongImageCard({
   const elderName = profile.nickname || profile.name || '家人';
   const caregiverName = profile.caregiverName || '照顾者';
   const zodiacEmoji = profile.zodiacEmoji || '🐯';
-  const sleepLabel = checkIn.sleepQuality === 'good' ? '良好 😴' : checkIn.sleepQuality === 'fair' ? '一般 😐' : '较差 😟';
-  const medLabel = checkIn.medicationTaken ? '已按时服药 ✅' : '未按时服药 ❌';
+  // B1: 睡眠/心情/用药只在对应时段完成后可信，不拿默认值编造。
+  const hasMorning = checkIn.morningDone === true;
+  const hasEvening = checkIn.eveningDone === true;
+  const sleepLabel = !hasMorning ? '未记录' : checkIn.sleepQuality === 'good' ? '良好 😴' : checkIn.sleepQuality === 'fair' ? '一般 😐' : '较差 😟';
+  const medLabel = !hasEvening ? '未记录' : checkIn.medicationTaken ? '已按时服药 ✅' : '未按时服药 ❌';
 
-  const todayDiaries = diaryEntries.filter(d => d.date === checkIn.date).slice(0, 3);
+  // B8: 长图文本加保守上限，避免超长备注/AI 文本把截图撑到任意高度（Android 纹理上限/OOM）。
+  const truncateForImage = (text: string | undefined | null, max = 500) =>
+    text && text.length > max ? text.slice(0, max) + '…' : (text || '');
+
+  const allTodayDiaries = diaryEntries.filter(d => d.date === checkIn.date);
+  const todayDiaries = allTodayDiaries.slice(0, 3);
+  // B3: 超过 3 条时在图上明确提示省略条数，不静默丢失。
+  const omittedDiaryCount = allTodayDiaries.length - todayDiaries.length;
   const activeMeds = medications.filter(m => m.active).slice(0, 5);
 
   return (
@@ -72,13 +82,13 @@ function LongImageCard({
         <View style={[imgStyles.dataCard, { backgroundColor: '#F0FDF4' }]}>
           <Text style={imgStyles.dataIcon}>😴</Text>
           <Text style={imgStyles.dataLabel}>睡眠</Text>
-          <Text style={imgStyles.dataValue}>{checkIn.sleepHours} 小时</Text>
+          <Text style={imgStyles.dataValue}>{hasMorning && checkIn.sleepHours ? `${checkIn.sleepHours} 小时` : '未记录'}</Text>
           <Text style={imgStyles.dataSub}>{sleepLabel}</Text>
         </View>
         <View style={[imgStyles.dataCard, { backgroundColor: '#FFFBEB' }]}>
-          <Text style={imgStyles.dataIcon}>{checkIn.moodEmoji || '😊'}</Text>
+          <Text style={imgStyles.dataIcon}>{hasEvening ? (checkIn.moodEmoji || '😊') : '—'}</Text>
           <Text style={imgStyles.dataLabel}>心情</Text>
-          <Text style={imgStyles.dataValue}>{checkIn.moodScore}/10</Text>
+          <Text style={imgStyles.dataValue}>{hasEvening && checkIn.moodScore != null ? `${checkIn.moodScore}/10` : '未记录'}</Text>
           <Text style={imgStyles.dataSub}>情绪评分</Text>
         </View>
       </View>
@@ -102,7 +112,7 @@ function LongImageCard({
           <Text style={imgStyles.notesIcon}>🌅</Text>
           <View style={imgStyles.notesContent}>
             <Text style={imgStyles.notesTitle}>早上记录</Text>
-            <Text style={imgStyles.notesText}>{checkIn.morningNotes}</Text>
+            <Text style={imgStyles.notesText}>{truncateForImage(checkIn.morningNotes)}</Text>
           </View>
         </View>
       ) : null}
@@ -112,7 +122,7 @@ function LongImageCard({
           <Text style={imgStyles.notesIcon}>🌙</Text>
           <View style={imgStyles.notesContent}>
             <Text style={imgStyles.notesTitle}>晚上记录</Text>
-            <Text style={imgStyles.notesText}>{checkIn.eveningNotes}</Text>
+            <Text style={imgStyles.notesText}>{truncateForImage(checkIn.eveningNotes)}</Text>
           </View>
         </View>
       ) : null}
@@ -156,6 +166,11 @@ function LongImageCard({
               ) : null}
             </View>
           ))}
+          {omittedDiaryCount > 0 && (
+            <Text style={[imgStyles.diaryContent, { color: AppColors.text.tertiary, fontStyle: 'italic' }]}>
+              …还有 {omittedDiaryCount} 篇日记未在长图中展示
+            </Text>
+          )}
         </>
       )}
 
@@ -164,7 +179,7 @@ function LongImageCard({
           <View style={imgStyles.divider} />
           <Text style={imgStyles.sectionTitle}>📋 智能状态总结</Text>
           <View style={imgStyles.aiBox}>
-            <Text style={imgStyles.aiText}>{briefing.summary}</Text>
+            <Text style={imgStyles.aiText}>{truncateForImage(briefing.summary)}</Text>
           </View>
         </>
       )}
@@ -173,7 +188,7 @@ function LongImageCard({
       <View style={imgStyles.encourageBox}>
         <Text style={imgStyles.encourageIcon}>💪</Text>
         <Text style={imgStyles.encourageTitle}>今日小结</Text>
-        <Text style={imgStyles.encourageText}>{encouragement}</Text>
+        <Text style={imgStyles.encourageText}>{truncateForImage(encouragement, 200)}</Text>
       </View>
 
       <View style={imgStyles.footer}>

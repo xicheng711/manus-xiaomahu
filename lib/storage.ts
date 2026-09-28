@@ -889,6 +889,9 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     : undefined;
   const stableServerCheckInId = existing?.serverCheckInId ?? validRequestedServerId;
   const stableDate = existing?.date ?? data.date;
+  // B1: 晚间先打卡会新建记录（morningDone=false），不能伪造早间数据。
+  // 原来 sleepHours 默认 7，首页/趋势图/简报会显示并不存在的"睡了 7 小时"。
+  const isEveningFirstCreation = !existing && data.eveningDone === true && data.morningDone !== true;
   const defaults: DailyCheckIn = {
     id: localId,
     clientId: stableClientId,
@@ -896,7 +899,7 @@ export async function upsertCheckIn(data: Partial<DailyCheckIn> & { date: string
     // 创建时记录设备时区：date 是按该时区的护理日算的，之后不再改变。
     // 更新已有记录时保留原值（见下面的 existing 分支，...existing 在前）。
     creatorTimeZone: deviceTimeZone(),
-    sleepHours: 7,
+    sleepHours: isEveningFirstCreation ? 0 : 7,
     sleepQuality: 'fair',
     morningNotes: '',
     morningDone: false,
@@ -2636,7 +2639,14 @@ export async function syncPendingBriefings(roomId: string): Promise<void> {
   const key = roomKey(KEYS.BRIEFINGS, roomId);
   const raw = await AsyncStorage.getItem(key);
   if (!raw) return;
-  const all: CareBriefing[] = JSON.parse(raw);
+  // B2: 存储损坏（非法 JSON）时不抛异常，直接跳过同步。
+  let all: CareBriefing[];
+  try {
+    all = JSON.parse(raw);
+  } catch {
+    console.warn('[storage] briefings 数据损坏，跳过同步');
+    return;
+  }
   let changed = false;
   const synced: CareBriefing[] = [];
   for (const briefing of all) {
@@ -2687,7 +2697,14 @@ export async function getTodayBriefing(roomId?: string): Promise<CareBriefing | 
   const key = roomKey(KEYS.BRIEFINGS, rid);
   const raw = await AsyncStorage.getItem(key);
   if (!raw) return null;
-  const all: CareBriefing[] = JSON.parse(raw);
+  // B2: 存储损坏（非法 JSON）时返回 null 而不是抛异常。
+  let all: CareBriefing[];
+  try {
+    all = JSON.parse(raw);
+  } catch {
+    console.warn('[storage] briefings 数据损坏，返回空');
+    return null;
+  }
   return all.find(b => b.date === todayStr()) ?? null;
 }
 
@@ -2696,7 +2713,14 @@ export async function getLatestBriefing(roomId?: string): Promise<CareBriefing |
   const key = roomKey(KEYS.BRIEFINGS, rid);
   const raw = await AsyncStorage.getItem(key);
   if (!raw) return null;
-  const all: CareBriefing[] = JSON.parse(raw);
+  // B2: 存储损坏（非法 JSON）时返回 null 而不是抛异常。
+  let all: CareBriefing[];
+  try {
+    all = JSON.parse(raw);
+  } catch {
+    console.warn('[storage] briefings 数据损坏，返回空');
+    return null;
+  }
   return all.length > 0 ? all[0] : null;
 }
 
@@ -2705,7 +2729,14 @@ export async function getBriefingByDate(date: string, roomId?: string): Promise<
   const key = roomKey(KEYS.BRIEFINGS, rid);
   const raw = await AsyncStorage.getItem(key);
   if (!raw) return null;
-  const all: CareBriefing[] = JSON.parse(raw);
+  // B2: 存储损坏（非法 JSON）时返回 null 而不是抛异常。
+  let all: CareBriefing[];
+  try {
+    all = JSON.parse(raw);
+  } catch {
+    console.warn('[storage] briefings 数据损坏，返回空');
+    return null;
+  }
   return all.find(b => b.date === date) ?? null;
 }
 

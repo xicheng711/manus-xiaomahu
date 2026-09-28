@@ -304,10 +304,19 @@ function MonthCalendar({ checkIns, caregiverName = '照顾者' }: { checkIns: Da
       Animated.timing(overlayOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
       Animated.spring(popupScale, { toValue: 1, friction: 8, tension: 65, useNativeDriver: true }),
     ]).start();
-    const briefing = await getBriefingByDate(checkIn.date);
-    if (mountedRef.current) {
-      setSelectedBriefing(briefing);
-      setBriefingLoading(false);
+    // B2: getBriefingByDate 内部 JSON.parse 无 try/catch，存储损坏时这里 unhandled rejection，
+    // setBriefingLoading(false) 永不执行，弹窗简报区永久转圈。包 try/catch + finally 复位。
+    try {
+      const briefing = await getBriefingByDate(checkIn.date);
+      if (mountedRef.current) {
+        setSelectedBriefing(briefing);
+      }
+    } catch (e) {
+      console.warn('[checkin] 读取日期简报失败:', e);
+    } finally {
+      if (mountedRef.current) {
+        setBriefingLoading(false);
+      }
     }
   }
 

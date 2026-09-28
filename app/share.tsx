@@ -1380,9 +1380,10 @@ export default function ShareScreen() {
     const encouragement = encouragements[new Date().getDay() % encouragements.length];
     // 严格基于用户实际输入构建总结，不使用随机鼓励语
     const parts: string[] = [];
-    if (ci.sleepHours) parts.push(`睡眠${ci.sleepHours}小时，质量${sleepLabel}`);
-    if (ci.moodScore != null) parts.push(`心情${ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差'}`);
-    if (ci.medicationTaken != null) parts.push(ci.medicationTaken ? '用药完成' : '今日未按时服药');
+    // B1: 睡眠/心情/用药只在对应时段完成后可信，不拿默认值编造。
+    if (ci.morningDone && ci.sleepHours) parts.push(`睡眠${ci.sleepHours}小时，质量${sleepLabel}`);
+    if (ci.eveningDone && ci.moodScore != null) parts.push(`心情${ci.moodScore >= 8 ? '良好' : ci.moodScore >= 6 ? '一般' : '较差'}`);
+    if (ci.eveningDone && ci.medicationTaken != null) parts.push(ci.medicationTaken ? '用药完成' : '今日未按时服药');
     if (ci.mealOption) parts.push(`进食${ci.mealOption.includes('正常') ? '正常' : ci.mealOption.includes('偏少') ? '偏少' : '较少'}`);
     if (napStr) parts.push(`白天小睡${napStr}`);
     const summary = parts.length > 0 ? parts.join('，') + '。' : `${nickname}今日照护记录已整理完毕。`;
@@ -1414,9 +1415,15 @@ export default function ShareScreen() {
       await handleShare();
       return;
     }
-    if (!cardRef.current) return;
+    if (!cardRef.current) {
+      // B10: ref 未挂载时给个提示，不静默 return 让用户以为按钮坏了。
+      Alert.alert('请稍候', '卡片还在准备中，请稍后再试');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSharingImage(true);
+    // B9: 区分截图阶段和分享阶段的失败，文案分别提示，避免用户在分享环节卡住时反复重试截图。
+    let phase: 'capture' | 'share' = 'capture';
     try {
       const ViewShot = require('react-native-view-shot');
       const uri = await ViewShot.captureRef(cardRef, {
@@ -1424,6 +1431,7 @@ export default function ShareScreen() {
         quality: 1,
         result: 'tmpfile',
       });
+      phase = 'share';
       const Sharing = require('expo-sharing');
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
@@ -1435,7 +1443,11 @@ export default function ShareScreen() {
         Alert.alert('无法分享', '当前设备不支持分享功能');
       }
     } catch (e) {
-      Alert.alert('截图失败', '请稍后重试');
+      if (phase === 'capture') {
+        Alert.alert('截图失败', '请稍后重试');
+      } else {
+        Alert.alert('分享失败', '截图已生成，但分享时出了问题，请稍后重试');
+      }
     } finally {
       setSharingImage(false);
     }
