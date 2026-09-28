@@ -27,6 +27,55 @@ import { resolveDiarySyncIdentity } from "./diary-sync-identity";
 import { resolveCheckInSyncIdentity } from "./checkin-sync-identity";
 import { getMemberDisplayEmoji } from "../lib/member-avatar";
 
+// ─── 打卡单调合并辅助 ──────────────────────────────────────────────────────
+// Completion is monotonic: 已完成时段只增不减。迟到的旧快照可能对另一时段
+// 带着默认值；除非本快照也完成了该时段，否则保留服务端已有的该时段数据。
+function applyMonotonicCheckInMerge(
+  safeInput: Record<string, unknown>,
+  previous: NonNullable<Awaited<ReturnType<typeof getCheckInByDate>>>,
+  input: { morningDone?: boolean; eveningDone?: boolean },
+): void {
+  if (previous.morningDone === true && input.morningDone !== true) {
+    Object.assign(safeInput, {
+      sleepHours: previous.sleepHours ?? undefined,
+      sleepQuality: previous.sleepQuality ?? undefined,
+      sleepInput: previous.sleepInput ?? undefined,
+      sleepScore: previous.sleepScore ?? undefined,
+      sleepProblems: previous.sleepProblems ?? undefined,
+      sleepType: previous.sleepType ?? undefined,
+      sleepSegments: previous.sleepSegments ?? undefined,
+      awakeHours: previous.awakeHours ?? undefined,
+      nightWakings: previous.nightWakings ?? undefined,
+      morningNotes: previous.morningNotes ?? undefined,
+      morningDone: true,
+    });
+  }
+  if (previous.eveningDone === true && input.eveningDone !== true) {
+    Object.assign(safeInput, {
+      daytimeNap: previous.daytimeNap ?? undefined,
+      napMinutes: previous.napMinutes ?? undefined,
+      moodEmoji: previous.moodEmoji ?? undefined,
+      moodScore: previous.moodScore ?? undefined,
+      medicationTaken: previous.medicationTaken ?? undefined,
+      medicationNotes: previous.medicationNotes ?? undefined,
+      mealNotes: previous.mealNotes ?? undefined,
+      mealOption: previous.mealOption ?? undefined,
+      eveningNotes: previous.eveningNotes ?? undefined,
+      eveningDone: true,
+      aiMessage: previous.aiMessage ?? undefined,
+      careScore: previous.careScore ?? undefined,
+    });
+  }
+}
+
+// MySQL 唯一索引冲突（并发首次写入同一护理日时触发）
+function isDuplicateKeyError(e: unknown): boolean {
+  const code = (e as { code?: string })?.code;
+  const errno = (e as { errno?: number })?.errno;
+  const message = (e as { message?: string })?.message ?? "";
+  return code === "ER_DUP_ENTRY" || errno === 1062 || /duplicate entry/i.test(message);
+}
+
 // ─── Expo Push Notification Helper ──────────────────────────────────────────
 
 async function sendExpoPushNotifications(
@@ -412,10 +461,29 @@ export const familyRouter = router({
         dateMatch,
       });
 
-      // completedAt is generated on every local save. A delayed morning request must not
-      // arrive after a completed evening save and replace the newer full-day snapshot.
-      if (previous?.completedAt && input.completedAt && input.completedAt < previous.completedAt) {
-        return { success: true, checkIn: previous, staleIgnored: true };
+      // 并发收窄：3 路查询与写入之间，另一设备可能已完成该护理日的首次写入。
+      // 写入前按日期重查一次；若命中则按"已有记录"走下面的单调合并，避免
+      // onDuplicateKeyUpdate 用本机快照整行覆盖对方已完成的时段（S2）。
+      let effectivePrevious = previous;
+      if (!effectivePrevious) {
+        effectivePrevious = await getCheckInByDate(input.roomId, input.date).catch(() => null);
+      }
+
+      // completedAt is generated on every local save. A delayed full-day snapshot must not
+      // arrive after a newer full-day save and replace it with older data.
+      // 但不能整单丢弃：离线设备迟到的"早间"快照可能带着服务端从未有过的已完成时段
+      //（例：A 离线做早间，B 在线做晚间并先同步；A 恢复网络后上传早间时 completedAt
+      // 早于服务端的晚间快照）。整单丢弃会导致该时段数据永远写不上服务端，
+      // 客户端收到 success 后又标为已同步，下次云端合并还会把本地的该时段抹掉——丢数据。
+      // 所以：只在"旧快照没有带来任何服务端没有的已完成时段"时才丢弃；
+      // 带来新时段的一律走下面的单调合并（已完成时段只增不减，不会覆盖另一时段的新数据）。
+      const inputBringsNewMorning = input.morningDone === true && effectivePrevious?.morningDone !== true;
+      const inputBringsNewEvening = input.eveningDone === true && effectivePrevious?.eveningDone !== true;
+      if (
+        effectivePrevious?.completedAt && input.completedAt && input.completedAt < effectivePrevious.completedAt
+        && !inputBringsNewMorning && !inputBringsNewEvening
+      ) {
+        return { success: true, checkIn: effectivePrevious, staleIgnored: true };
       }
 
       const { serverCheckInId: _serverCheckInId, clientId: requestedClientId, ...checkInFields } = input;
@@ -423,52 +491,43 @@ export const familyRouter = router({
         ...checkInFields,
         // Once a record exists, its identity and care date are immutable. If another
         // device created the same date first, adopt that canonical ID instead.
-        clientId: previous?.clientId || requestedClientId,
-        date: previous?.date || input.date,
+        clientId: effectivePrevious?.clientId || requestedClientId,
+        date: effectivePrevious?.date || input.date,
         // 创建者时区与 date 绑定：date 是按该时区算的护理日，一旦写入不再改变。
-        creatorTimeZone: previous?.creatorTimeZone || checkInFields.creatorTimeZone,
+        creatorTimeZone: effectivePrevious?.creatorTimeZone || checkInFields.creatorTimeZone,
       };
-      // Completion is monotonic. Older clients may send defaults for the other phase;
-      // preserve an already completed phase unless this snapshot also completed it.
-      if (previous?.morningDone === true && input.morningDone !== true) {
-        Object.assign(safeInput, {
-          sleepHours: previous.sleepHours ?? undefined,
-          sleepQuality: previous.sleepQuality ?? undefined,
-          sleepInput: previous.sleepInput ?? undefined,
-          sleepScore: previous.sleepScore ?? undefined,
-          sleepProblems: previous.sleepProblems ?? undefined,
-          sleepType: previous.sleepType ?? undefined,
-          sleepSegments: previous.sleepSegments ?? undefined,
-          awakeHours: previous.awakeHours ?? undefined,
-          nightWakings: previous.nightWakings ?? undefined,
-          morningNotes: previous.morningNotes ?? undefined,
-          morningDone: true,
-        });
+      if (effectivePrevious) {
+        applyMonotonicCheckInMerge(safeInput, effectivePrevious, input);
       }
-      if (previous?.eveningDone === true && input.eveningDone !== true) {
-        Object.assign(safeInput, {
-          daytimeNap: previous.daytimeNap ?? undefined,
-          napMinutes: previous.napMinutes ?? undefined,
-          moodEmoji: previous.moodEmoji ?? undefined,
-          moodScore: previous.moodScore ?? undefined,
-          medicationTaken: previous.medicationTaken ?? undefined,
-          medicationNotes: previous.medicationNotes ?? undefined,
-          mealNotes: previous.mealNotes ?? undefined,
-          mealOption: previous.mealOption ?? undefined,
-          eveningNotes: previous.eveningNotes ?? undefined,
-          eveningDone: true,
-          aiMessage: previous.aiMessage ?? undefined,
-          careScore: previous.careScore ?? undefined,
-        });
+      let result: Awaited<ReturnType<typeof upsertCheckIn>>;
+      try {
+        result = await upsertCheckIn(
+          { ...safeInput, authorUserId: userId },
+          effectivePrevious?.id,
+        );
+      } catch (e) {
+        // 极窄窗口：重查与写入之间另一设备刚插入，唯一索引冲突。
+        // 绝不能让本机快照整行覆盖：重查到赢家的行后走单调合并再按 id 更新。
+        if (!effectivePrevious && isDuplicateKeyError(e)) {
+          const raced = await getCheckInByDate(input.roomId, input.date).catch(() => null);
+          if (!raced) throw e;
+          safeInput.clientId = raced.clientId || safeInput.clientId;
+          safeInput.date = raced.date || safeInput.date;
+          safeInput.creatorTimeZone = raced.creatorTimeZone || safeInput.creatorTimeZone;
+          applyMonotonicCheckInMerge(safeInput, raced, input);
+          result = await upsertCheckIn(
+            { ...safeInput, authorUserId: userId },
+            raced.id,
+          );
+          effectivePrevious = raced;
+        } else {
+          throw e;
+        }
       }
-      const result = await upsertCheckIn(
-        { ...safeInput, authorUserId: userId },
-        previous?.id,
-      );
 
       // 只在完成状态首次 false→true 时通知。断网重试或资料补写不会重复打扰家人。
-      const newlyFinishedEvening = safeInput.eveningDone === true && previous?.eveningDone !== true;
-      const newlyFinishedMorning = safeInput.morningDone === true && previous?.morningDone !== true;
+      const newlyFinishedEvening = safeInput.eveningDone === true && effectivePrevious?.eveningDone !== true;
+      const newlyFinishedMorning = safeInput.morningDone === true && effectivePrevious?.morningDone !== true;
       if (newlyFinishedEvening || newlyFinishedMorning) {
         const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
         const period = newlyFinishedEvening ? '晚间' : '早间';

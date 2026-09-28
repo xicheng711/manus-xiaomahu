@@ -304,14 +304,29 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     Object.assign(payload, params.extra_body);
   }
 
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${resolveApiKey()}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  // D3: LLM 请求必须有界。网络半断开时 fetch 可能永远挂起，导致客户端 loading 永久卡死。
+  // 60 秒单次超时；上层的 callQwenChat 重试逻辑保持不变。
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  let response: Response;
+  try {
+    response = await fetch(resolveApiUrl(), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${resolveApiKey()}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      throw new Error('LLM invoke timed out after 60s');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
