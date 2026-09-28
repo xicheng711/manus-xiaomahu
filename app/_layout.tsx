@@ -1,6 +1,6 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -142,6 +142,49 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+  }, []);
+
+  // 全局 401/会话过期处理（#6）：fetch 层检测到 401（token 失效）或 403 账号注销时，
+  // 这里弹一次窗引导用户重新登录，不再全链路静默失败。每个 token 只提醒一次。
+  // 已在登录/引导/OAuth 页时不打扰。
+  const router = useRouter();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    import("@/lib/session-events").then(({ onSessionExpired }) => {
+      unsub = onSessionExpired(async (reason) => {
+        const path = pathnameRef.current ?? "";
+        if (path.startsWith("/login") || path.startsWith("/onboarding") || path.startsWith("/oauth")) return;
+        const goLogin = () => router.replace("/login" as any);
+        if (reason === "deleted") {
+          // 账号在别处被注销：按注销流程清本地数据，再引导登录
+          try {
+            const storage = await import("@/lib/storage");
+            const auth = await import("@/lib/_core/auth");
+            const cloud = await import("@/lib/cloud-sync");
+            await storage.clearCheckInDraft().catch(() => {});
+            await cloud.clearCloudSyncState().catch(() => {});
+            await auth.removeSessionToken().catch(() => {});
+            await auth.clearUserInfo().catch(() => {});
+            await storage.clearAllLocalData().catch(() => {});
+          } catch {}
+          Alert.alert("账号已注销", "该账号已在其他设备注销，本地数据已清除。", [
+            { text: "去登录", onPress: goLogin },
+          ]);
+        } else {
+          Alert.alert("登录已过期", "登录状态已失效，请重新登录。", [
+            { text: "稍后", style: "cancel" },
+            { text: "去登录", onPress: goLogin },
+          ]);
+        }
+      });
+    });
+    return () => {
+      unsub?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Register push token for cross-device notifications (after cloud sync is ready).

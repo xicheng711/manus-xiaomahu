@@ -58,6 +58,17 @@ async function exchangeProviderToken(provider: 'wechat' | 'apple', payload: Reco
  */
 async function navigateAfterLogin(router: Router) {
   try {
+    // 游客草稿归属（防串号）：只有"存草稿并去登录"延续下来的登录才保留草稿；
+    // 否则草稿可能是同设备上一手游客留下的，直接清除，防止新登录用户看到别人的护理备注。
+    try {
+      const { readCheckInDraft, clearCheckInDraft, shouldKeepDraftAfterLogin } = await import('@/lib/storage');
+      const draft = await readCheckInDraft().catch(() => null);
+      if (draft && !(await shouldKeepDraftAfterLogin())) {
+        await clearCheckInDraft().catch(() => {});
+      }
+    } catch (e) {
+      console.warn('[navigateAfterLogin] Failed to check draft ownership', e);
+    }
     // Step 1: Ask the server what rooms this user belongs to
     const serverRooms = await cloudGetMyRooms();
 

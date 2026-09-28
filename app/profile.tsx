@@ -538,13 +538,18 @@ export default function ProfileScreen() {
         setJoinLoading(false);
         return;
       }
-      await joinFamilyRoom(joinCode.trim().toUpperCase(), {
+      const result = await joinFamilyRoom(joinCode.trim().toUpperCase(), {
         name: joinName.trim(),
         role: 'family',
         roleLabel: '家庭成员',
         emoji: '👨',
         color: '#A855F7',
       });
+      if (!result.ok) {
+        setJoinError(result.message);
+        setJoinLoading(false);
+        return;
+      }
       await refresh();
       setJoinCode('');
       setJoinName('');

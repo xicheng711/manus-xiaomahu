@@ -127,6 +127,8 @@ export default function AssistantScreen() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 游客（未登录）：AI 生成永远失败，"重新生成"按钮是死路，改给"去登录"引导
+  const [isGuest, setIsGuest] = useState(false);
   const [elderNickname, setElderNickname] = useState('家人');
   const [caregiverName, setCaregiverName] = useState('照顾者');
   const [weeklyData, setWeeklyData] = useState<Array<{
@@ -149,6 +151,19 @@ export default function AssistantScreen() {
     cancelLoadRef.current = false;
     setLoading(true);
     setError(null);
+    // 游客直接给登录引导：AI 需要账号+家庭数据，重试永远失败
+    try {
+      const { getSessionToken } = await import('@/lib/_core/auth');
+      if (!(await getSessionToken().catch(() => null))) {
+        if (isCurrentFamily() && !isCancelled()) {
+          setIsGuest(true);
+          setError('登录后，小马虎才能结合你家的打卡记录生成专属护理总结。');
+          setLoading(false);
+        }
+        return;
+      }
+    } catch {}
+    setIsGuest(false);
     try {
       // 称谓：family-scoped 优先，降级到 legacy profile
       const [userProfile, familyProfile, legacyProfile] = await Promise.all([
@@ -311,9 +326,15 @@ export default function AssistantScreen() {
           <Text style={{ fontSize: 56, marginBottom: 16 }}>😅</Text>
           <Text style={s.errorTitle}>暂时无法生成分析</Text>
           <Text style={s.errorText}>{error ?? '请先完成今日打卡'}</Text>
-          <TouchableOpacity style={s.retryBtn} onPress={loadData}>
-            <Text style={s.retryBtnText}>重新生成</Text>
-          </TouchableOpacity>
+          {isGuest ? (
+            <TouchableOpacity style={s.retryBtn} onPress={() => router.push('/login' as any)}>
+              <Text style={s.retryBtnText}>去登录</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={s.retryBtn} onPress={loadData}>
+              <Text style={s.retryBtnText}>重新生成</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => router.replace('/(tabs)' as any)} style={{ marginTop: 12 }}>
             <Text style={{ fontSize: 15, color: AppColors.text.tertiary }}>返回首页</Text>
           </TouchableOpacity>

@@ -58,6 +58,16 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
     }
 
     if (!response.ok) {
+      // 全局 401 处理（#6）：会话失效不再静默，通知一次引导重新登录
+      if (response.status === 401) {
+        try {
+          const { notifySessionExpired } = await import("@/lib/session-events");
+          await Auth.removeSessionToken().catch(() => {});
+          notifySessionExpired("expired");
+        } catch {
+          // 通知链路异常不影响错误透传
+        }
+      }
       const errorText = await response.text();
       console.error("[API] Error response:", errorText);
       let errorMessage = errorText;

@@ -213,7 +213,14 @@ export async function cloudJoinRoom(params: {
     return result;
   } catch (e) {
     console.warn('[CloudSync] joinRoom failed:', e);
-    return null;
+    // 把服务端的具体拒绝原因（如"最多加入 3 个家庭"）透出去，
+    // 调用方不再统一显示"邀请码不正确"。传输层失败则给友好文案。
+    const raw = e instanceof Error ? e.message : '';
+    const isTransportError = /network request failed|failed to fetch|fetch failed|networkerror|timeout/i.test(raw);
+    return {
+      success: false as const,
+      error: isTransportError || !raw ? '网络连接失败，请检查网络后重试。' : raw,
+    };
   }
 }
 

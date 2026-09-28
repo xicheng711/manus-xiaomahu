@@ -2020,10 +2020,15 @@ export async function createFamilyRoom(
   return room;
 }
 
-export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember, 'id' | 'joinedAt'>): Promise<FamilyRoom | null> {
+export type JoinFamilyResult = { ok: true; room: FamilyRoom } | { ok: false; message: string };
+
+export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember, 'id' | 'joinedAt'>): Promise<JoinFamilyResult> {
   const code = roomCode.toUpperCase();
 
   // Step 1: Join via server (cloud-first for cross-device sharing)
+  // serverMessage：云端拒绝的具体原因（邀请码错误/3 个家庭上限/主照顾者冲突）或网络失败文案，
+  // 云端失败且本地兜底也失败时透给用户，不再统一说"邀请码不正确"。
+  let serverMessage: string | null = null;
   try {
     const cloudResult = await cloudJoinRoom({
       roomCode: code,
@@ -2037,7 +2042,7 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
       relationship: member.relationship,
     });
 
-    if (cloudResult?.success && cloudResult.roomId) {
+    if (cloudResult && cloudResult.success && 'roomId' in cloudResult && cloudResult.roomId) {
       await setCloudSyncState({ activeRoomId: cloudResult.roomId });
 
       // Step 1a: Pull full room detail from server (members + elder profile)
@@ -2113,20 +2118,28 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
       await addOrUpdateMembership(membership);
       await setActiveFamilyId(room.id);
       setActiveRoomIdCache(room.id);
-      return room;
+      return { ok: true as const, room };
+    }
+    if (cloudResult && !cloudResult.success && 'error' in cloudResult && cloudResult.error) {
+      serverMessage = cloudResult.error;
     }
   } catch (e) {
     console.warn('[Storage] joinFamilyRoom cloud join failed:', e);
+    serverMessage = '网络连接失败，请检查网络后重试。';
   }
 
   // Step 2: Fallback — check local storage (same-device scenario only)
   const localRoom = await getFamilyRoom();
-  if (!localRoom || localRoom.roomCode !== code) return null;
+  if (!localRoom || localRoom.roomCode !== code) {
+    return { ok: false, message: serverMessage ?? '邀请码不正确，请检查后重试' };
+  }
 
   // 如果当前用户已经是该家庭的 creator，拒绝加入
   const existingMemberships = await getAllMemberships();
   const alreadyCreator = existingMemberships.find(m => m.familyId === localRoom.id && m.role === 'creator');
-  if (alreadyCreator) return null;
+  if (alreadyCreator) {
+    return { ok: false, message: serverMessage ?? '您是这个家庭的主照顾者，无法以家庭成员身份加入' };
+  }
 
   const newMember: FamilyMember = {
     id: generateId(),
@@ -2149,7 +2162,7 @@ export async function joinFamilyRoom(roomCode: string, member: Omit<FamilyMember
   await addOrUpdateMembership(membership);
   await setActiveFamilyId(localRoom.id);
   setActiveRoomIdCache(localRoom.id);
-  return localRoom;
+  return { ok: true as const, room: localRoom };
 }
 
 export async function addFamilyMember(member: Omit<FamilyMember, 'id' | 'joinedAt'>): Promise<FamilyMember> {
@@ -2596,6 +2609,38 @@ export async function readCheckInDraft(): Promise<CheckInDraft | null> {
 
 export async function clearCheckInDraft(): Promise<void> {
   await AsyncStorage.removeItem(CHECKIN_DRAFT_KEY);
+}
+
+// ─── 游客草稿归属（防串号） ─────────────────────────────────────────────
+// 问题：草稿没有用户归属。游客 A 存草稿后放弃登录，用户 B 在同设备 48 小时内登录，
+// 打开打卡页会自动填入 A 的护理备注——B 直接看到 A 的隐私内容。
+// 修法：点"存草稿并去登录"时打时间标记；登录成功后（navigateAfterLogin）检查——
+// 只有 30 分钟内的延续登录才保留草稿，否则视为另一用户，直接清除。
+const DRAFT_LOGIN_GATE_KEY = '@xiaomahuDraftLoginAt';
+const DRAFT_LOGIN_WINDOW_MS = 30 * 60 * 1000;
+
+/** 游客点"存草稿并去登录"时调用：标记接下来的登录是草稿主人的延续。 */
+export async function markDraftLoginInitiated(): Promise<void> {
+  await AsyncStorage.setItem(DRAFT_LOGIN_GATE_KEY, String(Date.now())).catch(() => {});
+}
+
+/**
+ * 登录成功后调用（一次性消费标记）。
+ * 返回 true → 本次登录是存草稿动作的延续，保留草稿供恢复；
+ * 返回 false → 草稿与本次登录无关（可能上一手游客留下），调用方应清除草稿。
+ */
+export async function shouldKeepDraftAfterLogin(): Promise<boolean> {
+  let raw: string | null = null;
+  try {
+    raw = await AsyncStorage.getItem(DRAFT_LOGIN_GATE_KEY);
+  } catch {
+    raw = null;
+  }
+  await AsyncStorage.removeItem(DRAFT_LOGIN_GATE_KEY).catch(() => {});
+  if (!raw) return false;
+  const at = Number(raw);
+  if (!Number.isFinite(at)) return false;
+  return Date.now() - at <= DRAFT_LOGIN_WINDOW_MS;
 }
 
 // Delete a family and all associated data (creator only)

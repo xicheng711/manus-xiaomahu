@@ -197,8 +197,8 @@ function FamilySetupScreen({ onSetupComplete, initialCode }: { onSetupComplete: 
         color: memberColor,
         photoUri: finalPhotoUri,
       });
-      if (!result) {
-        Alert.alert('加入失败', '邀请码不正确，请检查后重试');
+      if (!result.ok) {
+        Alert.alert('加入失败', result.message);
         return;
       }
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

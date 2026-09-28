@@ -535,10 +535,10 @@ export default function OnboardingScreen() {
       photoUri: undefined, // joiner 不使用照片头像
       relationship: rel || undefined,
     });
-    if (!result) {
+    if (!result.ok) {
       // Cloud join failed — show error and stay on onboarding
       setIsSubmitting(false);
-      Alert.alert('加入失败', '网络连接失败，请检查网络后重试。');
+      Alert.alert('加入失败', result.message);
       return;
     }
     // 保存 joiner 自己的用户信息（名字 + emoji）到本地

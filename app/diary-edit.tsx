@@ -827,6 +827,12 @@ export default function DiaryEditScreen() {
         Alert.alert(
           failureTitle,
           `${publishResult?.errorMessage ?? '未能连接家庭云端，请检查网络后重试。'}\n\n完整日记和全部对话仍安全保存在本机，不会丢失。`,
+          errorCode === 'AUTH_REQUIRED'
+            ? [
+                { text: '稍后', style: 'cancel' },
+                { text: '去登录', onPress: () => router.push('/login' as any) },
+              ]
+            : undefined,
         );
         return;
       }

@@ -1,6 +1,6 @@
 import { and, desc, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { checkIns, InsertUser, users } from "../drizzle/schema";
+import { checkIns, InsertUser, users, deletedUsers } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -220,7 +220,11 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
 
   // 日记互动表：CREATE TABLE IF NOT EXISTS 在 MySQL 8.0 可安全重复执行。
   const tablesToCreate = [
-    `CREATE TABLE IF NOT EXISTS diary_reads (
+    `CREATE TABLE IF NOT EXISTS deleted_users (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      openId VARCHAR(64) NOT NULL UNIQUE,
+      deletedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,    `CREATE TABLE IF NOT EXISTS diary_reads (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       roomId INT NOT NULL,
       diaryId INT NOT NULL,
@@ -374,13 +378,67 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+/** 注销墓碑查询：openId 是否在 deleted_users 表里。 */
+export async function isUserDeleted(openId: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db || !openId) return false;
+  try {
+    const result = await db.select().from(deletedUsers).where(eq(deletedUsers.openId, openId)).limit(1);
+    return result.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function deleteUserByOpenId(openId: string): Promise<void> {
   const db = await getDb();
   if (!db) {
     console.warn('[Database] Cannot delete user: database not available');
     return;
   }
+  // drizzle mysql2 的 execute 返回 [rows, fields]
+  const rowsOf = (res: any): any[] => (Array.isArray(res?.[0]) ? res[0] : []);
   try {
+    // 1. 先立墓碑：其它设备持有效 JWT 调 API 时，authenticateRequest 不再自动"复活"用户（#2）。
+    await db.insert(deletedUsers).values({ openId })
+      .onDuplicateKeyUpdate({ set: { deletedAt: new Date() } })
+      .catch((e) => console.warn('[Database] Failed to write delete tombstone:', e?.message ?? e));
+
+    const user: any = await getUserByOpenId(openId).catch(() => null);
+    const userId = user?.id;
+
+    if (userId) {
+      // 2. 记下用户所在的房间，删成员身份
+      const memberRows = rowsOf(await (db as any).execute(
+        'SELECT DISTINCT roomId FROM family_members WHERE userId = ?', [userId]));
+      const roomIds: number[] = memberRows.map((r: any) => Number(r.roomId)).filter(Number.isFinite);
+      await (db as any).execute('DELETE FROM family_members WHERE userId = ?', [userId]);
+
+      // 3. 房间没有成员剩下 → 整个房间是孤儿，连带所有房间数据删除（#3）。
+      //    还有其他成员的房间：保留家庭共享历史（打卡/日记/用药等），只移除该成员身份，
+      //    不删除别人的家庭数据。
+      for (const roomId of roomIds) {
+        const cntRows = rowsOf(await (db as any).execute(
+          'SELECT COUNT(*) AS c FROM family_members WHERE roomId = ?', [roomId]));
+        if (Number(cntRows[0]?.c ?? 0) === 0) {
+          const roomTables = [
+            'medication_changes', 'medications', 'briefings',
+            'announcement_comments', 'announcements',
+            'diary_comments', 'diary_reads', 'diary_entries',
+            'check_ins', 'elder_profiles',
+          ];
+          for (const t of roomTables) {
+            await (db as any).execute(`DELETE FROM ${t} WHERE roomId = ?`, [roomId])
+              .catch((e: any) => console.warn(`[Database] Failed to clean ${t}:`, e?.message ?? e));
+          }
+          await (db as any).execute('DELETE FROM family_rooms WHERE id = ?', [roomId])
+            .catch((e: any) => console.warn('[Database] Failed to clean family_rooms:', e?.message ?? e));
+          console.log('[Database] Deleted orphan room and its data:', roomId);
+        }
+      }
+    }
+
+    // 4. 删除用户行
     await db.delete(users).where(eq(users.openId, openId));
     console.log('[Database] User deleted:', openId);
   } catch (error) {

@@ -13,6 +13,7 @@ import {
   getCurrentUserIsCreator, mergeCloudDiariesIntoLocal, syncPendingDiaries,
 } from '@/lib/storage';
 import { useFamilyContext } from '@/lib/family-context';
+import { getSessionToken } from '@/lib/_core/auth';
 import { cloudGetDiaries, cloudGetDiaryInteractionSummaries, getCloudSyncState, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { JoinerLockedScreen } from '@/components/joiner-locked-screen';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
@@ -227,7 +228,7 @@ function DraftCard({ content, savedAt, stage, onContinue, onDelete }: {
 }
 
 // ─── Empty State ─────────────────────────────────────────────────────────────
-function EmptyState({ onStart }: { onStart: () => void }) {
+function EmptyState({ onStart, isGuest, onLogin }: { onStart: () => void; isGuest?: boolean; onLogin?: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -251,16 +252,16 @@ function EmptyState({ onStart }: { onStart: () => void }) {
       <Animated.View style={[styles.emptyEmojiCircle, { transform: [{ scale: pulseAnim }] }]}>
         <AppIcon name="book" color={AppColors.coral.primary} size={44} strokeWidth={1.5} />
       </Animated.View>
-      <Text style={styles.emptyTitle}>还没有日记</Text>
-      <Text style={styles.emptyText}>每天记录一点点，{'\n'}积累成最珍贵的回忆</Text>
+      <Text style={styles.emptyTitle}>{isGuest ? '登录后开始记录' : '还没有日记'}</Text>
+      <Text style={styles.emptyText}>{isGuest ? '登录账号后，日记会与家人共享，\n珍贵的回忆不再丢失' : '每天记录一点点，\n积累成最珍贵的回忆'}</Text>
       <Animated.View style={{ transform: [{ scale: btnScale }] }}>
         <TouchableOpacity
           style={styles.startBtn}
-          onPress={() => pressAnimation(btnScale, onStart)}
+          onPress={() => pressAnimation(btnScale, isGuest ? (onLogin ?? onStart) : onStart)}
           activeOpacity={0.85}
         >
           <AppIcon name="note" color="#fff" size={16} strokeWidth={1.8} />
-          <Text style={styles.startBtnText}>开始第一篇日记</Text>
+          <Text style={styles.startBtnText}>{isGuest ? '去登录' : '开始第一篇日记'}</Text>
         </TouchableOpacity>
       </Animated.View>
     </Animated.View>
@@ -407,6 +408,8 @@ function DiaryScreenContent() {
   const [editMode, setEditMode] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; date: string } | null>(null);
+  // 游客（未登录）打开日记页：空状态给明确的登录引导，而不是空白列表
+  const [isGuest, setIsGuest] = useState(false);
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -434,6 +437,7 @@ function DiaryScreenContent() {
   }, [familyId]);
 
   useFocusEffect(useCallback(() => {
+    getSessionToken().then(t => setIsGuest(!t)).catch(() => {});
     if (!familyReady || !familyId) {
       setEntries([]);
       setTextDraft(null);
@@ -746,7 +750,11 @@ function DiaryScreenContent() {
 
         {/* Entry list or empty state */}
         {!hasAnyContent ? (
-          <EmptyState onStart={openNewEntry} />
+          <EmptyState
+            onStart={openNewEntry}
+            isGuest={isGuest}
+            onLogin={() => router.push('/login' as any)}
+          />
         ) : (
           <>
             <View style={styles.selfCareBanner}>

@@ -254,6 +254,11 @@ class SDKServer {
 
     // If user not in DB, try to recover
     if (!user) {
+      // 已注销的账号：墓碑存在时拒绝"复活"，旧 JWT 直接失效。
+      // 否则其它设备持 1 年有效期 token 调一次 API，用户行就被自动重建，注销≠注销。
+      if (await db.isUserDeleted(sessionUserId).catch(() => false)) {
+        throw ForbiddenError("账号已注销");
+      }
       // Non-OAuth users (apple_, wechat_) are created directly at login time.
       // If they're missing from DB, recreate from session info instead of
       // calling the OAuth server (which would 404 for these users).

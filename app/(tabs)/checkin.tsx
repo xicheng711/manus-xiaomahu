@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ScreenContainer } from '@/components/screen-container';
 import { PageHeader, PAGE_THEMES } from '@/components/page-header';
 import { AppIcon, type AppIconName } from '@/components/app-icons';
-import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, nightWakingsToKey, saveCheckInDraft, readCheckInDraft, clearCheckInDraft } from '@/lib/storage';
+import { upsertCheckIn, getTodayCheckIn, getCheckInByDate, getAllCheckIns, getProfile, getUserProfile, getFamilyProfile, DailyCheckIn, SleepInput, CareBriefing, todayStr, getBriefingByDate, syncPendingCheckIns, mergeCloudCheckInsIntoLocal, getNapMinutes, hasRecordedNap, getNightWakings, nightWakingsToLabel, nightWakingsToKey, saveCheckInDraft, readCheckInDraft, clearCheckInDraft, markDraftLoginInitiated } from '@/lib/storage';
 import { computeStreak } from '@/lib/night-wakings';
 import { getSessionToken } from '@/lib/_core/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1322,6 +1322,9 @@ function CheckinScreenContent() {
             onPress: async () => {
               // 保存按钮只在早间/晚间表单里可点；这里做防御性收窄
               if (mode === 'landing') return;
+              // 标记这次"去登录"是草稿主人的延续，登录成功后才保留草稿恢复；
+              // 若换人登录，草稿会被清除（防串号，见 markDraftLoginInitiated）。
+              await markDraftLoginInitiated();
               await saveCheckInDraft({
                 targetDate: formTarget?.date ?? getCareDayKey(),
                 mode,

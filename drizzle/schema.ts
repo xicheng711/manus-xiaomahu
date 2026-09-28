@@ -18,6 +18,18 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Deleted Users (tombstone) ───────────────────────────────────────────────
+// 注销墓碑：deleteAccount 删除 users 行后，其它设备可能还持有 1 年有效期的 JWT。
+// authenticateRequest 遇到 DB 查无的用户会自动 upsert "复活"——墓碑让复活逻辑
+// 识别出"这是注销过的账号"，直接拒绝而不是重建。否则注销≠注销。
+export const deletedUsers = mysqlTable("deleted_users", {
+  id: int("id").autoincrement().primaryKey(),
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  deletedAt: timestamp("deletedAt").defaultNow().notNull(),
+});
+
+export type DeletedUser = typeof deletedUsers.$inferSelect;
+
 // ─── Family Rooms ────────────────────────────────────────────────────────────
 
 export const familyRooms = mysqlTable("family_rooms", {

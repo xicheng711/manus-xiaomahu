@@ -18,6 +18,7 @@ import {
 import { cloudGetMedications, cloudGetMedicationChanges, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { MedicationHistory, MedicationItemHistory } from '@/components/medication-history';
 import { useFamilyContext } from '@/lib/family-context';
+import { getSessionToken } from '@/lib/_core/auth';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
@@ -122,6 +123,9 @@ function MedicationScreenContent() {
   const activeFamilyRef = useRef<string | undefined>(familyId);
   activeFamilyRef.current = familyId;
   const isCreator = activeMembership?.role === 'creator';
+  // 游客（未登录）不是"家庭成员"，空状态文案不能写"您是家庭成员身份"，
+  // 按钮也不能是"去家庭页联系主照顾者"——应该是"去登录"。
+  const [isGuest, setIsGuest] = useState(false);
   const currentMemberName = activeMembership?.room.members.find(member => member.id === activeMembership.myMemberId)?.name || '主照顾者';
   const [meds, setMeds] = useState<Medication[]>([]);
   const [medicationChanges, setMedicationChanges] = useState<MedicationChangeEvent[]>([]);
@@ -223,6 +227,7 @@ function MedicationScreenContent() {
 
   useFocusEffect(useCallback(() => {
     loadMeds();
+    getSessionToken().then(t => setIsGuest(!t)).catch(() => {});
   }, [loadMeds]));
 
   // 点击通知时强制刷新
@@ -699,6 +704,21 @@ function MedicationScreenContent() {
         {meds.length === 0 && !adding ? (
           isCreator ? (
             <EmptyMedState onAdd={() => setAdding(true)} elderNickname={elderNickname} />
+          ) : isGuest ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyEmojiCircle}>
+                <AppIcon name="pill" color={AppColors.coral.primary} size={44} strokeWidth={1.5} />
+              </View>
+              <Text style={styles.emptyTitle}>还没有用药记录</Text>
+              <Text style={styles.emptyText}>登录后即可查看家庭的用药计划，并与家人共享。</Text>
+              <TouchableOpacity
+                style={styles.joinerEmptyBtn}
+                onPress={() => router.push('/login' as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.joinerEmptyBtnText}>去登录 ›</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <View style={styles.emptyState}>
               <View style={styles.emptyEmojiCircle}>

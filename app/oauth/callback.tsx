@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { setCloudSyncState } from "@/lib/cloud-sync";
 import { registerPushToken } from "@/lib/notifications";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Text } from "react-native";
+import { ActivityIndicator, Pressable, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function OAuthCallback() {
@@ -20,6 +20,8 @@ export default function OAuthCallback() {
   }>();
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // 重试计数：失败页"再试一次"按钮用，触发 effect 重新跑一遍回调处理
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -239,7 +241,7 @@ export default function OAuthCallback() {
     };
 
     handleCallback();
-  }, [params.code, params.state, params.error, params.sessionToken, params.user, router]);
+  }, [params.code, params.state, params.error, params.sessionToken, params.user, router, retryKey]);
 
   return (
     <SafeAreaView className="flex-1" edges={["top", "bottom", "left", "right"]}>
@@ -270,6 +272,26 @@ export default function OAuthCallback() {
             <Text className="text-base leading-6 text-center text-foreground">
               {errorMessage}
             </Text>
+            {/* 失败页原来是死胡同：无按钮、无返回键，只能靠手势盲退。
+                现在给"再试一次"和"返回登录"两个出口。 */}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setErrorMessage(null);
+                setStatus("processing");
+                setRetryKey(k => k + 1);
+              }}
+              className="mt-4 rounded-full bg-primary px-8 py-3"
+            >
+              <Text className="text-base font-semibold text-white">再试一次</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.replace("/login" as any)}
+              className="rounded-full border border-primary px-8 py-3"
+            >
+              <Text className="text-base font-semibold text-primary">返回登录</Text>
+            </Pressable>
           </>
         )}
       </ThemedView>

@@ -44,6 +44,13 @@ export async function setSessionToken(token: string): Promise<void> {
     // Use SecureStore for native
     console.log("[Auth] Setting session token...", token.substring(0, 20) + "...");
     await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token);
+    // 新 token = 重新登录：重置"会话过期已提醒"标记，下次过期可再提醒（#6 去重）
+    try {
+      const { resetSessionExpiredFlag } = await import("@/lib/session-events");
+      resetSessionExpiredFlag();
+    } catch {
+      // 忽略：提醒去重是体验优化，不影响登录主流程
+    }
     console.log("[Auth] Session token stored in SecureStore successfully");
   } catch (error) {
     console.error("[Auth] Failed to set session token:", error);
