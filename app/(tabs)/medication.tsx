@@ -264,16 +264,29 @@ function MedicationScreenContent() {
 
   // 为选中的时间逐一排提醒，返回是否至少排上了一个。
   // 如实返回结果：调用方负责在全部失败时告诉用户，而不是显示"✨"。
+  // frequency 会透传给 scheduleMedicationReminder：每周一次走 WEEKLY、
+  // 每隔一天预排 10 个 DATE、需要时服用不排（调用方已单独提示，不算失败）。
   async function scheduleSelectedReminders(
-    medId: string, medName: string, medIcon: string, nickname: string, times: string[],
+    medId: string, medName: string, medIcon: string, nickname: string, times: string[], frequency?: string,
   ): Promise<boolean> {
     let scheduledAny = false;
     for (const t of times) {
       const [h, min] = t.split(':').map(Number);
-      const id = await scheduleMedicationReminder(medId + '_' + t.replace(':', ''), medName, medIcon, nickname, h, min).catch(() => null);
+      const id = await scheduleMedicationReminder(medId + '_' + t.replace(':', ''), medName, medIcon, nickname, h, min, frequency).catch(() => null);
       if (id) scheduledAny = true;
     }
     return scheduledAny;
+  }
+
+  // 取消某药物的全部用药提醒：各时间点 + 兼容旧版 _morning/_evening key。
+  // 用于删除药物（M1）和暂停用药（M2），否则会留下幽灵提醒。
+  async function cancelMedicationRemindersForMed(med: { id: string; times?: string[] }): Promise<void> {
+    const jobs: Promise<void>[] = (med.times || []).map(t =>
+      cancelMedicationReminder(med.id + '_' + t.replace(':', '')).catch(() => {}),
+    );
+    jobs.push(cancelMedicationReminder(med.id + '_morning').catch(() => {}));
+    jobs.push(cancelMedicationReminder(med.id + '_evening').catch(() => {}));
+    await Promise.all(jobs);
   }
 
   function alertReminderFailed() {
@@ -361,8 +374,14 @@ function MedicationScreenContent() {
           }
         }
         // 新增或保留的时间（selectedTimes）
-        const scheduled = await scheduleSelectedReminders(editingMed.id, name.trim(), icon, nickname, selectedTimes);
-        if (!scheduled) alertReminderFailed();
+        const editFrequency = FREQUENCIES[freqIdx];
+        if (editFrequency === '需要时服用') {
+          // 需要时服用的药不自动排提醒：如实告诉用户，而不是报"排期失败"。
+          Alert.alert('提醒说明', '「需要时服用」的药物不会自动排提醒，需要时请打开用药页查看。');
+        } else {
+          const scheduled = await scheduleSelectedReminders(editingMed.id, name.trim(), icon, nickname, selectedTimes, editFrequency);
+          if (!scheduled) alertReminderFailed();
+        }
       } else {
         // 关闭提醒：取消所有旧时间
         for (const t of oldTimes) {
@@ -393,8 +412,12 @@ function MedicationScreenContent() {
       setMedicationChanges(previous => [changeEvent, ...previous.filter(item => item.eventId !== changeEvent.eventId)]);
       setMeds(prev => [...prev, newMed]);
       if (reminderEnabled) {
-        const scheduled = await scheduleSelectedReminders(newMed.id, newMed.name, newMed.icon, nickname, selectedTimes);
-        if (!scheduled) alertReminderFailed();
+        if (newMedicationData.frequency === '需要时服用') {
+          Alert.alert('提醒说明', '「需要时服用」的药物不会自动排提醒，需要时请打开用药页查看。');
+        } else {
+          const scheduled = await scheduleSelectedReminders(newMed.id, newMed.name, newMed.icon, nickname, selectedTimes, newMedicationData.frequency);
+          if (!scheduled) alertReminderFailed();
+        }
       }
     }
 
@@ -450,6 +473,17 @@ function MedicationScreenContent() {
         if (activeFamilyRef.current !== requestedFamilyId) return;
         setMeds(updatedMeds);
         setMedicationChanges(updatedChanges);
+        if (!nextMedication.active) {
+          // M2: 暂停用药必须取消它的全部提醒，否则暂停期间通知还会继续响。
+          await cancelMedicationRemindersForMed(action.med);
+        } else if (action.med.reminderEnabled) {
+          // 恢复用药：按原来的提醒设置（频率语义由 scheduleMedicationReminder 处理）重新排期。
+          const resumed = await scheduleSelectedReminders(
+            action.med.id, action.med.name, action.med.icon || '💊', elderNickname,
+            action.med.times || ['08:00'], action.med.frequency,
+          );
+          if (!resumed && action.med.frequency !== '需要时服用') alertReminderFailed();
+        }
       } else {
         const changeEvent = createMedicationChangeEvent({
           changeType: 'deleted',
@@ -459,6 +493,8 @@ function MedicationScreenContent() {
           changedByName: currentMemberName,
         });
         await deleteMedication(action.med.id, requestedFamilyId, changeEvent);
+        // M1: 删除药物必须同时取消它的全部用药提醒，否则通知会继续响（幽灵提醒）。
+        await cancelMedicationRemindersForMed(action.med);
         setMeds(previous => previous.filter(item => item.id !== action.med.id));
         const refreshedChanges = await getMedicationChanges(requestedFamilyId);
         setMedicationChanges(refreshedChanges);
