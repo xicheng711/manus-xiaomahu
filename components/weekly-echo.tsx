@@ -63,7 +63,10 @@ function getWeekDateRange(): { start: string; end: string } {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
 
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  // H1: 必须用本地日期组装 key。toISOString() 是 UTC，美东夏令时周日 20:00 之后
+  // UTC 已是周一，会导致整周范围错位一天（周一变周二……周日变下周一）。
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   return { start: fmt(monday), end: fmt(sunday) };
 }
 

@@ -405,17 +405,6 @@ function QuickActionCard({
   );
 }
 
-// ─── 标题 🚀 摇摆 Hook ───────────────────────────────────────────────
-function useShakeAnim() {
-  const shakeAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(Animated.timing(shakeAnim, {
-      toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true,
-    })).start();
-  }, []);
-  return shakeAnim.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: ['0deg', '10deg', '0deg', '-10deg', '0deg'] });
-}
-
 // ─── Helper ────────────────────────────────────────────────────────────────
 function getMoodLabel(score: number): string {
   if (score >= 9) return '非常好';
@@ -507,7 +496,6 @@ function CreatorHomeScreen() {
   const headerFade = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-15)).current;
   const avatarScale = useRef(new Animated.Value(0)).current;
-  const _unusedShake = useShakeAnim();
 
   const [refreshing, setRefreshing] = useState(false);
 
