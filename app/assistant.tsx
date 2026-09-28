@@ -15,6 +15,7 @@ import {
 import { scoreSleepInput } from '@/lib/sleep-scoring';
 import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
+import { withAiTimeout, isAiTimeoutError, AI_TIMEOUT_FRIENDLY_MESSAGE } from '@/lib/ai-timeout';
 import { BackButton } from '@/components/back-button';
 import { COLORS, RADIUS, SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
@@ -23,7 +24,7 @@ import { BarChart } from 'react-native-gifted-charts';
 const { width: SW } = Dimensions.get('window');
 const CHART_W = Math.min(SW - 64, 360);
 
-function LoadingScreen() {
+function LoadingScreen({ onCancel }: { onCancel?: () => void }) {
   const bar1 = useRef(new Animated.Value(0)).current;
   const bar2 = useRef(new Animated.Value(0)).current;
   const bar3 = useRef(new Animated.Value(0)).current;
@@ -65,6 +66,20 @@ function LoadingScreen() {
         <Animated.View style={{ alignItems: 'center', marginTop: 32, opacity: titleOpacity, transform: [{ translateY: titleY }] }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: AppColors.purple.strong, marginBottom: 8 }}>小马虎正在整理数据...</Text>
           <Text style={{ fontSize: 14, color: AppColors.text.tertiary }}>正在生成护理总结</Text>
+          {/* B1: 加载态必须有逃生出口。网络停滞时请求可能很久才回来，不能让用户只能杀进程。 */}
+          {onCancel ? (
+            <TouchableOpacity
+              onPress={onCancel}
+              activeOpacity={0.7}
+              style={{
+                marginTop: 28, paddingHorizontal: 28, paddingVertical: 12,
+                borderRadius: 999, backgroundColor: AppColors.surface.whiteStrong,
+                borderWidth: 1, borderColor: AppColors.purple.soft,
+              }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '700', color: AppColors.purple.strong }}>不等了，先返回</Text>
+            </TouchableOpacity>
+          ) : null}
         </Animated.View>
       </View>
     </LinearGradient>
@@ -101,6 +116,12 @@ function formatDateShort(dateStr: string) {
 export default function AssistantScreen() {
   const { activeMembership } = useFamilyContext();
   const familyId = activeMembership?.familyId;
+  // B3: 切家庭后，旧家庭请求的回包不能覆盖新家庭的显示。
+  // 用 ref 镜像最新 familyId，loadData 每次 await 后校验归属。
+  const familyIdRef = useRef(familyId);
+  familyIdRef.current = familyId;
+  // B1: 加载态点"不等了，先返回"时置 true，迟到的 AI 响应直接丢弃，不再 setState。
+  const cancelLoadRef = useRef(false);
   const [advice, setAdvice] = useState<{
     careScore?: number; summary?: string; encouragement?: string; suggestion?: string;
   } | null>(null);
@@ -122,6 +143,10 @@ export default function AssistantScreen() {
   useFocusEffect(useCallback(() => { loadData(); }, [familyId]));
 
   async function loadData() {
+    const requestedFamilyId = familyId;
+    const isCurrentFamily = () => familyIdRef.current === requestedFamilyId;
+    const isCancelled = () => cancelLoadRef.current;
+    cancelLoadRef.current = false;
     setLoading(true);
     setError(null);
     try {
@@ -138,6 +163,8 @@ export default function AssistantScreen() {
       const careNeeds = familyProfile?.careNeeds?.selectedNeeds
         ?? legacyProfile?.careNeeds?.selectedNeeds
         ?? undefined;
+      // B3: 资料请求回来时可能已切家庭 / 用户已点返回，不再往下写界面。
+      if (!isCurrentFamily() || isCancelled()) return;
       setElderNickname(nickname);
       setCaregiverName(caregiver);
       // 打卡数据：显式传 familyId
@@ -146,11 +173,13 @@ export default function AssistantScreen() {
         getTodayCheckIn(familyId),
         getWeeklySleepData(7, familyId),
       ]);
+      if (!isCurrentFamily() || isCancelled()) return;
       setTodayCheckIn(today);
       setYesterdayCheckIn(yesterday);
       setWeeklyData(weekly);
       // 简报读取：显式传 familyId
       const savedBriefing = await getTodayBriefing(familyId);
+      if (!isCurrentFamily() || isCancelled()) return;
       const latestCheckInTime = today?.completedAt ?? yesterday?.completedAt ?? '';
       const briefingIsFresh = savedBriefing && (!latestCheckInTime || savedBriefing.generatedAt >= latestCheckInTime);
 
@@ -164,6 +193,7 @@ export default function AssistantScreen() {
       const hasNewCheckIn = (today?.morningDone || today?.eveningDone || yesterday?.eveningDone);
       if (!hasNewCheckIn) {
         const fallback = savedBriefing ?? await getLatestBriefing(familyId);
+        if (!isCurrentFamily() || isCancelled()) return;
         if (fallback) {
           setAdvice({ careScore: fallback.careScore, summary: fallback.summary, suggestion: fallback.encouragement });
           setLoading(false);
@@ -175,7 +205,9 @@ export default function AssistantScreen() {
       const sleepData = yesterday?.sleepInput ?? today?.sleepInput ?? null;
       const sleepAnalysis = sleepData ? scoreSleepInput(sleepData) : null;
 
-      const result = await getDailyAdviceMutation.mutateAsync({
+      // B1: AI 请求必须有界。网络停滞时请求可能永远挂起，60 秒后走降级路径，
+      // 不让用户卡在"正在整理数据"全屏。迟到响应被丢弃。
+      const result = await withAiTimeout(getDailyAdviceMutation.mutateAsync({
         elderNickname: nickname,
         caregiverName: caregiver,
         city,
@@ -193,7 +225,9 @@ export default function AssistantScreen() {
           notes: yesterday?.eveningNotes || today?.morningNotes || undefined,
         },
         careNeeds,
-      });
+      }));
+      // B1/B3: 用户已点"先返回"，或等待期间切了家庭 → 丢弃迟到响应，不写界面。
+      if (isCancelled() || !isCurrentFamily()) return;
 
       if (result.success && result.advice) {
         setAdvice(result.advice);
@@ -212,12 +246,25 @@ export default function AssistantScreen() {
         setError(result.error ?? '小马虎暂时无法生成分析');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '网络错误，请检查连接');
+      // B1/B3: 已取消或已切家庭，不弹错误、不写界面。
+      if (isCancelled() || !isCurrentFamily()) return;
+      setError(isAiTimeoutError(e)
+        ? AI_TIMEOUT_FRIENDLY_MESSAGE
+        : (e instanceof Error ? e.message : '网络错误，请检查连接'));
     } finally {
-      setLoading(false);
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+      // 陈旧请求（切家庭后回来）的 finally 不能把新一轮 loadData 的 loading 提前关掉。
+      if (isCurrentFamily() && !isCancelled()) {
+        setLoading(false);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+      }
     }
   }
+
+  // B1: 加载态的逃生出口。置取消标记后返回，迟到的 AI 响应在 loadData 里被丢弃。
+  const handleCancelLoading = useCallback(() => {
+    cancelLoadRef.current = true;
+    router.back();
+  }, []);
 
   const sleepBarData = useMemo(() => {
     const reversed = [...weeklyData].reverse();
@@ -250,7 +297,7 @@ export default function AssistantScreen() {
 
   const totalWakings = useMemo(() => weeklyData.reduce((s, d) => s + d.nightWakings, 0), [weeklyData]);
 
-  if (loading) return <LoadingScreen />;
+  if (loading) return <LoadingScreen onCancel={handleCancelLoading} />;
 
   if (error || !advice) {
     return (

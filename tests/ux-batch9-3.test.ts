@@ -254,8 +254,11 @@ describe('D1/D2: 日记删除与保存', () => {
 });
 
 describe('D3: AI 请求有界超时', () => {
-  it('客户端：两个 AI 调用都包了 withAiTimeout', () => {
-    expect(diaryEditSrc).toContain('AI_REQUEST_TIMEOUT_MS');
+  it('客户端：两个 AI 调用都包了 withAiTimeout（helper 抽到 lib/ai-timeout.ts）', () => {
+    const aiTimeoutSrc = read('lib/ai-timeout.ts');
+    expect(aiTimeoutSrc).toContain('AI_REQUEST_TIMEOUT_MS');
+    expect(aiTimeoutSrc).toContain('60_000');
+    expect(diaryEditSrc).toContain("from '@/lib/ai-timeout'");
     expect(diaryEditSrc).toContain('withAiTimeout(replyMutation.mutateAsync(');
     expect(diaryEditSrc).toContain('withAiTimeout(followUpMutation.mutateAsync(');
   });

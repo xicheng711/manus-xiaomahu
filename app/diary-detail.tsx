@@ -13,6 +13,7 @@ import { useFamilyContext } from '@/lib/family-context';
 import * as Haptics from 'expo-haptics';
 import { BackButton } from '@/components/back-button';
 import { trpc } from '@/lib/trpc';
+import { withAiTimeout } from '@/lib/ai-timeout';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { getCompleteDiaryBody, getDiaryFollowUpConversation } from '@/lib/diary-conversation-display';
 
@@ -126,11 +127,14 @@ export default function DiaryDetailScreen() {
     try {
       // followUpHistory 已经是 conversation.slice(2) 的结果，不包含初始日记和首次 AI 回复。
       // 只需跳过最后一条（本次用户消息，由 question 字段单独传递）。
-      const historyForApi = followUpHistory.map(m => ({
+      // B4: 追问历史无界增长会让每次请求的 token 随轮次线性膨胀（越问越慢、越贵），
+      // 只发最近 24 条（与 diary-edit 一致），本地完整历史不受影响。
+      const historyForApi = followUpHistory.slice(-24).map(m => ({
         role: (m.role === 'ai' ? 'ai' : 'user') as 'user' | 'ai',
         text: m.text,
       }));
-      const result = await followUpMutation.mutateAsync({
+      // B2: 追问必须有界。网络停滞时请求可能永远挂起，不加超时 typing 无限转、输入框被锁。
+      const result = await withAiTimeout(followUpMutation.mutateAsync({
         elderNickname,
         caregiverName,
         originalContent: getCompleteDiaryBody(entry.content, entry.conversation),
@@ -138,7 +142,7 @@ export default function DiaryDetailScreen() {
         originalAiReply: entry.smartReply || '',
         history: historyForApi,
         question: q,
-      });
+      }));
       setFollowUpHistory([...newHistory, { role: 'ai' as const, text: result.reply }]);
     } catch (err) {
       console.error('diary-detail followUp error:', err);

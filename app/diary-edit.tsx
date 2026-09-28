@@ -222,20 +222,7 @@ function TagOption({ tag, selected, onPress }: { tag: string; selected: boolean;
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-// D3: AI 请求必须有界。地铁/电梯里网络半断开时请求可能永远挂起，
-// 不加超时的话 smartLoading/followUpLoading 永久为 true，输入和"结束并保存"全锁死。
-// 超时后走和失败一样的降级路径（本地已持久化的对话保留，用户可继续编辑或结束保存）；
-// 超时后才姗姗来迟的响应会被丢弃，不会覆盖已结束的状态。
-const AI_REQUEST_TIMEOUT_MS = 60_000;
-function withAiTimeout<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('AI_REQUEST_TIMEOUT')), AI_REQUEST_TIMEOUT_MS);
-  });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
+import { withAiTimeout } from '@/lib/ai-timeout';
 
 export default function DiaryEditScreen() {
   const router = useRouter();
