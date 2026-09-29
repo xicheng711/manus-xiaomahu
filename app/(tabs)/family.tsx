@@ -523,6 +523,10 @@ export default function FamilyScreen() {
   const [briefingData, setBriefingData] = useState<any>(null);
   const [selectedBriefingDate, setSelectedBriefingDate] = useState<string>(todayStr());
   const [briefingHistory, setBriefingHistory] = useState<BriefingHistoryItem[]>([]);
+  // 用户手动点过日期 tab 后，后台刷新不再把选中抢回最新天；
+  // 切家庭时重置（新家庭重新自动选中最新）。
+  const userPickedBriefingDateRef = useRef(false);
+  const briefingDateFamilyRef = useRef<string | null>(null);
   const [elderNickname, setElderNickname] = useState('家人');
   const [elderEmoji, setElderEmoji] = useState('🐯');
 
@@ -600,6 +604,11 @@ export default function FamilyScreen() {
   // 用 ref 转发，保证每次 tick 调的都是最新的 loadData。
   const loadDataRef = useRef(loadData);
   loadDataRef.current = loadData;
+  // 同家庭 loadData 并发守卫（见 loadData 顶部）
+  const loadDataInflightRef = useRef<Set<string>>(new Set());
+  // trailing 刷新：已有请求在跑时又来了新请求（如下拉刷新撞上 60 秒自动刷新），
+  // 记一笔，等当前请求跑完补跑一次——主动刷新不会被静默丢掉。
+  const loadDataTrailingRef = useRef<Set<string>>(new Set());
   useFocusEffect(useCallback(() => {
     const timer = setInterval(() => {
       if (AppState.currentState === 'active') {
@@ -620,6 +629,21 @@ export default function FamilyScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.refresh]);
 
+  // 简报日期自动选中：只在"用户没手动选过"或"手动选的日期已不在历史里"时才选中最新；
+  // 否则 60 秒后台刷新会把用户正在看的日期抢回最新天。
+  function autoSelectBriefingDate(history: BriefingHistoryItem[], familyId: string) {
+    if (briefingDateFamilyRef.current !== familyId) {
+      briefingDateFamilyRef.current = familyId;
+      userPickedBriefingDateRef.current = false;
+    }
+    if (userPickedBriefingDateRef.current) {
+      if (history.some(item => item.date === selectedBriefingDate)) return;
+      userPickedBriefingDateRef.current = false;
+    }
+    const latestWithData = history.find(item => item.checkIn) ?? history[0];
+    if (latestWithData) setSelectedBriefingDate(latestWithData.date);
+  }
+
   async function loadData(forceCloudRefresh = false) {
     const requestedMembership = activeMembership;
     const requestedFamilyId = requestedMembership?.familyId;
@@ -632,234 +656,248 @@ export default function FamilyScreen() {
       setLoading(false);
       return;
     }
-    const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
-    const rLocal = requestedMembership.room;
-    const m = rLocal.members.find(member => member.id === requestedMembership.myMemberId) ?? null;
-    const creatorFlag = requestedMembership.role === 'creator' || m?.isCreator === true;
-
-    // 第一阶段只读取当前家庭的 AsyncStorage：不等待网络，立即显示成员、公告和简报缓存。
-    const [localAnns, cachedCheckIns, cachedDiaries, cachedFamilyProfile, cachedLegacyProfile] = await Promise.all([
-      getFamilyAnnouncements(30, requestedFamilyId),
-      getAllCheckIns(requestedFamilyId),
-      getDiaryEntries(requestedFamilyId),
-      getFamilyProfile(requestedFamilyId),
-      getProfile(),
-    ]);
-    if (!isCurrentFamily()) return;
-    const allowLegacyProfileFallback = memberships.length === 1;
-    const cachedProfile = cachedFamilyProfile
-      ? {
-          ...(allowLegacyProfileFallback ? cachedLegacyProfile : null),
-          ...cachedFamilyProfile,
-          name: cachedFamilyProfile.name || (allowLegacyProfileFallback ? cachedLegacyProfile?.name : undefined),
-          nickname: cachedFamilyProfile.nickname || (allowLegacyProfileFallback ? cachedLegacyProfile?.nickname : undefined),
-        }
-      : allowLegacyProfileFallback ? cachedLegacyProfile : null;
-    // 用照护时区（创建者时区）找"今天"的记录：跨时区时不用查看者本地今天去匹配，
-    // 否则创建者在查看者日历的"昨天"打的卡会被误判为未打卡。
-    const cachedToday = findCurrentSharedRecord(cachedCheckIns, undefined, resolveCareTimeZone(cachedCheckIns));
-    const cachedHistory = buildFamilyBriefingHistory(cachedCheckIns, cachedDiaries, localAnns);
-    setRoom(rLocal);
-    setCurrentMemberState(m);
-    setIsCreator(creatorFlag);
-    setAnnouncements(localAnns);
-    setBriefingData({
-      checkIn: cachedToday,
-      profile: cachedProfile,
-      todayAnnouncements: localAnns.filter(announcement => getAnnouncementViewerDateKey(announcement) === todayStr()),
-    });
-    setBriefingHistory(cachedHistory);
-    const cachedLatestWithData = cachedHistory.find(item => item.checkIn) ?? cachedHistory[0];
-    if (cachedLatestWithData) setSelectedBriefingDate(cachedLatestWithData.date);
-    setElderNickname(cachedProfile?.nickname || cachedProfile?.name || rLocal.elderName || '家人');
-    setElderEmoji(cachedProfile?.zodiacEmoji || '🐯');
-    fadeAnim.setValue(1);
-    setLoading(false);
-
-    // 频繁切换 Tab 时直接复用刚刷新的内容；下拉刷新和通知进入会强制拉取。
-    const lastCloudRefreshAt = lastCloudRefreshAtRef.current.get(requestedFamilyId) ?? 0;
-    if (!forceCloudRefresh && Date.now() - lastCloudRefreshAt < FAMILY_CLOUD_REFRESH_TTL_MS) return;
-    lastCloudRefreshAtRef.current.set(requestedFamilyId, Date.now());
-
-    // 第二阶段在后台重试待同步内容并拉取服务器最新数据，不再用骨架屏阻塞页面。
-    await Promise.all([
-      syncPendingAnnouncements(requestedFamilyId).catch(() => {}),
-      syncPendingBriefings(requestedFamilyId).catch(() => {}),
-    ]);
-    const cloudAnns = await cloudGetAnnouncements(Number(requestedFamilyId), 50);
-    if (!isCurrentFamily()) return;
-    // myMemberId is the authoritative member row id for the requested family.
-    const myMemberId = requestedMembership.myMemberId;
-    let r = rLocal;
-    const activeRoomId = requestedFamilyId;
-    if (activeRoomId) {
-      try {
-        const detail = await cloudGetRoomDetail(Number(activeRoomId));
-        if (!isCurrentFamily()) return;
-        if (detail?.room) {
-          // 本地已有成员数据（用于备用本地 photoUri）
-          const localMembersMap = new Map((rLocal?.members ?? []).map((lm: any) => [String(lm.id), lm]));
-          const serverMembers = (detail.members ?? []).map((x: any) => {
-            const localMember = localMembersMap.get(String(x.id));
-            // 接受任何非空 photoUri（包括 http://、自定义域名等），不强制要求 https://
-            // 本地 file:// URI 不应存在于服务器，所以直接优先用服务器返回的地址
-            const serverPhotoUri = x.photoUri || null;
-            const localPhotoUri = localMember?.photoUri || undefined;
-            const photoUri = serverPhotoUri || localPhotoUri;
-            return {
-              id: String(x.id),
-              name: x.name,
-              role: x.role ?? "family",
-              roleLabel: x.roleLabel ?? x.role ?? "家人",
-              emoji: x.emoji ?? "👤",
-              color: x.color ?? "#888",
-              photoUri,
-              joinedAt: x.joinedAt ?? new Date().toISOString(),
-              isCreator: x.isCreator ?? false,
-              isCurrentUser: String(x.id) === String(myMemberId),
-              relationship: x.relationship,
-              birthYear: x.birthYear ?? null,
-            };
-          });
-          r = {
-            id: String(detail.room.id ?? activeRoomId),
-            roomCode: detail.room.roomCode ?? r?.roomCode ?? "",
-            elderName: detail.room.elderName ?? r?.elderName ?? "家人",
-            elderEmoji: detail.room.elderEmoji ?? r?.elderEmoji,
-            elderPhotoUri: detail.room.elderPhotoUri ?? r?.elderPhotoUri,
-            members: serverMembers,
-            createdAt: detail.room.createdAt ?? r?.createdAt ?? new Date().toISOString(),
-          };
-          if (isCurrentFamily()) await saveFamilyRoom(r);
-        }
-      } catch (e) {
-        console.warn("[Family] getRoomDetail failed", e);
-      }
+    // 同家庭并发守卫：60 秒自动刷新、tab 聚焦、下拉刷新可能重叠触发，
+    // 重叠跑会交错写 AsyncStorage（旧响应覆盖新响应）。同一家庭一次只跑一个；
+    // 重叠到达的请求记一笔 trailing，当前请求跑完后补跑一次，不静默丢刷新。
+    if (loadDataInflightRef.current.has(requestedFamilyId)) {
+      loadDataTrailingRef.current.add(requestedFamilyId);
+      return;
     }
-    // 对当前用户的头像和出生年份补充 fallback（无论从服务器还是本地加载）
-    if (r?.members) {
-      const up = await getUserProfile();
-      const lp = await getProfile();
-      const cgPhoto = up?.caregiverPhotoUri || lp?.caregiverPhotoUri || null;
-      // caregiverBirthYear 是字符串 'YYYY'，转为数字
-      const cgBirthYearStr = up?.caregiverBirthYear || lp?.caregiverBirthYear || null;
-      const cgBirthYear = cgBirthYearStr ? parseInt(cgBirthYearStr, 10) : null;
-      let needsServerSync = false;
-      let needsBirthYearSync = false;
-      r = {
-        ...r,
-        members: r.members.map((mem: any) => {
-          // 匹配当前用户：通过 myMemberId 或 isCurrentUser 标记
-          const isMe = String(mem.id) === String(myMemberId) || mem.isCurrentUser;
-          if (isMe) {
-            let updated = { ...mem };
-            // 头像 fallback：服务器没有头像但本地有
-            if (cgPhoto && (!mem.photoUri || mem.photoUri === '')) {
-              needsServerSync = true;
-              updated = { ...updated, photoUri: cgPhoto };
-            }
-            // birthYear fallback：服务器没有 birthYear 但本地有
-            if (cgBirthYear && !isNaN(cgBirthYear) && !mem.birthYear) {
-              needsBirthYearSync = true;
-              updated = { ...updated, birthYear: cgBirthYear };
-            }
-            return updated;
-          }
-          return mem;
-        }),
-      };
-      // 如果服务器端没有头像但本地有，自动同步到服务器
-      if ((needsServerSync || needsBirthYearSync) && activeRoomId) {
-        const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
-        const syncData: any = { roomId: Number(activeRoomId) };
-        if (needsServerSync && cgPhoto && !cgPhoto.startsWith('file://')) syncData.photoUri = cgPhoto;
-        if (needsBirthYearSync && cgBirthYear) syncData.birthYear = cgBirthYear;
-        cloudUpdateMemberProfile(syncData).catch(() => {});
-      }
-    }
-    if (!isCurrentFamily()) return;
-    setRoom(r);
-    // 优先使用服务器返回的最新成员数据（包含最新名字），避免本地缓存名字过时
-    const serverMe = r?.members?.find((mem: any) => mem.isCurrentUser || String(mem.id) === String(myMemberId));
-    setCurrentMemberState(serverMe ?? m);
-    // 只有服务器明确返回数组时才合并；网络失败为 null，必须保留本地缓存和待同步公告。
-    const a: FamilyAnnouncement[] = Array.isArray(cloudAnns)
-      ? await mergeCloudAnnouncementsIntoLocal(cloudAnns, requestedFamilyId)
-      : localAnns;
-    setAnnouncements(a);
-    setIsCreator(creatorFlag);
+    loadDataInflightRef.current.add(requestedFamilyId);
+    try {
+      const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
+      const rLocal = requestedMembership.room;
+      const m = rLocal.members.find(member => member.id === requestedMembership.myMemberId) ?? null;
+      const creatorFlag = requestedMembership.role === 'creator' || m?.isCreator === true;
 
-    // Load briefing data — joiner 从云端拉取主照顾者的数据
-    let todayCheckIn: any = null;
-    let allCheckIns: DailyCheckIn[] = [];
-    let diaryEntries: any[] = [];
-    let profile: any = null;
-    if (!creatorFlag) {
-      // Joiner: pull from cloud
-      const [cloudCIs, cloudDiaries, cloudProfile] = await Promise.all([
-        cloudGetCheckIns(Number(requestedFamilyId)),
-        cloudGetDiaries(Number(requestedFamilyId)),
-        cloudGetElderProfile(Number(requestedFamilyId)).catch(() => null),
+      // 第一阶段只读取当前家庭的 AsyncStorage：不等待网络，立即显示成员、公告和简报缓存。
+      const [localAnns, cachedCheckIns, cachedDiaries, cachedFamilyProfile, cachedLegacyProfile] = await Promise.all([
+        getFamilyAnnouncements(30, requestedFamilyId),
+        getAllCheckIns(requestedFamilyId),
+        getDiaryEntries(requestedFamilyId),
+        getFamilyProfile(requestedFamilyId),
+        getProfile(),
       ]);
-      allCheckIns = Array.isArray(cloudCIs)
-        ? await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId)
-        : await getAllCheckIns(requestedFamilyId);
-      todayCheckIn = findCurrentSharedRecord(allCheckIns, undefined, resolveCareTimeZone(allCheckIns));
-      diaryEntries = Array.isArray(cloudDiaries)
-        ? await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId)
-        : await getDiaryEntries(requestedFamilyId);
-      const scopedProfile = await getFamilyProfile(requestedFamilyId);
-      profile = cloudProfile ?? scopedProfile ?? { nickname: requestedMembership.room.elderName };
-    } else {
-      // Creator: 直接复用第一阶段已读到的本地数据。第二阶段的同步
-      // （待同步公告/简报、云端公告合并、房间详情）不会改动本地打卡、
-      // 日记与档案，因此不需要再做一次全量 JSON 解析。
-      allCheckIns = cachedCheckIns;
-      todayCheckIn = cachedToday;
-      diaryEntries = cachedDiaries;
-      // 如果本地缓存为空（如退出登录后），立即从云端拉取数据
-      if (allCheckIns.length === 0 && diaryEntries.length === 0) {
-        try {
-          const [cloudCIs, cloudDiaries] = await Promise.all([
-            cloudGetCheckIns(Number(requestedFamilyId), 60),
-            cloudGetDiaries(Number(requestedFamilyId), 100),
-          ]);
-          if (Array.isArray(cloudCIs)) {
-            allCheckIns = await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId);
-            todayCheckIn = findCurrentSharedRecord(allCheckIns, undefined, resolveCareTimeZone(allCheckIns));
+      if (!isCurrentFamily()) return;
+      const allowLegacyProfileFallback = memberships.length === 1;
+      const cachedProfile = cachedFamilyProfile
+        ? {
+            ...(allowLegacyProfileFallback ? cachedLegacyProfile : null),
+            ...cachedFamilyProfile,
+            name: cachedFamilyProfile.name || (allowLegacyProfileFallback ? cachedLegacyProfile?.name : undefined),
+            nickname: cachedFamilyProfile.nickname || (allowLegacyProfileFallback ? cachedLegacyProfile?.nickname : undefined),
           }
-          if (Array.isArray(cloudDiaries)) {
-            diaryEntries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);
+        : allowLegacyProfileFallback ? cachedLegacyProfile : null;
+      // 用照护时区（创建者时区）找"今天"的记录：跨时区时不用查看者本地今天去匹配，
+      // 否则创建者在查看者日历的"昨天"打的卡会被误判为未打卡。
+      const cachedToday = findCurrentSharedRecord(cachedCheckIns, undefined, resolveCareTimeZone(cachedCheckIns));
+      const cachedHistory = buildFamilyBriefingHistory(cachedCheckIns, cachedDiaries, localAnns);
+      setRoom(rLocal);
+      setCurrentMemberState(m);
+      setIsCreator(creatorFlag);
+      setAnnouncements(localAnns);
+      setBriefingData({
+        checkIn: cachedToday,
+        profile: cachedProfile,
+        todayAnnouncements: localAnns.filter(announcement => getAnnouncementViewerDateKey(announcement) === todayStr()),
+      });
+      setBriefingHistory(cachedHistory);
+      autoSelectBriefingDate(cachedHistory, requestedFamilyId);
+      setElderNickname(cachedProfile?.nickname || cachedProfile?.name || rLocal.elderName || '家人');
+      setElderEmoji(cachedProfile?.zodiacEmoji || '🐯');
+      fadeAnim.setValue(1);
+      setLoading(false);
+
+      // 频繁切换 Tab 时直接复用刚刷新的内容；下拉刷新和通知进入会强制拉取。
+      const lastCloudRefreshAt = lastCloudRefreshAtRef.current.get(requestedFamilyId) ?? 0;
+      if (!forceCloudRefresh && Date.now() - lastCloudRefreshAt < FAMILY_CLOUD_REFRESH_TTL_MS) return;
+      lastCloudRefreshAtRef.current.set(requestedFamilyId, Date.now());
+
+      // 第二阶段在后台重试待同步内容并拉取服务器最新数据，不再用骨架屏阻塞页面。
+      await Promise.all([
+        syncPendingAnnouncements(requestedFamilyId).catch(() => {}),
+        syncPendingBriefings(requestedFamilyId).catch(() => {}),
+      ]);
+      const cloudAnns = await cloudGetAnnouncements(Number(requestedFamilyId), 50);
+      if (!isCurrentFamily()) return;
+      // myMemberId is the authoritative member row id for the requested family.
+      const myMemberId = requestedMembership.myMemberId;
+      let r = rLocal;
+      const activeRoomId = requestedFamilyId;
+      if (activeRoomId) {
+        try {
+          const detail = await cloudGetRoomDetail(Number(activeRoomId));
+          if (!isCurrentFamily()) return;
+          if (detail?.room) {
+            // 本地已有成员数据（用于备用本地 photoUri）
+            const localMembersMap = new Map((rLocal?.members ?? []).map((lm: any) => [String(lm.id), lm]));
+            const serverMembers = (detail.members ?? []).map((x: any) => {
+              const localMember = localMembersMap.get(String(x.id));
+              // 接受任何非空 photoUri（包括 http://、自定义域名等），不强制要求 https://
+              // 本地 file:// URI 不应存在于服务器，所以直接优先用服务器返回的地址
+              const serverPhotoUri = x.photoUri || null;
+              const localPhotoUri = localMember?.photoUri || undefined;
+              const photoUri = serverPhotoUri || localPhotoUri;
+              return {
+                id: String(x.id),
+                name: x.name,
+                role: x.role ?? "family",
+                roleLabel: x.roleLabel ?? x.role ?? "家人",
+                emoji: x.emoji ?? "👤",
+                color: x.color ?? "#888",
+                photoUri,
+                joinedAt: x.joinedAt ?? new Date().toISOString(),
+                isCreator: x.isCreator ?? false,
+                isCurrentUser: String(x.id) === String(myMemberId),
+                relationship: x.relationship,
+                birthYear: x.birthYear ?? null,
+              };
+            });
+            r = {
+              id: String(detail.room.id ?? activeRoomId),
+              roomCode: detail.room.roomCode ?? r?.roomCode ?? "",
+              elderName: detail.room.elderName ?? r?.elderName ?? "家人",
+              elderEmoji: detail.room.elderEmoji ?? r?.elderEmoji,
+              elderPhotoUri: detail.room.elderPhotoUri ?? r?.elderPhotoUri,
+              members: serverMembers,
+              createdAt: detail.room.createdAt ?? r?.createdAt ?? new Date().toISOString(),
+            };
+            if (isCurrentFamily()) await saveFamilyRoom(r);
           }
         } catch (e) {
-          console.warn('[Family] cloud fallback failed:', e);
+          console.warn("[Family] getRoomDetail failed", e);
         }
       }
-      // 与第一阶段完全相同的档案合并逻辑，直接复用已算好的结果。
-      profile = cachedProfile;
+      // 对当前用户的头像和出生年份补充 fallback（无论从服务器还是本地加载）
+      if (r?.members) {
+        const up = await getUserProfile();
+        const lp = await getProfile();
+        const cgPhoto = up?.caregiverPhotoUri || lp?.caregiverPhotoUri || null;
+        // caregiverBirthYear 是字符串 'YYYY'，转为数字
+        const cgBirthYearStr = up?.caregiverBirthYear || lp?.caregiverBirthYear || null;
+        const cgBirthYear = cgBirthYearStr ? parseInt(cgBirthYearStr, 10) : null;
+        let needsServerSync = false;
+        let needsBirthYearSync = false;
+        r = {
+          ...r,
+          members: r.members.map((mem: any) => {
+            // 匹配当前用户：通过 myMemberId 或 isCurrentUser 标记
+            const isMe = String(mem.id) === String(myMemberId) || mem.isCurrentUser;
+            if (isMe) {
+              let updated = { ...mem };
+              // 头像 fallback：服务器没有头像但本地有
+              if (cgPhoto && (!mem.photoUri || mem.photoUri === '')) {
+                needsServerSync = true;
+                updated = { ...updated, photoUri: cgPhoto };
+              }
+              // birthYear fallback：服务器没有 birthYear 但本地有
+              if (cgBirthYear && !isNaN(cgBirthYear) && !mem.birthYear) {
+                needsBirthYearSync = true;
+                updated = { ...updated, birthYear: cgBirthYear };
+              }
+              return updated;
+            }
+            return mem;
+          }),
+        };
+        // 如果服务器端没有头像但本地有，自动同步到服务器
+        if ((needsServerSync || needsBirthYearSync) && activeRoomId) {
+          const { cloudUpdateMemberProfile } = await import('@/lib/cloud-sync');
+          const syncData: any = { roomId: Number(activeRoomId) };
+          if (needsServerSync && cgPhoto && !cgPhoto.startsWith('file://')) syncData.photoUri = cgPhoto;
+          if (needsBirthYearSync && cgBirthYear) syncData.birthYear = cgBirthYear;
+          cloudUpdateMemberProfile(syncData).catch(() => {});
+        }
+      }
+      if (!isCurrentFamily()) return;
+      setRoom(r);
+      // 优先使用服务器返回的最新成员数据（包含最新名字），避免本地缓存名字过时
+      const serverMe = r?.members?.find((mem: any) => mem.isCurrentUser || String(mem.id) === String(myMemberId));
+      setCurrentMemberState(serverMe ?? m);
+      // 只有服务器明确返回数组时才合并；网络失败为 null，必须保留本地缓存和待同步公告。
+      const a: FamilyAnnouncement[] = Array.isArray(cloudAnns)
+        ? await mergeCloudAnnouncementsIntoLocal(cloudAnns, requestedFamilyId)
+        : localAnns;
+      setAnnouncements(a);
+      setIsCreator(creatorFlag);
+
+      // Load briefing data — joiner 从云端拉取主照顾者的数据
+      let todayCheckIn: any = null;
+      let allCheckIns: DailyCheckIn[] = [];
+      let diaryEntries: any[] = [];
+      let profile: any = null;
+      if (!creatorFlag) {
+        // Joiner: pull from cloud
+        const [cloudCIs, cloudDiaries, cloudProfile] = await Promise.all([
+          cloudGetCheckIns(Number(requestedFamilyId)),
+          cloudGetDiaries(Number(requestedFamilyId)),
+          cloudGetElderProfile(Number(requestedFamilyId)).catch(() => null),
+        ]);
+        allCheckIns = Array.isArray(cloudCIs)
+          ? await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId)
+          : await getAllCheckIns(requestedFamilyId);
+        todayCheckIn = findCurrentSharedRecord(allCheckIns, undefined, resolveCareTimeZone(allCheckIns));
+        diaryEntries = Array.isArray(cloudDiaries)
+          ? await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId)
+          : await getDiaryEntries(requestedFamilyId);
+        const scopedProfile = await getFamilyProfile(requestedFamilyId);
+        profile = cloudProfile ?? scopedProfile ?? { nickname: requestedMembership.room.elderName };
+      } else {
+        // Creator: 直接复用第一阶段已读到的本地数据。第二阶段的同步
+        // （待同步公告/简报、云端公告合并、房间详情）不会改动本地打卡、
+        // 日记与档案，因此不需要再做一次全量 JSON 解析。
+        allCheckIns = cachedCheckIns;
+        todayCheckIn = cachedToday;
+        diaryEntries = cachedDiaries;
+        // 如果本地缓存为空（如退出登录后），立即从云端拉取数据
+        if (allCheckIns.length === 0 && diaryEntries.length === 0) {
+          try {
+            const [cloudCIs, cloudDiaries] = await Promise.all([
+              cloudGetCheckIns(Number(requestedFamilyId), 60),
+              cloudGetDiaries(Number(requestedFamilyId), 100),
+            ]);
+            if (Array.isArray(cloudCIs)) {
+              allCheckIns = await mergeCloudCheckInsIntoLocal(cloudCIs, requestedFamilyId);
+              todayCheckIn = findCurrentSharedRecord(allCheckIns, undefined, resolveCareTimeZone(allCheckIns));
+            }
+            if (Array.isArray(cloudDiaries)) {
+              diaryEntries = await mergeCloudDiariesIntoLocal(cloudDiaries, requestedFamilyId);
+            }
+          } catch (e) {
+            console.warn('[Family] cloud fallback failed:', e);
+          }
+        }
+        // 与第一阶段完全相同的档案合并逻辑，直接复用已算好的结果。
+        profile = cachedProfile;
+      }
+      if (!isCurrentFamily()) return;
+      const viewerToday = todayStr();
+      setBriefingData({
+        checkIn: todayCheckIn,
+        profile,
+        todayAnnouncements: a.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday),
+      });
+      setElderNickname(profile?.nickname || profile?.name || r?.elderName || '家人');
+      setElderEmoji(profile?.zodiacEmoji || '🐯');
+
+      // 用与缓存首屏相同的纯函数重建最近三天，保持跨时区日期规则完全一致。
+      const history = buildFamilyBriefingHistory(allCheckIns, diaryEntries, a);
+      if (!isCurrentFamily()) return;
+      setBriefingHistory(history);
+
+      // 用户手动选过日期时不抢回最新（见 autoSelectBriefingDate）
+      autoSelectBriefingDate(history, requestedFamilyId);
+
+      if (!isCurrentFamily()) return;
+      setLoading(false);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    } finally {
+      loadDataInflightRef.current.delete(requestedFamilyId);
+      if (loadDataTrailingRef.current.delete(requestedFamilyId)) {
+        // 运行期间有新请求到达：补跑一次（force 刷新，保证拿到最新云端数据）
+        void loadDataRef.current(true).catch(() => {});
+      }
     }
-    if (!isCurrentFamily()) return;
-    const viewerToday = todayStr();
-    setBriefingData({
-      checkIn: todayCheckIn,
-      profile,
-      todayAnnouncements: a.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday),
-    });
-    setElderNickname(profile?.nickname || profile?.name || r?.elderName || '家人');
-    setElderEmoji(profile?.zodiacEmoji || '🐯');
-
-    // 用与缓存首屏相同的纯函数重建最近三天，保持跨时区日期规则完全一致。
-    const history = buildFamilyBriefingHistory(allCheckIns, diaryEntries, a);
-    if (!isCurrentFamily()) return;
-    setBriefingHistory(history);
-
-    // Select the newest day that has any check-in data; otherwise show the first day.
-    const latestWithData = history.find(item => item.checkIn) || history[0];
-    if (latestWithData) setSelectedBriefingDate(latestWithData.date);
-
-    if (!isCurrentFamily()) return;
-    setLoading(false);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }
 
   async function handlePostAnnouncement() {
@@ -1282,7 +1320,10 @@ export default function FamilyScreen() {
                     styles.briefingDateTab,
                     selectedBriefingDate === item.date && styles.briefingDateTabActive,
                   ]}
-                  onPress={() => setSelectedBriefingDate(item.date)}
+                  onPress={() => {
+                    userPickedBriefingDateRef.current = true;
+                    setSelectedBriefingDate(item.date);
+                  }}
                 >
                   <Text style={[
                     styles.briefingDateTabText,
