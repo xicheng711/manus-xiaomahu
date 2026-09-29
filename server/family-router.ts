@@ -1304,7 +1304,33 @@ export const familyRouter = router({
     .input(z.object({ roomId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
-      await requireRoomMember(userId, input.roomId);
+      const member = await requireRoomMember(userId, input.roomId);
+      if (member.isCreator) {
+        // P0 修复：主照顾者退出不能留下"无主"家庭（否则剩余成员打卡/改用药/改档案
+        // 全被 isCreator 门禁拦死，连解散都解散不了，数据变只读孤儿）。
+        // 语义：还有成员 → 主照顾者身份转给最早加入的成员；只剩自己 → 直接解散。
+        const others = (await getRoomMembers(input.roomId))
+          .filter(m => m.userId !== userId)
+          .sort((a, b) => {
+            const t = new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime();
+            return t !== 0 ? t : a.id - b.id;
+          });
+        if (others.length === 0) {
+          await deleteFamilyRoom(input.roomId);
+          return { success: true, dissolved: true };
+        }
+        // 继任者不能已是别家庭的主照顾者（硬限制：一人只能是一个家庭的 creator）
+        let successor: (typeof others)[number] | null = null;
+        for (const m of others) {
+          const rooms = await getUserFamilyRooms(m.userId);
+          if (!rooms.some(r => r.membership.isCreator)) { successor = m; break; }
+        }
+        if (!successor) {
+          throw new Error("您是主照顾者，且其他成员已是别家庭的主照顾者，无法转移身份。请先解散家庭。");
+        }
+        await updateFamilyMember(successor.id, { isCreator: true });
+        await updateFamilyRoom(input.roomId, { creatorUserId: successor.userId });
+      }
       await removeFamilyMember(input.roomId, userId);
       return { success: true };
     }),

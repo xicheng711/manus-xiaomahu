@@ -1041,6 +1041,12 @@ function CheckinScreenContent() {
       setCheckIn(null);
       return;
     }
+    // P0 修复：refocus 重建 formTarget 曾用"当前家庭/当前日期"无条件重建，
+    // 切家庭或跨 5 点后会把填一半的内容写到错的家庭/日期（守卫两边一致而失效）。
+    // 这里先保存旧目标：同一家庭同一表单 → 恢复旧锁定（日期也不重算，恪守入场锁定）；
+    // 家庭变了 → 旧表单作废，走全新重建（字段也在下面强制重置）。
+    const prevTarget = formTargetRef.current;
+    const familyChanged = !!prevTarget && prevTarget.familyId !== requestedFamilyId;
     formTargetRef.current = null;
     loadCheckInData().catch(() => {});
     syncPendingCheckIns(requestedFamilyId).catch(() => {});
@@ -1061,7 +1067,13 @@ function CheckinScreenContent() {
       if (!isCurrentFamily()) return;
       setCheckIn(existing);
       if (backfillDate) {
-        formTargetRef.current = {
+        // 同一家庭同一次补录（切 tab 回来）：恢复旧锁定，不重建。
+        // 家庭变了则用新家庭重建——旧家庭的内容已在下面被强制重置。
+        const sameBackfill = !!prevTarget
+          && !familyChanged
+          && prevTarget.mode === backfillPeriod
+          && prevTarget.date === targetDate;
+        formTargetRef.current = sameBackfill ? prevTarget : {
           familyId: requestedFamilyId,
           date: targetDate,
           mode: backfillPeriod,
@@ -1073,7 +1085,8 @@ function CheckinScreenContent() {
 
       // 表单已打开且用户填了未保存的内容时：不要重置字段。
       // 切 tab / 去登录页再回来会触发 refocus，之前这里会无条件清空，把用户填一半的内容吃掉。
-      const keepUserInput = modeRef.current !== 'landing' && isFormDirty();
+      // 但家庭变了必须重置：旧字段属于旧家庭，留着会把 A 的内容存进 B（P0 修复）。
+      const keepUserInput = !familyChanged && modeRef.current !== 'landing' && isFormDirty();
       if (!keepUserInput) {
       // 先清理上一家庭的表单数据，当前家庭有记录时再逐项恢复。
       setMorningNotes('');
@@ -1117,7 +1130,9 @@ function CheckinScreenContent() {
       let restoredDraftMode: 'morning' | 'evening' | null = null;
       if (!keepUserInput) {
         const draft = await readCheckInDraft().catch(() => null);
-        if (draft && draft.targetDate !== targetDate) {
+        if (draft && draft.familyId !== requestedFamilyId) {
+          await clearCheckInDraft().catch(() => {}); // 草稿属于别的家庭：直接清理，不恢复
+        } else if (draft && draft.targetDate !== targetDate) {
           await clearCheckInDraft().catch(() => {}); // 非当天草稿：直接清理
         } else if (draft) {
           const modeDone = draft.mode === 'evening' ? existing?.eveningDone : existing?.morningDone;
@@ -1137,11 +1152,16 @@ function CheckinScreenContent() {
       // useFocusEffect 开头把 formTargetRef 置空后，只给补录（backfillDate）重建了，
       // 普通表单和刚恢复的游客草稿没有重建——切 tab 回来再点保存会被守卫拦掉
       // （"打卡目标已变化"），内容填了也存不上。这里按当前实际状态补上。
+      // P0 修复：还在同一家庭同一表单里（切 tab 回来 / 跨 5 点 / 去登录页回来）
+      // → 直接恢复旧锁定目标，不用当前日期重建，否则跨 5 点会把内容写到错误日期。
       if (!backfillDate) {
         const activeMode = restoredDraftMode
           ?? (modeRef.current === 'morning' || modeRef.current === 'evening' ? modeRef.current : null);
         if (activeMode) {
-          formTargetRef.current = {
+          const sameForm = !!prevTarget
+            && !familyChanged
+            && prevTarget.mode === activeMode;
+          formTargetRef.current = sameForm ? prevTarget : {
             familyId: requestedFamilyId,
             date: targetDate,
             mode: activeMode,
@@ -1327,6 +1347,7 @@ function CheckinScreenContent() {
               await markDraftLoginInitiated();
               await saveCheckInDraft({
                 targetDate: formTarget?.date ?? getCareDayKey(),
+                familyId: formTarget?.familyId ?? familyId ?? '',
                 mode,
                 fields: JSON.parse(serializeFormFields()),
                 savedAt: Date.now(),

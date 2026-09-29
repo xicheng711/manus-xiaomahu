@@ -64,6 +64,7 @@ describe("游客打卡草稿（存取）", () => {
     await saveCheckInDraft({
       targetDate: "2026-09-23",
       mode: "morning",
+      familyId: "1",
       fields: { morningNotes: "睡得不错", nightWakings: 1 },
       savedAt: Date.now(),
     });
@@ -74,7 +75,7 @@ describe("游客打卡草稿（存取）", () => {
   });
 
   it("clear 后读不到", async () => {
-    await saveCheckInDraft({ targetDate: "2026-09-23", mode: "evening", fields: {}, savedAt: Date.now() });
+    await saveCheckInDraft({ targetDate: "2026-09-23", mode: "evening", familyId: "1", fields: {}, savedAt: Date.now() });
     await clearCheckInDraft();
     expect(await readCheckInDraft()).toBeNull();
   });
@@ -83,6 +84,7 @@ describe("游客打卡草稿（存取）", () => {
     await saveCheckInDraft({
       targetDate: "2026-09-20",
       mode: "morning",
+      familyId: "1",
       fields: {},
       savedAt: Date.now() - 49 * 3600 * 1000,
     });
@@ -93,6 +95,14 @@ describe("游客打卡草稿（存取）", () => {
   it("损坏的 JSON 不抛异常、返回 null", async () => {
     store.set("@xiaomahuCheckinDraft", "{not-json");
     expect(await readCheckInDraft()).toBeNull();
+  });
+
+  it("缺 familyId 的老草稿无法验证归属，直接丢弃并清理", async () => {
+    store.set("@xiaomahuCheckinDraft", JSON.stringify({
+      targetDate: "2026-09-23", mode: "morning", fields: {}, savedAt: Date.now(),
+    }));
+    expect(await readCheckInDraft()).toBeNull();
+    expect(store.has("@xiaomahuCheckinDraft")).toBe(false);
   });
 });
 

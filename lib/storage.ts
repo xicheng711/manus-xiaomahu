@@ -2651,6 +2651,7 @@ const CHECKIN_DRAFT_TTL_MS = 48 * 3600 * 1000; // 草稿保留 48 小时
 export interface CheckInDraft {
   targetDate: string; // 打卡目标日期（护理日 key）
   mode: 'morning' | 'evening';
+  familyId: string; // 草稿归属家庭：恢复时必须与当前家庭一致，否则丢弃（防写错家庭）
   fields: Record<string, any>; // 表单字段快照（与 serializeFormFields 对应）
   savedAt: number;
 }
@@ -2665,6 +2666,11 @@ export async function readCheckInDraft(): Promise<CheckInDraft | null> {
   try {
     const d = JSON.parse(raw);
     if (!d || typeof d.targetDate !== 'string' || !d.fields || typeof d.fields !== 'object') return null;
+    // familyId 缺失的老草稿无法验证归属，直接丢弃（防写错家庭）。
+    if (typeof d.familyId !== 'string' || !d.familyId) {
+      await AsyncStorage.removeItem(CHECKIN_DRAFT_KEY).catch(() => {});
+      return null;
+    }
     if (typeof d.savedAt === 'number' && Date.now() - d.savedAt > CHECKIN_DRAFT_TTL_MS) {
       await AsyncStorage.removeItem(CHECKIN_DRAFT_KEY).catch(() => {});
       return null;
