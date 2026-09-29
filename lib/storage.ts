@@ -428,6 +428,27 @@ export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+/**
+ * 安全解析 AsyncStorage 里读到的 JSON 字符串。
+ * 存储损坏（半截写入、磁盘异常）时：把坏数据备份到 `<key>:corrupt_backup_<时间戳>`，
+ * 删除坏 key，返回 fallback——读路径永远不抛，页面不白屏，坏数据留待排查。
+ */
+async function parseStoredJson<T>(key: string, raw: string | null, fallback: T): Promise<T> {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    console.warn(`[Storage] corrupt JSON at ${key}, backed up, returning fallback`);
+    try {
+      await AsyncStorage.setItem(`${key}:corrupt_backup_${Date.now()}`, raw);
+      await AsyncStorage.removeItem(key);
+    } catch {
+      // 备份失败也不影响返回 fallback
+    }
+    return fallback;
+  }
+}
+
 export function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -601,6 +622,15 @@ function normalizeCheckIn(c: DailyCheckIn): DailyCheckIn {
     ...normalizeMoodScore(c),
     clientId: getStableCheckInClientId(c),
   };
+  // 防御：服务端对 sleepHours/awakeHours 是透传不校验的，旧版本或异常数据可能存成字符串，
+  // 后续趋势图的 .toFixed / 四则运算会直接崩。只归一异常值，正常 number 原样不动。
+  for (const field of ['sleepHours', 'awakeHours'] as const) {
+    const v = (normalized as any)[field];
+    if (typeof v === 'string') {
+      const n = Number(v);
+      (normalized as any)[field] = Number.isFinite(n) ? n : 0;
+    }
+  }
   if (!hasRecordedNap(normalized)) return normalized;
   const napMinutes = getNapMinutes(normalized);
   return { ...normalized, napMinutes, daytimeNap: napMinutes > 0 };
@@ -779,14 +809,14 @@ export async function getAllCheckIns(roomId?: string): Promise<DailyCheckIn[]> {
       if (onlyMembership) {
         await AsyncStorage.setItem(key, legacy);
         await AsyncStorage.removeItem(KEYS.CHECK_INS);
-        const list: DailyCheckIn[] = JSON.parse(legacy);
+        const list = await parseStoredJson<DailyCheckIn[]>(key, legacy, []);
         return list.map(normalizeCheckIn);
       }
       await AsyncStorage.setItem(`${KEYS.CHECK_INS}:legacy_unassigned_backup`, legacy);
       await AsyncStorage.removeItem(KEYS.CHECK_INS);
     }
   }
-  const list: DailyCheckIn[] = raw ? JSON.parse(raw) : [];
+  const list = await parseStoredJson<DailyCheckIn[]>(key, raw, []);
   return list.map(normalizeCheckIn);
 }
 
@@ -1166,13 +1196,13 @@ export async function getMedications(roomId?: string): Promise<Medication[]> {
       if (onlyMembership) {
         await AsyncStorage.setItem(key, legacy);
         await AsyncStorage.removeItem(KEYS.MEDICATIONS);
-        return JSON.parse(legacy);
+        return parseStoredJson<Medication[]>(key, legacy, []);
       }
       await AsyncStorage.setItem(`${KEYS.MEDICATIONS}:legacy_unassigned_backup`, legacy);
       await AsyncStorage.removeItem(KEYS.MEDICATIONS);
     }
   }
-  return raw ? JSON.parse(raw) : [];
+  return parseStoredJson<Medication[]>(key, raw, []);
 }
 
 export async function saveMedication(data: Omit<Medication, 'id'>, roomId?: string, changeEvent?: MedicationChangeEvent): Promise<Medication> {
@@ -1515,6 +1545,11 @@ export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
       }
       return visible;
     } catch {
+      // 解析失败：备份坏数据后返回空，避免每次读取都静默失败且坏数据永久残留
+      try {
+        await AsyncStorage.setItem(`${key}:corrupt_backup_${Date.now()}`, raw);
+        await AsyncStorage.removeItem(key);
+      } catch { /* 忽略备份失败 */ }
       return [];
     }
   }
@@ -1526,7 +1561,7 @@ export async function getDiaryEntries(roomId?: string): Promise<DiaryEntry[]> {
       // 只有明确只有一个家庭时才可安全迁移旧全局缓存；多家庭时保留备份并等待各自云端数据回填。
       const onlyMembership = memberships.length === 1 && memberships[0]?.familyId === String(rid);
       if (onlyMembership) {
-        const migrated = (JSON.parse(legacy) as DiaryEntry[]).map(entry => ({ ...entry, roomId: String(rid) }));
+        const migrated = (await parseStoredJson<DiaryEntry[]>(KEYS.DIARY, legacy, [])).map(entry => ({ ...entry, roomId: String(rid) }));
         const { userId: currentUserId } = await getCloudSyncState().catch(() => ({ userId: null }));
         const parsed = migrated.filter(entry =>
           entry.conversationFinished !== false || !entry.authorUserId || entry.authorUserId === currentUserId
@@ -2490,7 +2525,7 @@ export async function getAllMemberships(): Promise<FamilyMembership[]> {
   // Migrate old data first if needed
   await migrateToMultiFamily();
   const raw = await AsyncStorage.getItem(KEYS.MEMBERSHIPS);
-  return raw ? JSON.parse(raw) : [];
+  return parseStoredJson<FamilyMembership[]>(KEYS.MEMBERSHIPS, raw, []);
 }
 
 export async function saveMemberships(memberships: FamilyMembership[]): Promise<void> {
@@ -2499,7 +2534,7 @@ export async function saveMemberships(memberships: FamilyMembership[]): Promise<
 
 export async function addOrUpdateMembership(membership: FamilyMembership): Promise<void> {
   const raw = await AsyncStorage.getItem(KEYS.MEMBERSHIPS);
-  const all: FamilyMembership[] = raw ? JSON.parse(raw) : [];
+  const all = await parseStoredJson<FamilyMembership[]>(KEYS.MEMBERSHIPS, raw, []);
   const idx = all.findIndex(m => m.familyId === membership.familyId);
   if (idx >= 0) all[idx] = membership;
   else all.unshift(membership);
