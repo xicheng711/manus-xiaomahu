@@ -122,6 +122,26 @@ async function sendExpoPushNotifications(
   }
 }
 
+// ─── 补打卡通知 ──────────────────────────────────────────────────────────
+// 记录日期早于创建者时区的今天 → 视为补打卡，通知标题带上日期
+//（"xx补上了9月27日的晚间打卡"），家人一看就知道补的是哪天。
+function todayStrInTimeZone(tz: string | undefined): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz || 'UTC',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function formatMonthDay(dateStr: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!m) return dateStr;
+  return `${Number(m[2])}月${Number(m[3])}日`;
+}
+
 // ─── Diary notification dedup cache ────────────────────────────────────────
 // Prevents duplicate push notifications when the client sends two concurrent
 // syncDiary requests with conversationFinished:true (e.g. double-tap on
@@ -531,11 +551,22 @@ export const familyRouter = router({
       if (newlyFinishedEvening || newlyFinishedMorning) {
         const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
         const period = newlyFinishedEvening ? '晚间' : '早间';
+        // 补打卡：记录日期早于创建者时区的今天。标题带日期，
+        // 家人收到 "xx补上了9月27日的晚间打卡"，不会误会成今天的。
+        const isBackfill = safeInput.date < todayStrInTimeZone(safeInput.creatorTimeZone);
+        const dateLabel = formatMonthDay(safeInput.date);
+        const actorName = actorMember?.name || '照顾者';
+        const title = isBackfill
+          ? `${actorName}补上了${dateLabel}的${period}打卡 ✅`
+          : `${actorName}完成了${period}打卡 ✅`;
+        const fallbackBody = isBackfill
+          ? `点击查看${dateLabel}的照护记录，辛苦了！💕`
+          : '点击查看今日照护记录，辛苦了！💕';
         await notifyRoomMembers(
           input.roomId,
           userId,
-          `${actorMember?.name || '照顾者'}完成了${period}打卡 ✅`,
-          (newlyFinishedEvening ? safeInput.eveningNotes : safeInput.morningNotes) || '点击查看今日照护记录，辛苦了！💕',
+          title,
+          (newlyFinishedEvening ? safeInput.eveningNotes : safeInput.morningNotes) || fallbackBody,
           { type: 'checkin', screen: 'home', roomId: input.roomId },
           'syncCheckIn',
         );
