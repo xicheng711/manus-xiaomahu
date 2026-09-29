@@ -815,9 +815,11 @@ export default function FamilyScreen() {
       const serverMe = r?.members?.find((mem: any) => mem.isCurrentUser || String(mem.id) === String(myMemberId));
       setCurrentMemberState(serverMe ?? m);
       // 只有服务器明确返回数组时才合并；网络失败为 null，必须保留本地缓存和待同步公告。
+      // 注意：这里不能复用第一阶段读到的 localAnns——第二阶段的 syncPendingAnnouncements
+      // 可能已经清掉了待同步标记（写进 AsyncStorage），必须重读，否则徽标会一直 lie。
       const a: FamilyAnnouncement[] = Array.isArray(cloudAnns)
         ? await mergeCloudAnnouncementsIntoLocal(cloudAnns, requestedFamilyId)
-        : localAnns;
+        : await getFamilyAnnouncements(30, requestedFamilyId);
       setAnnouncements(a);
       setIsCreator(creatorFlag);
 
