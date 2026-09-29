@@ -1413,7 +1413,7 @@ function CheckinScreenContent() {
     void (async () => {
       try {
         const { cancelReminderForDate } = await import('@/lib/notifications');
-        await cancelReminderForDate(formTarget.mode === 'morning' ? 'morning' : 'evening', formTarget.date);
+        await cancelReminderForDate(formTarget.mode === 'morning' ? 'morning' : 'evening', formTarget.date, familyId);
       } catch { /* 静默失败 */ }
     })();
     // 正式保存成功：游客草稿使命完成，在这里清除（恢复时不立即清，防止用户中途退出又丢）

@@ -74,7 +74,6 @@ import {
   smartTodayKey,
   parseReminderTime,
   ensureTodayReminders,
-  cancelTodayReminder,
   cancelReminderForDate,
   areRemindersScheduled,
   cancelAllReminders,
@@ -190,7 +189,7 @@ describe('ux-batch8.1: 智能提醒行为', () => {
     expect(scheduled.length).toBe(6);
     const morningId = scheduled.find(s => s.trigger.date.getHours() === 8)!.id;
 
-    await cancelTodayReminder('morning');
+    await cancelReminderForDate('morning', '2026-09-26', '1');
     expect(cancelledIds).toContain(morningId);
     // 晚间的不受影响
     expect(cancelledIds.length).toBe(1);
@@ -211,7 +210,7 @@ describe('ux-batch8.1: 智能提醒行为', () => {
 
     // 9-28 07:35 补 9-27 的早间打卡：只取消 9-27 的提醒
     vi.setSystemTime(new Date(2026, 8, 28, 7, 35, 0));
-    await cancelReminderForDate('morning', '2026-09-27');
+    await cancelReminderForDate('morning', '2026-09-27', '1');
     expect(cancelledIds).toEqual([yesterdayMorningId]);
     // 今日（9-28）的早间提醒还在排期里
     const pending = await Notifications.getAllScheduledNotificationsAsync();
@@ -243,7 +242,7 @@ describe('ux-batch8.1: 智能提醒行为', () => {
 
     // 9-26 02:00 补 9-25（前一护理日）的晚间打卡：只取消 9-25 的 key
     vi.setSystemTime(new Date(2026, 8, 26, 2, 0, 0));
-    await cancelReminderForDate('evening', '2026-09-25');
+    await cancelReminderForDate('evening', '2026-09-25', '1');
     expect(cancelledIds.length).toBe(1);
     // 9-26 当天的早间提醒还在排期里
     const pending = await Notifications.getAllScheduledNotificationsAsync();
@@ -308,7 +307,7 @@ describe('ux-batch8.1: 智能提醒行为', () => {
 describe('ux-batch8.1: 打卡页 hook', () => {
   it('打卡保存成功后按记录日期取消该时段提醒（补打卡不误删今日）', () => {
     expect(checkinSrc).toContain(
-      "cancelReminderForDate(formTarget.mode === 'morning' ? 'morning' : 'evening', formTarget.date)",
+      "cancelReminderForDate(formTarget.mode === 'morning' ? 'morning' : 'evening', formTarget.date, familyId)",
     );
   });
 

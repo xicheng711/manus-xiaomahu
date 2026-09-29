@@ -149,8 +149,10 @@ export async function cancelAllReminders(): Promise<void> {
       k.startsWith(MORNING_SMART_ID_PREFIX) || k.startsWith(EVENING_SMART_ID_PREFIX)
     );
     for (const k of smartKeys) {
-      const id = await AsyncStorage.getItem(k);
-      if (id) await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+      // 注意：存的是 JSON { id, time }，必须解析出真正的通知 ID 再取消，
+      // 直接把整个 JSON 字符串当 ID 传进去一个都取消不掉（和用药 H1 同类）。
+      const rec = await readSmartRecord(k).catch(() => null);
+      if (rec) await Notifications.cancelScheduledNotificationAsync(rec.id).catch(() => {});
       await AsyncStorage.removeItem(k);
     }
   } catch { /* 静默失败 */ }
@@ -158,12 +160,13 @@ export async function cancelAllReminders(): Promise<void> {
 
 // ─── 智能打卡提醒 ─────────────────────────────────────────────
 // 旧的 DAILY 常驻提醒不管打没打卡每天都响，用户学会无视后就失去了提醒意义。
-// 新逻辑：按实际打卡状态决定是否安排"一次性"提醒，key 按日期（日历日）。
+// 新逻辑：按实际打卡状态决定是否安排"一次性"提醒，key 按"家庭 + 日期"。
 //   - 还没打卡 + 提醒时间还没过 → 安排该日期一次提醒
 //   - 已经打卡 → 取消该日期未响的提醒（不再打扰）
 //   - 提醒时间已过 → 不安排（打卡页的"昨日漏打卡"卡片会接管提醒）
 //   - 提前安排未来 2 天：用户某天没打开 app，当天仍有提醒
 // 由打卡页聚焦、App 回到前台、提醒设置变更、切换家庭时调用。
+// key 必须带 familyId：多家庭提醒时间/老人名字不同，共用 key 会互相取消。
 //
 // 日期语义：提醒时刻（8:00/21:00）都在凌晨 5 点之后，所以提醒日期恒等于
 // 该护理日的日期；打卡记录的 date 也是护理日 key（见 resolveCheckInFormTargetDate）。
@@ -174,6 +177,24 @@ export async function cancelAllReminders(): Promise<void> {
 const SMART_REMINDER_MIGRATED_KEY = '@xiaomahuSmartReminderV1';
 const MORNING_SMART_ID_PREFIX = '@xiaomahuMorningSmart_';
 const EVENING_SMART_ID_PREFIX = '@xiaomahuEveningSmart_';
+
+/**
+ * 智能提醒的 AsyncStorage key。必须纳入 familyId：
+ * 多家庭各自的提醒时间/老人名字不同，共用一个 key 会互相取消覆盖——
+ * 切到 B 家庭排提醒时会把 A 家庭的提醒取消掉，A 家庭就再也收不到提醒了。
+ */
+function smartIdKey(prefix: string, familyId: string | number | undefined, dateKey: string): string {
+  const scope = familyId !== undefined && familyId !== null && String(familyId) !== ''
+    ? String(familyId)
+    : 'default';
+  return `${prefix}${scope}_${dateKey}`;
+}
+
+/** 从智能提醒 key 末尾解析日期（YYYY-MM-DD），格式不对返回 null。 */
+function smartKeyDate(key: string): string | null {
+  const m = /(\d{4}-\d{2}-\d{2})$/.exec(key);
+  return m ? m[1] : null;
+}
 // 提前安排的天数：今天 + 未来 N 天。N 天内没打开 app，提醒依然会响。
 const SMART_SCHEDULE_AHEAD_DAYS = 2;
 
@@ -224,20 +245,26 @@ async function cancelSmartRecord(idKey: string): Promise<void> {
 /** 清理安排窗口之外的过期 key，防止 AsyncStorage 无限堆积。 */
 async function cleanupStaleSmartKeys(): Promise<void> {
   try {
-    const keep = new Set<string>();
+    const keepDates = new Set<string>();
     for (let i = 0; i <= SMART_SCHEDULE_AHEAD_DAYS; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
-      const k = smartDateKey(d);
-      keep.add(MORNING_SMART_ID_PREFIX + k);
-      keep.add(EVENING_SMART_ID_PREFIX + k);
+      keepDates.add(smartDateKey(d));
     }
     const keys = await AsyncStorage.getAllKeys();
     for (const k of keys) {
-      if (
-        (k.startsWith(MORNING_SMART_ID_PREFIX) || k.startsWith(EVENING_SMART_ID_PREFIX)) &&
-        !keep.has(k)
-      ) {
+      const isMorning = k.startsWith(MORNING_SMART_ID_PREFIX);
+      const isEvening = k.startsWith(EVENING_SMART_ID_PREFIX);
+      if (!isMorning && !isEvening) continue;
+      const prefix = isMorning ? MORNING_SMART_ID_PREFIX : EVENING_SMART_ID_PREFIX;
+      const rest = k.slice(prefix.length);
+      const isNewFormat = /^.+_\d{4}-\d{2}-\d{2}$/.test(rest);
+      if (!isNewFormat) {
+        // 旧格式 key（升级前排的）：取消其通知，由本次调度的同日期新格式 key 接管
+        await cancelSmartRecord(k);
+        continue;
+      }
+      if (!keepDates.has(smartKeyDate(k) ?? '')) {
         await cancelSmartRecord(k);
       }
     }
@@ -276,9 +303,10 @@ async function ensureSmartReminder(
   name: string,
   dateKey: string,
   baseDate: Date,
+  familyId: string | number | undefined,
 ): Promise<void> {
   const prefix = period === 'morning' ? MORNING_SMART_ID_PREFIX : EVENING_SMART_ID_PREFIX;
-  const idKey = prefix + dateKey;
+  const idKey = smartIdKey(prefix, familyId, dateKey);
   const existing = await readSmartRecord(idKey);
 
   const time = parseReminderTime(timeStr, defaultHour);
@@ -360,8 +388,8 @@ export async function ensureTodayReminders(elderNickname?: string, familyId?: st
       // 提醒时刻都在凌晨 5 点之后，提醒日期恒等于该护理日的日期，直接按日历日查打卡状态。
       // 未来日期不可能已有打卡记录，getCheckInByDate 会返回 null → 正常安排。
       const checkIn = await getCheckInByDate(dateKey, familyId).catch(() => null);
-      await ensureSmartReminder('morning', checkIn?.morningDone ?? false, fp?.reminderMorning, 8, name, dateKey, d);
-      await ensureSmartReminder('evening', checkIn?.eveningDone ?? false, fp?.reminderEvening, 21, name, dateKey, d);
+      await ensureSmartReminder('morning', checkIn?.morningDone ?? false, fp?.reminderMorning, 8, name, dateKey, d, familyId);
+      await ensureSmartReminder('evening', checkIn?.eveningDone ?? false, fp?.reminderEvening, 21, name, dateKey, d, familyId);
     }
 
     await cleanupStaleSmartKeys();
@@ -378,22 +406,18 @@ export async function ensureTodayReminders(elderNickname?: string, familyId?: st
  * 凌晨 0:00–5:00 做的打卡记到前一护理日，同样只取消那一护理日的提醒，
  * 新一天（5 点后）的提醒不受影响。
  */
-export async function cancelReminderForDate(period: 'morning' | 'evening', dateKey: string): Promise<void> {
+export async function cancelReminderForDate(
+  period: 'morning' | 'evening',
+  dateKey: string,
+  familyId?: string | number,
+): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
     const prefix = period === 'morning' ? MORNING_SMART_ID_PREFIX : EVENING_SMART_ID_PREFIX;
-    await cancelSmartRecord(prefix + dateKey);
+    await cancelSmartRecord(smartIdKey(prefix, familyId, dateKey));
   } catch (e) {
     console.warn('[Notifications] cancelReminderForDate failed:', e);
   }
-}
-
-/**
- * @deprecated 仅为兼容旧调用保留。新代码请用 cancelReminderForDate(period, dateKey)，
- * 按打卡记录的实际日期取消，避免补打卡误删今日提醒。
- */
-export async function cancelTodayReminder(period: 'morning' | 'evening'): Promise<void> {
-  return cancelReminderForDate(period, smartTodayKey());
 }
 
 /**
