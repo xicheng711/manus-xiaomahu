@@ -107,15 +107,23 @@ describe("智能提醒多家庭 key 隔离", () => {
   it("打卡后只取消本家庭该日期的提醒", async () => {
     await ensureTodayReminders("奶奶", "famA");
     await ensureTodayReminders("爷爷", "famB");
-    const todayKey = (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    })();
+    // 不假设"今天"一定有排期（临近午夜时 now+3h 会落在已过去的时间，源码会按设计跳过），
+    // 直接取 famA 实际排上的第一个早提醒 key，从中解析出它所属的日期。
+    const famAMorningKeys = smartKeys().filter(
+      k => k.startsWith("@xiaomahuMorningSmart_") && k.includes("famA"),
+    );
+    expect(famAMorningKeys.length).toBeGreaterThan(0);
+    const targetKey = famAMorningKeys[0];
+    const dateKey = targetKey.match(/(\d{4}-\d{2}-\d{2})$/)?.[1];
+    expect(dateKey).toBeTruthy();
+    const famBKeysBefore = smartKeys().filter(k => k.includes("famB"));
+    expect(famBKeysBefore.length).toBeGreaterThan(0);
     cancelled.length = 0;
-    await cancelReminderForDate("morning", todayKey, "famA");
-    // famB 同日期早提醒的 key 还在
-    expect(store.has(`@xiaomahuMorningSmart_famB_${todayKey}`)).toBe(true);
-    expect(store.has(`@xiaomahuMorningSmart_famA_${todayKey}`)).toBe(false);
+    await cancelReminderForDate("morning", dateKey!, "famA");
+    // famA 该日期早提醒的 key 没了
+    expect(store.has(targetKey)).toBe(false);
+    // famB 的提醒 key 一个都不少
+    for (const k of famBKeysBefore) expect(store.has(k)).toBe(true);
   });
 
   it("cancelAllReminders 解析智能提醒的 JSON record 逐个取消（不是把 JSON 当 ID）", async () => {
