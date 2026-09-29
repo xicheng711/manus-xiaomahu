@@ -3,7 +3,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
 import { Platform, View, Text, StyleSheet } from "react-native";
 import { AppColors } from "@/lib/design-tokens";
-import { AppIcon, TAB_CONFIG, TAB_ACTIVE_BG, TAB_ACTIVE_LABEL } from "@/components/app-icons";
+import { AppIcon, TAB_CONFIG, TAB_ACTIVE_LABEL, TAB_INACTIVE_TINT } from "@/components/app-icons";
 import { useFamilyContext } from "@/lib/family-context";
 
 // Joiner 可见的 Tab：首页 / 每日打卡（只读） / 用药记录 / 日记 / 家人共享。
@@ -20,27 +20,20 @@ function TabIcon({
   isJoiner: boolean;
 }) {
   const cfg = TAB_CONFIG[route] ?? {
-    icon: "heart" as const, idleColor: "#ccc", label: "",
+    icon: "heart" as const, label: "",
   };
 
   const accessible = !isJoiner || JOINER_TABS.has(route);
-  // 只有当前页面使用高亮色；其他可访问页面保持清晰但不过度抢眼。
-  const showActive = focused;
+  // Apple 式 Tab 栏：无底圆，图标 + 文字统一 tint，未选中系统灰、高亮珊瑚。
+  const tint = focused ? TAB_ACTIVE_LABEL : TAB_INACTIVE_TINT;
 
   return (
     <View style={[styles.tabItem, !accessible && styles.tabItemFaded]}>
-      {showActive ? (
-        <View style={[styles.iconCircle, { backgroundColor: TAB_ACTIVE_BG, shadowColor: TAB_ACTIVE_BG, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 4 }]}>
-          <AppIcon name={cfg.icon} color="#FFFFFF" size={23} strokeWidth={1.7} />
-        </View>
-      ) : (
-        <View style={[styles.iconCircle, styles.inactiveCircle]}>
-          <AppIcon name={cfg.icon} color={cfg.idleColor} size={23} strokeWidth={1.7} />
-        </View>
-      )}
+      <AppIcon name={cfg.icon} color={tint} size={26} weight="medium" />
       <Text style={[
         styles.tabLabel,
-        showActive && { color: TAB_ACTIVE_LABEL, fontWeight: "700" as const },
+        { color: tint },
+        focused && { fontWeight: "600" as const },
         !accessible && styles.tabLabelFaded,
       ]} numberOfLines={1}>
         {cfg.label}
@@ -73,17 +66,15 @@ export default function TabLayout() {
             paddingTop: 4,
             paddingBottom: safeBottom,
             paddingHorizontal: 4,
-            backgroundColor: 'rgba(255,253,251,0.96)',
+            // Apple 原生式：半透明底 + 顶部细线，无悬浮圆角
+            backgroundColor: 'rgba(255,253,251,0.94)',
             borderTopWidth: 0.5,
-            borderTopColor: 'rgba(129,111,101,0.12)',
-            borderTopLeftRadius: 26,
-            borderTopRightRadius: 26,
+            borderTopColor: 'rgba(129,111,101,0.18)',
             shadowColor: '#7D6D64',
             shadowOffset: { width: 0, height: -5 },
-            shadowOpacity: 0.12,
-            shadowRadius: 22,
-            elevation: 18,
-            overflow: Platform.OS === "android" ? "hidden" : undefined,
+            shadowOpacity: 0.08,
+            shadowRadius: 18,
+            elevation: 12,
           },
           tabBarItemStyle: {
             paddingVertical: 0,
@@ -103,33 +94,20 @@ export default function TabLayout() {
   );
 }
 
-const CIRCLE = 44;
-
 const styles = StyleSheet.create({
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 2,
     flex: 1,
     minWidth: 56,
   },
   tabItemFaded: {
     opacity: 0.62,
   },
-  iconCircle: {
-    width: CIRCLE,
-    height: CIRCLE,
-    borderRadius: CIRCLE / 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  inactiveCircle: {
-    backgroundColor: '#F6F1EE',
-  },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
-    color: AppColors.nav.inactive,
     letterSpacing: 0,
   },
   tabLabelFaded: {

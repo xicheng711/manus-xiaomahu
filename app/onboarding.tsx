@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg';
 import { ScreenContainer } from '@/components/screen-container';
+import { AppIcon } from '@/components/app-icons';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { saveProfile, saveUserProfile, getUserProfile, saveFamilyProfile, saveMedication, generateId, createFamilyRoom, joinFamilyRoom, lookupFamilyByCode, generateRoomCode } from '@/lib/storage';
 import { getSessionToken, getUserInfo } from '@/lib/_core/auth';
@@ -727,11 +728,7 @@ export default function OnboardingScreen() {
                   style={[styles.roleCard, styles.roleCardCreator]}
                 >
                   <View style={styles.roleIconBox}>
-                    <Svg viewBox="0 0 24 24" width={28} height={28} fill="none">
-                      <Rect x="5" y="5" width="14" height="14" rx="2" stroke="#f43f5e" strokeWidth="1.5" />
-                      <Path d="M12 8V16" stroke="#f43f5e" strokeWidth="1.5" strokeLinecap="round" />
-                      <Path d="M8 12H16" stroke="#f43f5e" strokeWidth="1.5" strokeLinecap="round" />
-                    </Svg>
+                    <AppIcon name="plus" color="#f43f5e" size={26} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.roleCardTitle, { color: '#E11D48' }]}>我是主要照顾者</Text>
@@ -756,11 +753,7 @@ export default function OnboardingScreen() {
                   style={[styles.roleCard, styles.roleCardJoiner]}
                 >
                   <View style={[styles.roleIconBox]}>
-                    <Svg viewBox="0 0 24 24" width={28} height={28} fill="none">
-                      <Path d="M13.5 7.5L16.5 4.5C17.88 3.12 20.12 3.12 21.5 4.5C22.88 5.88 22.88 8.12 21.5 9.5L18.5 12.5" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
-                      <Path d="M10.5 16.5L7.5 19.5C6.12 20.88 3.88 20.88 2.5 19.5C1.12 18.12 1.12 15.88 2.5 14.5L5.5 11.5" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
-                      <Path d="M14 10L10 14" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
-                    </Svg>
+                    <AppIcon name="link" color="#64748b" size={26} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.roleCardTitle, { color: '#334155' }]}>我是家庭成员</Text>
