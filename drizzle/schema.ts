@@ -161,8 +161,10 @@ export const diaryEntries = mysqlTable("diary_entries", {
   conversation: json("conversation"),
   conversationFinished: boolean("conversationFinished").default(false),
   localTimeStr: varchar("localTimeStr", { length: 10 }),  // e.g. "14:23" — writer's local time, timezone-safe
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  // P1：毫秒精度（fsp=3）。并发去重靠 updatedAt > createdAt 判断行是否被赢家推进过；
+  // 秒精度下同秒内的毫秒级真并发会被误判为"未推进"，导致陈旧快照整行覆盖。
+  createdAt: timestamp("createdAt", { fsp: 3 }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { fsp: 3 }).defaultNow().onUpdateNow().notNull(),
 }, table => [
   // clientId 为 NULL 的历史日记仍可共存；新日记在同一家庭、同一作者下严格幂等。
   uniqueIndex("uq_diary_entries_room_author_client").on(table.roomId, table.authorUserId, table.clientId),
@@ -293,6 +295,9 @@ export const medications = mysqlTable("medications", {
   active: boolean("active").default(true).notNull(),
   reminderEnabled: boolean("reminderEnabled").default(true),
   color: varchar("color", { length: 20 }),
+  // "每隔一天"服药的周期锚点（YYYY-MM-DD）：服药日恒为 anchor + 2k。
+  // 多设备必须一致：云端存一份，客户端拉取时缺失回填/云端优先，解决双设备永久错开一天。
+  everyOtherDayAnchor: varchar("everyOtherDayAnchor", { length: 10 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [

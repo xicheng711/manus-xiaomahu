@@ -719,6 +719,9 @@ export async function cloudSyncMedication(med: any, serverMedId?: number, roomId
       active: med.active,
       reminderEnabled: med.reminderEnabled,
       color: med.color,
+      // 周期锚点进云：多设备奇偶一致靠云端这一份（服务端 last-writer-wins，
+      // 客户端拉取时云端优先/缺失回填，见 mergeCloudMedicationsIntoLocal）。
+      everyOtherDayAnchor: med.everyOtherDayAnchor,
       changeEvents,
     });
   } catch (e) {

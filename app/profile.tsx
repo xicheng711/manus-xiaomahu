@@ -28,7 +28,7 @@ import {
 import { useFamilyContext } from '@/lib/family-context';
 import { trpc } from '@/lib/trpc';
 import { cloudUploadPhoto, cloudUpdateMemberProfile, cloudUpdateElderProfile, cloudGetElderProfile, clearCloudSyncState } from '@/lib/cloud-sync';
-import { clearAllLocalData, clearCheckInDraft } from '@/lib/storage';
+import { clearAllLocalData, clearCheckInDraft, syncAllPendingAnnouncements, countPendingAnnouncements } from '@/lib/storage';
 import { removeSessionToken, clearUserInfo } from '@/lib/_core/auth';
 
 export default function ProfileScreen() {
@@ -85,8 +85,31 @@ export default function ProfileScreen() {
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
+  // P2：登出前 flush 待同步公告。若断网导致仍有 N 条未同步，弹窗警告，
+  // 用户二次确认后才允许退出——失败时不能静默丢数据。
+  const [signOutPendingCount, setSignOutPendingCount] = useState(0);
+  const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut() {
+    if (signingOut) return;
+    // 先把断网期间攒下的待同步公告刷出去（P2：登出前 flush）。
+    if (signOutPendingCount === 0) {
+      setSigningOut(true);
+      try {
+        await syncAllPendingAnnouncements().catch(() => {});
+        const n = await countPendingAnnouncements().catch(() => 0);
+        if (n > 0) {
+          // 还没刷完（大概率断网）：警告用户，二次确认后才放行。
+          setSignOutPendingCount(n);
+          setSigningOut(false);
+          return;
+        }
+      } catch {
+        setSigningOut(false);
+        return;
+      }
+      setSigningOut(false);
+    }
     // 先取消本账号的全部提醒（用药 + 智能打卡），必须在清本地数据之前，
     // 否则存的通知 ID 就找不到了，旧账号的提醒会继续响。
     await cancelAllMedicationReminders().catch(() => {});
@@ -978,7 +1001,7 @@ export default function ProfileScreen() {
         {/* Sign Out button */}
         <TouchableOpacity
           style={styles.signOutBtn}
-          onPress={() => setShowSignOutModal(true)}
+          onPress={() => { setSignOutPendingCount(0); setShowSignOutModal(true); }}
         >
           <Text style={styles.signOutBtnText}>🚪 退出登录</Text>
         </TouchableOpacity>
@@ -1251,26 +1274,32 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* ── 退出登录确认 Modal ── */}
-      <Modal visible={showSignOutModal} transparent animationType="fade" onRequestClose={() => setShowSignOutModal(false)}>
+      <Modal visible={showSignOutModal} transparent animationType="fade" onRequestClose={() => { setShowSignOutModal(false); setSignOutPendingCount(0); }}>
         <View style={styles.permOverlay}>
           <View style={styles.confirmBox}>
             <Text style={styles.confirmEmoji}>🚪</Text>
             <Text style={styles.confirmTitle}>确认退出登录？</Text>
             <Text style={styles.confirmMsg}>
               退出登录后，您的账号和所有数据在服务器上安全保留，下次登录后可以完整恢复。
+              {signOutPendingCount > 0
+                ? `\n\n⚠️ 还有 ${signOutPendingCount} 条公告没能同步到云端（可能网络不佳）。现在退出，这台设备上的这几条公告会丢失，家人也看不到。`
+                : ''}
             </Text>
             <View style={styles.confirmBtnRow}>
               <TouchableOpacity
                 style={styles.confirmCancelBtn}
-                onPress={() => setShowSignOutModal(false)}
+                onPress={() => { setShowSignOutModal(false); setSignOutPendingCount(0); }}
               >
                 <Text style={styles.confirmCancelBtnText}>取消</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirmDeleteBtn, { backgroundColor: '#E53935' }]}
                 onPress={handleSignOut}
+                disabled={signingOut}
               >
-                <Text style={styles.confirmDeleteBtnText}>确认退出</Text>
+                <Text style={styles.confirmDeleteBtnText}>
+                  {signingOut ? '同步中…' : signOutPendingCount > 0 ? '仍要退出' : '确认退出'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

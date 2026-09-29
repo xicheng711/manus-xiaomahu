@@ -478,6 +478,41 @@ export async function areRemindersScheduled(): Promise<boolean> {
 const MED_NOTIF_PREFIX = "@xiaomahuMedNotif_";
 
 /**
+ * iOS 每个 app 最多 64 条已排期本地通知；超了会被系统静默丢弃，
+ * 用户收不到任何提示。Android 无此硬限制，但统一按 64 做预算。
+ * 用药 DATE 预排（"每隔一天"每槽 10 条）是最主要的消耗者，
+ * 排期前必须查已用额度，优先保近舍远，绝不能让系统静默吞掉。
+ */
+const OS_MAX_SCHEDULED_NOTIFICATIONS = 64;
+/** 给打卡提醒等其他通知留的余量：用药排期最多占用到这个数。 */
+const MED_SCHEDULE_BUDGET = 56;
+
+/** 当前已排期的通知数（查不到时按 0 计，宁可多排一条也不漏提醒）。 */
+async function currentScheduledCount(): Promise<number> {
+  try {
+    const pending = await Notifications.getAllScheduledNotificationsAsync();
+    return pending.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 本次最多还能排几条（DATE 触发器用）。
+ * - 硬上限：已排期数绝不能超过 iOS 的 64 条，否则系统会静默丢弃。
+ *   额度已满时返回 0，调用方直接跳过本次排期（续排时会再试）。
+ * - 软预算未满时至少返回 1：保证最近的一个剂量日有提醒，
+ *   不能让用户一次药都收不到。
+ */
+async function dateTriggerBudget(): Promise<number> {
+  const used = await currentScheduledCount();
+  const hardRoom = OS_MAX_SCHEDULED_NOTIFICATIONS - used;
+  if (hardRoom <= 0) return 0;
+  const softRoom = MED_SCHEDULE_BUDGET - used;
+  return Math.max(1, Math.min(softRoom, hardRoom));
+}
+
+/**
  * Schedule a medication reminder at a specific time, honoring the medication's frequency.
  * @param medId Unique medication ID (callers pass medId + '_' + HHMM per time slot)
  * @param medName Medication name
@@ -577,8 +612,13 @@ export async function scheduleMedicationReminder(
       if (d.getTime() > now.getTime()) dates.push(d);
       k++;
     }
+    // iOS 64 条上限防护：本槽位旧提醒上面已取消，这里按剩余额度只排最近的 N 个
+    // 剂量日（优先保近、舍远），绝不能让系统静默丢弃。
+    // 预算为 0（硬上限已满）时直接跳过，续排时会再试。
+    const budget = await dateTriggerBudget();
+    const planned = budget > 0 ? dates.slice(0, Math.min(dates.length, budget)) : [];
     const ids: string[] = [];
-    for (const d of dates) {
+    for (const d of planned) {
       const id = await Notifications.scheduleNotificationAsync({
         content,
         trigger: {
@@ -593,7 +633,7 @@ export async function scheduleMedicationReminder(
     // 存 ID + 剂量日期：续排时按日期续（保持奇偶），取消时按 ID 逐个取消。
     await AsyncStorage.setItem(MED_NOTIF_PREFIX + medId, JSON.stringify({
       ids,
-      dates: dates.map(d => d.toISOString()),
+      dates: planned.map(d => d.toISOString()),
     }));
     return ids[0];
   }
@@ -644,6 +684,30 @@ function parseStoredNotifSchedule(raw: string | null): { ids: string[]; dates: s
         dates = parsed.dates.filter((d: unknown) => typeof d === 'string');
       }
     } catch { /* 旧格式没有 dates */ }
+  }
+  return { ids, dates };
+}
+
+/**
+ * 剪掉已过期的排期记录（P2）：ids 与 dates 按下标对齐，只保留未来剂量；
+ * 过期 ID 对应的通知逐个取消，避免僵尸 ID 在存储里无限膨胀。
+ */
+function pruneExpiredSchedule(
+  sched: { ids: string[]; dates: string[] },
+  nowMs: number,
+): { ids: string[]; dates: string[] } {
+  const ids: string[] = [];
+  const dates: string[] = [];
+  const n = Math.max(sched.ids.length, sched.dates.length);
+  for (let i = 0; i < n; i++) {
+    const d = sched.dates[i];
+    const ts = d ? new Date(d).getTime() : NaN;
+    if (Number.isFinite(ts) && ts > nowMs) {
+      dates.push(d);
+      if (sched.ids[i]) ids.push(sched.ids[i]);
+    } else if (sched.ids[i]) {
+      void Notifications.cancelScheduledNotificationAsync(sched.ids[i]).catch(() => {});
+    }
   }
   return { ids, dates };
 }
@@ -728,22 +792,31 @@ export async function renewEveryOtherDayReminders(
         const slotKey = MED_NOTIF_PREFIX + med.id + '_' + t.replace(':', '');
         const raw = await AsyncStorage.getItem(slotKey).catch(() => null);
         const sched = parseStoredNotifSchedule(raw);
-        const futureDates = sched.dates
+        // P2：先剪掉过期 ID，避免数组无限膨胀（同时取消对应僵尸通知）。
+        const pruned = pruneExpiredSchedule(sched, now.getTime());
+        const futureDates = pruned.dates
           .map(d => new Date(d).getTime())
           .filter(ts => Number.isFinite(ts) && ts > now.getTime())
           .sort((a, b) => a - b);
-        if (futureDates.length >= 5) continue;
-        if (sched.dates.length === 0) {
-          // 旧格式：不知道已排日期，整槽重排（自动转新格式）
+        if (futureDates.length >= 5) {
+          if (pruned.ids.length !== sched.ids.length) {
+            await AsyncStorage.setItem(slotKey, JSON.stringify(pruned)).catch(() => {});
+          }
+          continue;
+        }
+        if (futureDates.length === 0) {
+          // 全部过期（或旧格式无日期）：整槽重排。scheduleMedicationReminder
+          // 会按锚点 anchor + 2k 推算下一批未来剂量日——不能从 now 重锚，
+          // 否则奇偶翻转；开头也会先取消本槽位旧提醒（幂等），重排后转新格式。
           await scheduleMedicationReminder(
             med.id + '_' + t.replace(':', ''), med.name || '药物', med.icon || '💊',
             elderNickname, h, min, '每隔一天',
-            { anchorDateKey: med.everyOtherDayAnchor ?? localDateKey(now) },
+            { anchorDateKey: med.everyOtherDayAnchor ?? localDateKey(now), ...(roomId ? { roomId } : {}) },
           ).catch(() => {});
           continue;
         }
         // 日期续排：从最后一个剂量日往后每 2 天，补到 10 个未来剂量日
-        const last = new Date(futureDates.length > 0 ? futureDates[futureDates.length - 1] : now.getTime());
+        const last = new Date(futureDates[futureDates.length - 1]);
         const extra: Date[] = [];
         let k = 1;
         while (futureDates.length + extra.length < 10 && k < 40) {
@@ -754,6 +827,10 @@ export async function renewEveryOtherDayReminders(
           k++;
         }
         if (extra.length === 0) continue;
+        // iOS 64 条上限防护：续排也受预算限制，优先保近舍远。
+        // 预算为 0（硬上限已满）时跳过本槽位，下次续排再试。
+        const renewBudget = await dateTriggerBudget();
+        const plannedExtra = renewBudget > 0 ? extra.slice(0, renewBudget) : [];
         const content = {
           title: `${med.icon || '💊'} 用药提醒`,
           body: `该给${elderNickname}服用 ${med.name || '药物'} 了 💊`,
@@ -762,7 +839,7 @@ export async function renewEveryOtherDayReminders(
         };
         const newIds: string[] = [];
         const newDates: string[] = [];
-        for (const d of extra) {
+        for (const d of plannedExtra) {
           const id = await Notifications.scheduleNotificationAsync({
             content,
             trigger: {
@@ -778,11 +855,8 @@ export async function renewEveryOtherDayReminders(
         }
         if (newIds.length > 0) {
           await AsyncStorage.setItem(slotKey, JSON.stringify({
-            ids: [...sched.ids, ...newIds],
-            dates: [
-              ...sched.dates.filter(d => new Date(d).getTime() > now.getTime()),
-              ...newDates,
-            ],
+            ids: [...pruned.ids, ...newIds],
+            dates: [...pruned.dates, ...newDates],
           })).catch(() => {});
         }
       }

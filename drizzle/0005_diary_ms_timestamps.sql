@@ -1,0 +1,3 @@
+ALTER TABLE `diary_entries` MODIFY COLUMN `createdAt` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3);
+--> statement-breakpoint
+ALTER TABLE `diary_entries` MODIFY COLUMN `updatedAt` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3);

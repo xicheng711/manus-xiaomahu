@@ -14,7 +14,7 @@ import {
   createDiaryEntry, updateDiaryEntry, deleteDiaryEntryById, getDiaryEntriesByRoom,
   getDiaryEntryByClientId, getDiaryEntryForInteraction, markDiaryRead, getDiaryInteractions, addDiaryComment,
   deleteDiaryCommentByAuthor, getDiaryInteractionSummaries,
-  createAnnouncement, getAnnouncementByClientId, getAnnouncementsByRoom, getAnnouncementCommentSummaries, getAnnouncementById,
+  createAnnouncement, getAnnouncementsByRoom, getAnnouncementCommentSummaries, getAnnouncementById,
   getAnnouncementComments, addAnnouncementComment, deleteAnnouncementCommentByAuthor,
   deleteAnnouncement, toggleReaction,
   createBriefing, getBriefingsByRoom, getBriefingByDate,
@@ -25,6 +25,7 @@ import { updatePushToken, getUsersByIds } from "./db";
 import { ossUploadAvatar, storagePut } from "./storage";
 import { resolveDiarySyncIdentity } from "./diary-sync-identity";
 import { resolveCheckInSyncIdentity } from "./checkin-sync-identity";
+import { isBackfillDate } from "./care-day";
 import { getMemberDisplayEmoji } from "../lib/member-avatar";
 
 // ─── 打卡单调合并辅助 ──────────────────────────────────────────────────────
@@ -123,18 +124,9 @@ async function sendExpoPushNotifications(
 }
 
 // ─── 补打卡通知 ──────────────────────────────────────────────────────────
-// 记录日期早于创建者时区的今天 → 视为补打卡，通知标题带上日期
-//（"xx补上了9月27日的晚间打卡"），家人一看就知道补的是哪天。
-function todayStrInTimeZone(tz: string | undefined): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: tz || 'UTC',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(new Date());
-  } catch {
-    return new Date().toISOString().slice(0, 10);
-  }
-}
+// 记录日期早于创建者时区的"今天"（05:00 护理日口径，与客户端一致）→ 视为补打卡，
+// 通知标题带上日期（"xx补上了9月27日的晚间打卡"），家人一看就知道补的是哪天。
+// 口径实现见 server/care-day.ts：时区缺失/非法时不判补录，绝不回退 UTC 误判（P1 修复）。
 
 function formatMonthDay(dateStr: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
@@ -433,7 +425,7 @@ export const familyRouter = router({
       roomId: z.number(),
       clientId: z.string().min(1).max(100).optional(),
       serverCheckInId: z.number().int().positive().optional(),
-      date: z.string(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date 必须是 YYYY-MM-DD'),
       /** 创建记录时设备的 IANA 时区；date 是按该时区算的护理日。 */
       creatorTimeZone: z.string().max(64).optional(),
       sleepHours: z.number().optional(),
@@ -551,9 +543,10 @@ export const familyRouter = router({
       if (newlyFinishedEvening || newlyFinishedMorning) {
         const actorMember = (await getRoomMembers(input.roomId)).find(m => m.userId === userId);
         const period = newlyFinishedEvening ? '晚间' : '早间';
-        // 补打卡：记录日期早于创建者时区的今天。标题带日期，
+        // 补打卡：记录日期早于创建者时区的今天（05:00 护理日口径）。标题带日期，
         // 家人收到 "xx补上了9月27日的晚间打卡"，不会误会成今天的。
-        const isBackfill = safeInput.date < todayStrInTimeZone(safeInput.creatorTimeZone);
+        // 时区缺失/非法时不判补录（保守用普通标题），不回退 UTC。
+        const isBackfill = isBackfillDate(safeInput.date, safeInput.creatorTimeZone);
         const dateLabel = formatMonthDay(safeInput.date);
         const actorName = actorMember?.name || '照顾者';
         const title = isBackfill
@@ -718,22 +711,36 @@ export const familyRouter = router({
           console.log(`[DiarySync] success diary=${entry.id} mode=dedup-already-published`);
           return { success: true, diaryId: entry.id };
         }
-        await updateDiaryEntry(entry.id, {
-          clientId: input.clientId ?? entry.clientId,
-          content: input.content,
-          moodEmoji: input.moodEmoji ?? null,
-          moodLabel: input.moodLabel ?? null,
-          moodScore: input.moodScore ?? null,
-          tags: input.tags ?? null,
-          caregiverMoodEmoji: input.caregiverMoodEmoji ?? null,
-          caregiverMoodLabel: input.caregiverMoodLabel ?? null,
-          aiReply: input.aiReply ?? null,
-          aiEmoji: input.aiEmoji ?? null,
-          aiTip: input.aiTip ?? null,
-          conversation: input.conversation ?? null,
-          conversationFinished: input.conversationFinished ?? false,
-          localTimeStr: input.localTimeStr ?? null,
-        });
+        // P1 修复：recovered 行若已被赢家后续更新过（updatedAt > createdAt），
+        // 本请求的快照一定陈旧——只允许完成态 false→true 单向推进，
+        // 不用陈旧快照整行覆盖，否则会把赢家的新内容抹掉。
+        // （MySQL timestamp 秒精度：同秒内的毫秒级真并发走 last-writer-wins，可接受。）
+        const entryUpdatedAt = entry.updatedAt ? new Date(entry.updatedAt).getTime() : 0;
+        const entryCreatedAt = entry.createdAt ? new Date(entry.createdAt).getTime() : 0;
+        const rowAdvanced = entryUpdatedAt > entryCreatedAt;
+        if (rowAdvanced) {
+          if (input.conversationFinished === true) {
+            await updateDiaryEntry(entry.id, { conversationFinished: true });
+          }
+          console.log(`[DiarySync] success diary=${entry.id} mode=dedup-stale-skipped`);
+        } else {
+          await updateDiaryEntry(entry.id, {
+            clientId: input.clientId ?? entry.clientId,
+            content: input.content,
+            moodEmoji: input.moodEmoji ?? null,
+            moodLabel: input.moodLabel ?? null,
+            moodScore: input.moodScore ?? null,
+            tags: input.tags ?? null,
+            caregiverMoodEmoji: input.caregiverMoodEmoji ?? null,
+            caregiverMoodLabel: input.caregiverMoodLabel ?? null,
+            aiReply: input.aiReply ?? null,
+            aiEmoji: input.aiEmoji ?? null,
+            aiTip: input.aiTip ?? null,
+            conversation: input.conversation ?? null,
+            conversationFinished: input.conversationFinished ?? false,
+            localTimeStr: input.localTimeStr ?? null,
+          });
+        }
       }
       // 只有对话结束（日记正式保存）时才发推送通知，避免对话中途就发出通知。
       // shouldSendDiaryNotification 确保同一条日记 10 秒内只发一次通知（防止并发重试导致重复通知）。
@@ -933,10 +940,7 @@ export const familyRouter = router({
       const userId = ctx.user.id;
       const member = await requireRoomMember(userId, input.roomId);
 
-      const existingAnnouncement = input.clientId
-        ? await getAnnouncementByClientId(input.roomId, input.clientId)
-        : null;
-      const announcement = await createAnnouncement({
+      const { announcement, created } = await createAnnouncement({
         roomId: input.roomId,
         clientId: input.clientId ?? null,
         authorUserId: userId,
@@ -950,8 +954,9 @@ export const familyRouter = router({
         localTimeStr: input.localTimeStr ?? null,
       });
 
-      // Idempotent retries reuse the same announcement and must not send another push.
-      if (!existingAnnouncement) {
+      // 只有本次真正新建成功才推送。幂等重试/并发去重命中的请求不重复推送。
+      // （不能用"预查为空"判断：并发时两个请求的预查都可能为空。）
+      if (created) {
         const announcementPreview = input.content.length > 50 ? input.content.slice(0, 50) + '...' : input.content;
         await notifyRoomMembers(
           input.roomId,
@@ -1141,6 +1146,8 @@ export const familyRouter = router({
       active: z.boolean().default(true),
       reminderEnabled: z.boolean().optional(),
       color: z.string().optional(),
+      // "每隔一天"周期锚点（YYYY-MM-DD）：多设备奇偶一致靠云端这一份。
+      everyOtherDayAnchor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       changeEvents: z.array(z.object({
         eventId: z.string().min(1).max(100),
         changeType: z.enum(["added", "updated", "paused", "resumed", "deleted"]),
@@ -1167,6 +1174,8 @@ export const familyRouter = router({
         active: input.active,
         reminderEnabled: input.reminderEnabled ?? true,
         color: input.color ?? null,
+        // 只带上真正传了的锚点：老客户端不带此字段时不能把云端已有的锚点抹成 null。
+        ...(input.everyOtherDayAnchor ? { everyOtherDayAnchor: input.everyOtherDayAnchor } : {}),
       });
       const recordedChanges = [];
       for (const event of input.changeEvents ?? []) {

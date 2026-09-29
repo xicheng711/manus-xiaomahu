@@ -216,6 +216,8 @@ export interface Medication {
   /**
    * "每隔一天"的服药周期锚点（YYYY-MM-DD）：服药日恒为 anchor + 2k。
    * 没有它，编辑/重排时锚点会跟着"排期当天"走，奇偶悄悄翻转（M2）。
+   * 已进云同步（medications.everyOtherDayAnchor）：多设备以云端为准，
+   * 拉取时云端优先/缺失回填，见 mergeCloudMedicationsIntoLocal。
    */
   everyOtherDayAnchor?: string;
   /**
@@ -1276,6 +1278,11 @@ export async function mergeCloudMedicationsIntoLocal(cloudMeds: any[], roomId: s
       active: item.active ?? true,
       reminderEnabled: item.reminderEnabled ?? true,
       color: item.color ?? undefined,
+      // 锚点多设备一致：云端优先；云端没有（老服务端）则保留本地的。
+      // B 设备首次拉取时靠这一行拿到创建设备的锚点，不再按"当天"回填导致永久错开一天。
+      everyOtherDayAnchor: typeof item.everyOtherDayAnchor === 'string' && item.everyOtherDayAnchor
+        ? item.everyOtherDayAnchor
+        : existing?.everyOtherDayAnchor,
       syncPending: false,
       pendingChanges: [],
     } as Medication;
@@ -2379,6 +2386,30 @@ export async function syncPendingAnnouncements(roomId: string): Promise<void> {
 }
 
 /**
+ * 统计所有家庭尚未同步到云端的公告数（P2：登出前检查用）。
+ * 返回 0 表示没有待同步数据，可以放心清本地。
+ */
+export async function countPendingAnnouncements(): Promise<number> {
+  let memberships: FamilyMembership[] = [];
+  try {
+    memberships = await getAllMemberships();
+  } catch {
+    return 0;
+  }
+  let count = 0;
+  for (const m of memberships) {
+    try {
+      const raw = await AsyncStorage.getItem(roomKey(KEYS.FAMILY_ANNOUNCEMENTS, m.familyId));
+      const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+      count += all.filter(item => item.syncPending).length;
+    } catch {
+      // 单个家庭读失败不影响总数
+    }
+  }
+  return count;
+}
+
+/**
  * 把所有家庭的待同步公告都重试一遍。
  * 之前重试只发生在家人页 loadData 里——离线时发了公告、之后没再进家人页，
  * 这条公告就会一直卡在"待同步"。现在 app 回到前台时也会触发（见 _layout.tsx
@@ -2633,6 +2664,8 @@ export async function clearScopedFamilyData(roomId: string): Promise<void> {
     roomKey(KEYS.FAMILY_PROFILE, roomId),
     roomKey(KEYS.CHECK_INS, roomId),
     roomKey(KEYS.MEDICATIONS, roomId),
+    // P2：用药变更记录也按家庭隔离，登出/切号时必须清掉，否则串号。
+    roomKey(KEYS.MEDICATION_CHANGES, roomId),
     roomKey(KEYS.DIARY, roomId),
     roomKey(KEYS.DIARY_DRAFT, roomId),
     roomKey(KEYS.FAMILY_ANNOUNCEMENTS, roomId),

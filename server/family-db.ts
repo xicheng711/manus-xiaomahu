@@ -384,23 +384,23 @@ export async function createAnnouncement(data: InsertAnnouncement) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (data.clientId) {
-    await db.insert(announcements).values(data).onDuplicateKeyUpdate({
-      set: {
-        content: data.content,
-        emoji: data.emoji,
-        type: data.type,
-        date: data.date,
-        localTimeStr: data.localTimeStr,
-      },
-    });
-    const rows = await db.select().from(announcements)
-      .where(and(eq(announcements.roomId, data.roomId), eq(announcements.clientId, data.clientId)))
-      .limit(1);
-    if (!rows[0]) throw new Error("Announcement upsert failed");
-    return rows[0];
+    // 同一条公告（同一 clientId）即使因响应丢失或并发再次提交，也只保留一条。
+    // 返回 created 告诉调用方本次是否新建成功——推送通知必须只在新建成功时发一次，
+    // 不能靠"预查为空"判断（并发时两个请求的预查都可能为空，导致重复推送）。
+    const alreadyExists = await getAnnouncementByClientId(data.roomId, data.clientId);
+    if (alreadyExists) return { announcement: alreadyExists, created: false };
+    try {
+      const result = await db.insert(announcements).values(data);
+      return { announcement: { id: result[0].insertId, ...data }, created: true };
+    } catch (error) {
+      // 并发首发时由唯一索引判定同一公告；读回原记录而非建第二条。
+      const recovered = await getAnnouncementByClientId(data.roomId, data.clientId);
+      if (recovered) return { announcement: recovered, created: false };
+      throw error;
+    }
   }
   const result = await db.insert(announcements).values(data);
-  return { id: result[0].insertId, ...data };
+  return { announcement: { id: result[0].insertId, ...data }, created: true };
 }
 
 export async function getAnnouncementByClientId(roomId: number, clientId: string) {

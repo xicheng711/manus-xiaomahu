@@ -245,3 +245,82 @@ describe('final family-scoped cache safety', () => {
     expect(merged.map(item => item.date)).toEqual(['2026-08-31', '2026-08-20']);
   });
 });
+
+describe('everyOtherDayAnchor 云同步（P1：多设备奇偶一致）', () => {
+  beforeEach(() => memoryStorage.clear());
+
+  const baseMed = {
+    name: '药B',
+    dosage: '1片',
+    frequency: '每隔一天',
+    times: ['08:00'],
+    active: true,
+  };
+
+  it('B 设备拉取时采用云端锚点，不按本地"今天"回填', async () => {
+    // B 设备本地没有这条药（全新拉取）
+    const merged = await mergeCloudMedicationsIntoLocal([{
+      id: 99,
+      clientId: 'client-med-anchor-1',
+      ...baseMed,
+      everyOtherDayAnchor: '2026-09-27',
+    }], ROOM_ID);
+
+    expect(merged[0].everyOtherDayAnchor).toBe('2026-09-27');
+  });
+
+  it('本地有未同步修改（syncPending）时不让云端旧锚点覆盖', async () => {
+    memoryStorage.set(`medications:${ROOM_ID}`, JSON.stringify([{
+      id: 'client-med-anchor-1',
+      ...baseMed,
+      everyOtherDayAnchor: '2026-09-28', // 本地刚改的锚点，还没同步上去
+      syncPending: true,
+      pendingChanges: [],
+    }]));
+
+    const merged = await mergeCloudMedicationsIntoLocal([{
+      id: 99,
+      clientId: 'client-med-anchor-1',
+      ...baseMed,
+      everyOtherDayAnchor: '2026-09-20', // 云端旧值
+    }], ROOM_ID);
+
+    expect(merged[0].everyOtherDayAnchor).toBe('2026-09-28');
+    expect(merged[0].syncPending).toBe(true);
+  });
+
+  it('云端没有锚点（老服务端）时保留本地已有锚点', async () => {
+    memoryStorage.set(`medications:${ROOM_ID}`, JSON.stringify([{
+      id: 'client-med-anchor-1',
+      ...baseMed,
+      everyOtherDayAnchor: '2026-09-27',
+    }]));
+
+    const merged = await mergeCloudMedicationsIntoLocal([{
+      id: 99,
+      clientId: 'client-med-anchor-1',
+      ...baseMed,
+      // 老服务端：没有 everyOtherDayAnchor 字段
+    }], ROOM_ID);
+
+    expect(merged[0].everyOtherDayAnchor).toBe('2026-09-27');
+  });
+
+  it('非 pending 且云端有锚点时云端优先', async () => {
+    memoryStorage.set(`medications:${ROOM_ID}`, JSON.stringify([{
+      id: 'client-med-anchor-1',
+      ...baseMed,
+      everyOtherDayAnchor: '2026-09-20',
+    }]));
+
+    const merged = await mergeCloudMedicationsIntoLocal([{
+      id: 99,
+      clientId: 'client-med-anchor-1',
+      ...baseMed,
+      everyOtherDayAnchor: '2026-09-27',
+    }], ROOM_ID);
+
+    expect(merged[0].everyOtherDayAnchor).toBe('2026-09-27');
+    expect(merged[0].syncPending).toBe(false);
+  });
+});

@@ -25,6 +25,7 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     { table: 'check_ins',      column: 'daytimeNap',   definition: 'tinyint(1) NULL' },
     { table: 'check_ins',      column: 'napMinutes',   definition: 'int NULL' },
     { table: 'medications',    column: 'clientId',     definition: 'varchar(100)' },
+    { table: 'medications',    column: 'everyOtherDayAnchor', definition: 'varchar(10)' },
   ];
 
   for (const { table, column, definition } of columnsToAdd) {
@@ -193,6 +194,31 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
     }
   } catch (e: any) {
     console.warn('[Database] Migration warning (uq_diary_entries_room_author_client):', e?.message ?? e);
+  }
+
+  // P1：日记表时间戳提到毫秒精度（fsp=3）。并发去重靠 updatedAt > createdAt
+  // 判断行是否被赢家推进过；秒精度下同秒内的毫秒级真并发会被误判为"未推进"，
+  // 导致输家的陈旧快照整行覆盖赢家的新内容。
+  try {
+    const rows: any[] = await (db as any).execute(
+      `SELECT DATETIME_PRECISION FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'diary_entries'
+         AND COLUMN_NAME = 'updatedAt'
+       LIMIT 1`
+    );
+    const row = Array.isArray(rows[0]) ? rows[0][0] : rows[0];
+    if (Number(row?.DATETIME_PRECISION) !== 3) {
+      await (db as any).execute(
+        'ALTER TABLE diary_entries MODIFY COLUMN createdAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)'
+      );
+      await (db as any).execute(
+        'ALTER TABLE diary_entries MODIFY COLUMN updatedAt timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)'
+      );
+      console.log('[Database] Migration: diary_entries timestamps upgraded to fsp=3');
+    }
+  } catch (e: any) {
+    console.warn('[Database] Migration warning (diary fsp=3):', e?.message ?? e);
   }
 
   // 简报按家庭 + 日期幂等：先保留每组最新一条，再创建唯一索引。

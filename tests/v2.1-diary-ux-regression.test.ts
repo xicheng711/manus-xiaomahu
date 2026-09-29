@@ -755,7 +755,9 @@ describe('Final end-to-end audit safeguards', () => {
     expect(cloud).toContain('clientId: params.clientId');
     expect(schema).toContain('uniqueIndex("uq_announcements_room_client")');
     expect(db).toContain('uq_announcements_room_client (roomId, clientId)');
-    expect(router).toContain('getAnnouncementByClientId(input.roomId, input.clientId)');
+    // P2：推送按"本次是否新建成功"决定，不再靠预查（并发时两个预查都可能为空导致重复推送）
+    expect(router).toContain('const { announcement, created } = await createAnnouncement');
+    expect(router).toContain('if (created)');
     expect(family).toContain("ann.syncPending ? ' · 待同步' : ''");
   });
 
