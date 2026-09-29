@@ -789,7 +789,9 @@ describe('Final end-to-end audit safeguards', () => {
   });
 
   it('uses the shared cross-timezone range and never treats cloud read failure as an empty family dataset', () => {
-    expect(share).toContain('resolveSharedDataAnchorDate(cloudCIsForWeekly)');
+    // B7：joiner 近 7 天按"照护时区"的护理日 key 建桶，不用查看者本地日历
+    expect(share).toContain('buildCareWeekKeys(careTodayKey, 0)');
+    expect(share).toContain('resolveCareTodayKey(cloudCIsForWeekly)');
     expect(share).toContain('Array.isArray(cloudResult) ? cloudResult : []');
     expect(family).not.toMatch(/cloudGet(?:CheckIns|Diaries)[^\n]*\.catch\(\(\) => \[\]\)/);
   });

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated, Easing } from 'react-native';
 import { DailyCheckIn, DiaryEntry, getNapMinutes, hasRecordedNap } from '@/lib/storage';
 import { AppColors } from '@/lib/design-tokens';
-import { resolveSharedDataAnchorDate, resolveCareTodayKey } from '@/lib/shared-date-range';
+import { resolveCareTodayKey, buildCareWeekKeys, formatDateKeyRangeLabel, weekdayLabelOfDateKey } from '@/lib/shared-date-range';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -26,30 +26,8 @@ interface TrendChartProps {
   caregiverName?: string;
 }
 
-function getWeekRange(offset: number, anchorDate = new Date()): { start: Date; end: Date; label: string } {
-  // 当前周以查看者今天或最多领先一天的家庭最新记录为终点。
-  const endOfWeek = new Date(anchorDate);
-  endOfWeek.setDate(anchorDate.getDate() + (offset * 7));
-  endOfWeek.setHours(23, 59, 59, 999);
-  const startOfWeek = new Date(endOfWeek);
-  startOfWeek.setDate(endOfWeek.getDate() - 6);
-  startOfWeek.setHours(0, 0, 0, 0);
-  const label = `${startOfWeek.getMonth() + 1}月${startOfWeek.getDate()}日 至 ${endOfWeek.getMonth() + 1}月${endOfWeek.getDate()}日`;
-  return { start: startOfWeek, end: endOfWeek, label };
-}
-
-function getMonthRange(offset: number): { start: Date; end: Date; label: string } {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
-  const label = `${start.getFullYear()}年${start.getMonth() + 1}月`;
-  return { start, end, label };
-}
-
-function dateStr(d: Date): string {
-  // 使用本地日期格式（与打卡保存的 todayStr() 一致），避免 UTC 时区偏移导致日期不匹配
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// B7: 旧的查看者本地日历建桶函数已删除（getWeekRange / getMonthRange / dateStr / buildDateRange）。
+// 七天桶现在按"照护时区"的护理日 key 建（buildCareWeekKeys），见下方 derived。
 
 function getDateKeyYearMonth(value: string): { year: number; month: number } | null {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
@@ -57,16 +35,6 @@ function getDateKeyYearMonth(value: string): { year: number; month: number } | n
   const year = Number(match[1]);
   const month = Number(match[2]) - 1;
   return Number.isFinite(year) && month >= 0 && month <= 11 ? { year, month } : null;
-}
-
-function buildDateRange(start: Date, end: Date): string[] {
-  const range: string[] = [];
-  const cur = new Date(start);
-  while (cur <= end) {
-    range.push(dateStr(cur));
-    cur.setDate(cur.getDate() + 1);
-  }
-  return range;
 }
 
 function MoodGauge({ avgMood, prevAvg }: { avgMood: number; prevAvg: number | null }) {
@@ -560,10 +528,10 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
   // 父组件每次 setState 都全量重算。包进 useMemo，只在数据源/周期/今天变化时重算。
   // B6: isToday 按"照护的今天"（创建者时区的护理日 key）判定，不用查看者本地自然日。
   const careTodayKey = resolveCareTodayKey(checkIns);
-  // 锚点日期很便宜（一次遍历取最大日期），留在 memo 外供 useState/useEffect 用。
-  const anchorDate = resolveSharedDataAnchorDate(checkIns);
-  const currentYear = anchorDate.getFullYear();
-  const anchorMonth = anchorDate.getMonth();
+  // B7: 年/月锚点从"照护今天"的 key 取，不用查看者本地日历——
+  // 纽约查看者在本地 12-31 看到北京 1-1 的记录时，年视图不能掉到上一年。
+  const currentYear = Number(careTodayKey.slice(0, 4));
+  const anchorMonth = Number(careTodayKey.slice(5, 7)) - 1;
   const yearLabel = `${currentYear}年`;
   const [selectedYearMonth, setSelectedYearMonth] = useState(anchorMonth);
   useEffect(() => {
@@ -599,24 +567,24 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       return { label, taken: total > 0 ? taken >= total / 2 : null };
     });
 
-    const range = getWeekRange(offset, anchorDate);
-    const dateRange = buildDateRange(range.start, range.end);
+    // B7: 七天桶按照护时区的护理日 key 建（buildCareWeekKeys），不用查看者本地日历。
+    // 北京创建者、纽约查看者时，旧逻辑会把最新一天的记录漏出窗口。
+    const dateRange = buildCareWeekKeys(careTodayKey, offset);
+    const range = { label: formatDateKeyRangeLabel(dateRange) };
     const periodLabel = offset === 0 ? '近7天' : `${Math.abs(offset) * 7}天前`;
 
     const periodCheckIns = dateRange.map(d => checkInMap.get(d)).filter(Boolean) as DailyCheckIn[];
 
-    const DAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
-
     const sleepData = period === 'year' ? yearSleepData : dateRange.map(date => {
       const c = checkInMap.get(date);
-      const d = new Date(date + 'T12:00:00');
       const wakeTime = c?.nightAwakeTime;
       const wakeShort = wakeTime === '10-30分钟' ? '<30分'
         : wakeTime === '30-60分钟' ? '<1h'
         : wakeTime === '1小时以上' ? '>1h'
         : null;
       return {
-        label: DAY_LABELS[d.getDay()],
+        // B7: 星期标签从护理日 key 取，日历日期的星期与时区无关
+        label: weekdayLabelOfDateKey(date),
         value: c?.sleepHours ?? 0,
         hasData: !!c && c.morningDone && c.sleepHours > 0,
         isToday: date === careTodayKey,
@@ -628,8 +596,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
 
     const medData = period === 'year' ? yearMedData : dateRange.map(date => {
       const c = checkInMap.get(date);
-      const d = new Date(date + 'T12:00:00');
-      return { label: DAY_LABELS[d.getDay()], taken: c ? c.medicationTaken : null };
+      return { label: weekdayLabelOfDateKey(date), taken: c ? c.medicationTaken : null };
     });
 
     const relevantCheckIns = period === 'year'
@@ -659,10 +626,9 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
 
     const napData = period === 'year' ? yearNapData : dateRange.map(date => {
       const c = checkInMap.get(date);
-      const d = new Date(date + 'T12:00:00');
       const napMins = getNapMinutes(c);
       return {
-        label: DAY_LABELS[d.getDay()],
+        label: weekdayLabelOfDateKey(date),
         value: napMins,
         hasData: hasRecordedNap(c),
         isToday: date === careTodayKey,
@@ -700,8 +666,8 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
     const avgCaregiverMood = cgMoodDates.length > 0
       ? cgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / cgMoodDates.length : 0;
 
-    const prevRange = getWeekRange(offset - 1, anchorDate);
-    const prevDateRange = buildDateRange(prevRange.start, prevRange.end);
+    // B7: 上周对比同样按照护时区建桶
+    const prevDateRange = buildCareWeekKeys(careTodayKey, offset - 1);
     const prevCgMoodDates = prevDateRange.filter(d => getMoodScore(d) > 0);
     const prevAvgCaregiverMood = prevCgMoodDates.length > 0
       ? prevCgMoodDates.reduce((s, d) => s + getMoodScore(d), 0) / prevCgMoodDates.length : null;
@@ -710,7 +676,7 @@ export function TrendChart({ checkIns, diaryEntries = [], patientNickname = '家
       medData, yearSleepData, yearNapData, napData, napSubtitle, yearNapMaxValue,
       avgCaregiverMood, prevAvgCaregiverMood,
     };
-  }, [checkIns, diaryMoodMap, period, offset, careTodayKey, currentYear, anchorMonth, yearLabel]);
+  }, [checkIns, diaryMoodMap, period, offset, careTodayKey]);
   const {
     range, periodLabel, sleepData, sleepSubtitle,
     medData, yearSleepData, yearNapData, napData, napSubtitle, yearNapMaxValue,

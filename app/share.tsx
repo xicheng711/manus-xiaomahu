@@ -18,7 +18,7 @@ import { AppIcon, type AppIconName } from '@/components/app-icons';
 import { useWeather } from '@/lib/weather-context';
 import { useFamilyContext } from '@/lib/family-context';
 import { cloudGetCheckIns, cloudGetBriefings, cloudGetRoomDetail } from '@/lib/cloud-sync';
-import { buildRecentDateKeys, localDateKey, parseDateKeyAtNoon, resolveSharedDataAnchorDate } from '@/lib/shared-date-range';
+import { localDateKey, parseDateKeyAtNoon, resolveCareTodayKey, buildCareWeekKeys } from '@/lib/shared-date-range';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -959,8 +959,10 @@ export default function ShareScreen() {
 
       // 加载周数据：Joiner 用云端打卡构建，主照顾者用本地数据
       if (isJoiner && cloudCIsHistory.length > 0) {
-        const anchor = resolveSharedDataAnchorDate(cloudCIsHistory);
-        const joinerWeekly = buildRecentDateKeys(anchor).map(dStr => {
+        // B7: 按"照护时区"的护理日 key 建 7 天桶（新→旧，保持原有顺序语义），
+        // 不用查看者本地日历，否则跨时区时最新一天掉出窗口。
+        const careTodayKey = resolveCareTodayKey(cloudCIsHistory);
+        const joinerWeekly = buildCareWeekKeys(careTodayKey, 0).reverse().map(dStr => {
           const cItem = cloudCIsHistory.find((c: any) => c.date === dStr);
           return {
             date: dStr,
@@ -1277,8 +1279,9 @@ export default function ShareScreen() {
 
       // Joiner：用云端打卡数据构建近7天趋势（覆盖本地空数据）
       if (isJoiner && cloudCIsForWeekly.length > 0) {
-        const anchor = resolveSharedDataAnchorDate(cloudCIsForWeekly);
-        const joinerWeekly = buildRecentDateKeys(anchor).map(dateStr => {
+        // B7: 按"照护时区"的护理日 key 建桶（新→旧），不用查看者本地日历
+        const careTodayKey = resolveCareTodayKey(cloudCIsForWeekly);
+        const joinerWeekly = buildCareWeekKeys(careTodayKey, 0).reverse().map(dateStr => {
           const ci = cloudCIsForWeekly.find((c: any) => c.date === dateStr);
           return {
             date: dateStr,

@@ -82,6 +82,50 @@ export function parseDateKeyAtNoon(key: string): Date | null {
   return localDateKey(parsed) === key ? parsed : null;
 }
 
+// ─── 照护日历 key 运算（B7） ──────────────────────────────────────────────
+// 趋势图/分享卡的"近 7 天"桶必须按"照护时区"的护理日 key 做日历加减，
+// 不能按查看者本地日历建桶：北京创建者、纽约查看者时会错一天，
+// 最新记录会掉出窗口，年末还可能年份错位。
+// 纯日历字段运算（不做毫秒位移），夏令时切换日也不会算错。
+
+/** key 格式校验。 */
+export function isDateKey(key: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(key) && parseDateKeyAtNoon(key) !== null;
+}
+
+/** 给 YYYY-MM-DD key 加减 N 个日历天（可为负）。非法 key 原样返回。 */
+export function addDaysToDateKey(key: string, days: number): string {
+  const parsed = parseDateKeyAtNoon(key);
+  if (!parsed) return key;
+  // parseDateKeyAtNoon 是本地正午，setDate 按日历加减，不受 DST 影响
+  parsed.setDate(parsed.getDate() + days);
+  return localDateKey(parsed);
+}
+
+/**
+ * 以照护今天（careTodayKey）为终点的连续 7 天 key 列表（升序）。
+ * offset=0 是本周，offset=-1 是上周，依此类推。
+ */
+export function buildCareWeekKeys(careTodayKey: string, offset = 0): string[] {
+  const endKey = addDaysToDateKey(careTodayKey, offset * 7);
+  const startKey = addDaysToDateKey(endKey, -6);
+  return Array.from({ length: 7 }, (_, i) => addDaysToDateKey(startKey, i));
+}
+
+/** "9月28日 至 10月4日" 风格的区间标签。 */
+export function formatDateKeyRangeLabel(keys: string[]): string {
+  if (keys.length === 0) return '';
+  const fmt = (k: string) => `${Number(k.slice(5, 7))}月${Number(k.slice(8, 10))}日`;
+  return `${fmt(keys[0])} 至 ${fmt(keys[keys.length - 1])}`;
+}
+
+/** key 对应星期标签（日/一/二/...）。日历日期的星期与时区无关，正午解析保证稳定。 */
+export function weekdayLabelOfDateKey(key: string): string {
+  const parsed = parseDateKeyAtNoon(key);
+  const day = parsed ? parsed.getDay() : new Date(`${key}T12:00:00`).getDay();
+  return ['日', '一', '二', '三', '四', '五', '六'][day] ?? '';
+}
+
 /**
  * Shared family records are dated in the writer's local calendar. Around midnight,
  * a Beijing caregiver can legitimately have a date one day ahead of a New York

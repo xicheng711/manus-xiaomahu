@@ -63,7 +63,8 @@ describe('A: 无限动画都有 cleanup', () => {
 describe('B: TrendChart 派生数据 memo 化', () => {
   it('重计算包在 useMemo 里，依赖只有数据源/周期', () => {
     expect(trendSrc).toContain('const derived = React.useMemo(() => {');
-    expect(trendSrc).toContain('[checkIns, diaryMoodMap, period, offset, careTodayKey, currentYear, anchorMonth, yearLabel]');
+    // B7 之后年/月锚点从 careTodayKey 派生，依赖只剩这 5 个
+    expect(trendSrc).toContain('[checkIns, diaryMoodMap, period, offset, careTodayKey]');
   });
 
   it('render 函数体里不再裸算 yearSleepData', () => {
