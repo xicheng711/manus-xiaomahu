@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "./auth";
+import { withRequestTimeout, API_REQUEST_TIMEOUT_MS } from "../request-timeout";
 
 type ApiResponse<T> = {
   data?: T;
@@ -41,11 +42,20 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
 
   try {
     console.log("[API] Making request...");
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      credentials: "include",
-    });
+    // 超时保护：移动网络假死时不无限等待（与 tRPC 层同策略，见 lib/request-timeout.ts）。
+    // 调用方自己的取消 signal 和超时计时合并，任一 abort 都终止 fetch。
+    const { signal, cleanup } = withRequestTimeout(API_REQUEST_TIMEOUT_MS, options.signal);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: "include",
+        signal,
+      });
+    } finally {
+      cleanup();
+    }
 
     console.log("[API] Response status:", response.status, response.statusText);
     const responseHeaders = Object.fromEntries(response.headers.entries());
