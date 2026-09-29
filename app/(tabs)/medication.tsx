@@ -22,11 +22,14 @@ import { getSessionToken } from '@/lib/_core/auth';
 import { COLORS, SHADOWS, RADIUS, fadeInUp, pressAnimation } from '@/lib/animations';
 import { AppColors } from '@/lib/design-tokens';
 import * as Haptics from 'expo-haptics';
-import { scheduleMedicationReminder, cancelMedicationReminder, requestNotificationPermissions } from '@/lib/notifications';
+import { scheduleMedicationReminder, cancelMedicationReminder, requestNotificationPermissions, renewEveryOtherDayReminders } from '@/lib/notifications';
+import { localDateKey } from '@/lib/shared-date-range';
 
 const TIMES = ['06:00','07:00','07:30','08:00','08:30','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
 const FREQUENCIES = ['每天一次', '每天两次', '每天三次', '每隔一天', '每周一次', '需要时服用'];
 const FREQ_ICONS = ['1️⃣', '2️⃣', '3️⃣', '📅', '📆', '⚡'];
+// 下标 0=周日，对应 weekday 1（Expo WEEKLY trigger：1=Sunday）
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 const MED_ICONS = ['💊', '💉', '🩺', '🌡️', '🧴', '🫁', '🧠', '❤️', '🦴', '👁️'];
 
 // ─── Animated Med Card ───────────────────────────────────────────────────────
@@ -135,6 +138,8 @@ function MedicationScreenContent() {
   const [name, setName] = useState('');
   const [dosage, setDosage] = useState('');
   const [freqIdx, setFreqIdx] = useState(0);
+  // "每周一次"选定的星期：1-7，1=周日（Expo WEEKLY 约定）。默认今天，保持老行为（M3/M4）
+  const [weeklyWeekday, setWeeklyWeekday] = useState<number>(new Date().getDay() + 1);
   const [selectedTimes, setSelectedTimes] = useState<string[]>(['08:00']);
   const [notes, setNotes] = useState('');
   const [changeReason, setChangeReason] = useState('');
@@ -228,7 +233,15 @@ function MedicationScreenContent() {
   useFocusEffect(useCallback(() => {
     loadMeds();
     getSessionToken().then(t => setIsGuest(!t)).catch(() => {});
-  }, [loadMeds]));
+    // "每隔一天"续排（M1）：预排只覆盖约 20 天，聚焦时把未来的剂量日补足到 10 个；
+    // 已够 5 个以上的不动，幂等。游客/非主照顾者内部直接跳过。
+    (async () => {
+      try {
+        const meds = await getMedications(familyId).catch(() => []);
+        await renewEveryOtherDayReminders(meds, elderNickname, familyId ?? undefined);
+      } catch { /* 静默失败：续排失败不影响页面 */ }
+    })();
+  }, [loadMeds, familyId, elderNickname]));
 
   // 点击通知时强制刷新
   useEffect(() => {
@@ -239,7 +252,7 @@ function MedicationScreenContent() {
   function resetForm() {
     setAdding(false);
     setEditingMed(null);
-    setName(''); setDosage(''); setFreqIdx(0); setSelectedTimes(['08:00']); setNotes(''); setChangeReason(''); setIcon('💊'); setReminderEnabled(false);
+    setName(''); setDosage(''); setFreqIdx(0); setWeeklyWeekday(new Date().getDay() + 1); setSelectedTimes(['08:00']); setNotes(''); setChangeReason(''); setIcon('💊'); setReminderEnabled(false);
   }
 
   // 提醒开关：打开时先确认通知权限。之前是开关照开、排期静默失败，
@@ -279,11 +292,14 @@ function MedicationScreenContent() {
   // 每隔一天预排 10 个 DATE、需要时服用不排（调用方已单独提示，不算失败）。
   async function scheduleSelectedReminders(
     medId: string, medName: string, medIcon: string, nickname: string, times: string[], frequency?: string,
+    scheduleOpts?: { anchorDateKey?: string; weekday?: number },
   ): Promise<boolean> {
     let scheduledAny = false;
+    // roomId 写进通知 data：点击通知时先切到正确的家庭再进用药页（L1）
+    const opts = { ...scheduleOpts, ...(familyId ? { roomId: familyId } : {}) };
     for (const t of times) {
       const [h, min] = t.split(':').map(Number);
-      const id = await scheduleMedicationReminder(medId + '_' + t.replace(':', ''), medName, medIcon, nickname, h, min, frequency).catch(() => null);
+      const id = await scheduleMedicationReminder(medId + '_' + t.replace(':', ''), medName, medIcon, nickname, h, min, frequency, opts).catch(() => null);
       if (id) scheduledAny = true;
     }
     return scheduledAny;
@@ -310,6 +326,7 @@ function MedicationScreenContent() {
     setName(med.name);
     setDosage(med.dosage);
     setFreqIdx(FREQUENCIES.indexOf(med.frequency) >= 0 ? FREQUENCIES.indexOf(med.frequency) : 0);
+    setWeeklyWeekday(med.weeklyWeekday ?? (new Date().getDay() + 1));
     setSelectedTimes(med.times || ['08:00']);
     setNotes(med.notes || '');
     setChangeReason('');
@@ -349,14 +366,22 @@ function MedicationScreenContent() {
 
     if (editingMed) {
       // ── Edit existing ── (updateMedication 自带云端同步)
+      const editFrequencyForPatch = FREQUENCIES[freqIdx];
+      // 老数据可能没有锚点：首次编辑时补上，之后奇偶就不再漂移（M2）
+      const editAnchor = editFrequencyForPatch === '每隔一天'
+        ? (editingMed.everyOtherDayAnchor ?? localDateKey(new Date()))
+        : undefined;
       const patch = {
         name: name.trim(),
         dosage: dosage.trim() || '按医嘱',
-        frequency: FREQUENCIES[freqIdx],
+        frequency: editFrequencyForPatch,
         times: selectedTimes,
         notes: notes.trim(),
         icon,
         reminderEnabled,
+        ...(editAnchor && !editingMed.everyOtherDayAnchor ? { everyOtherDayAnchor: editAnchor } : {}),
+        // "每周一次"持久化选定的星期，编辑重排沿用它，不再漂到编辑当天（M3/M4）
+        ...(editFrequencyForPatch === '每周一次' ? { weeklyWeekday } : {}),
       };
       const nextMedication = { ...editingMed, ...patch };
       const changeEvent = createMedicationChangeEvent({
@@ -386,11 +411,20 @@ function MedicationScreenContent() {
         }
         // 新增或保留的时间（selectedTimes）
         const editFrequency = FREQUENCIES[freqIdx];
+        // 编辑重排必须沿用原来的周期锚点，不能按"今天"重算奇偶（M2）
+        const editAnchorKey = editFrequency === '每隔一天'
+          ? (editingMed.everyOtherDayAnchor ?? localDateKey(new Date()))
+          : undefined;
+        // "每周一次"沿用选定的星期（M4），而不是取编辑当天
+        const editWeekday = editFrequency === '每周一次' ? weeklyWeekday : undefined;
         if (editFrequency === '需要时服用') {
           // 需要时服用的药不自动排提醒：如实告诉用户，而不是报"排期失败"。
           Alert.alert('提醒说明', '「需要时服用」的药物不会自动排提醒，需要时请打开用药页查看。');
         } else {
-          const scheduled = await scheduleSelectedReminders(editingMed.id, name.trim(), icon, nickname, selectedTimes, editFrequency);
+          const scheduled = await scheduleSelectedReminders(editingMed.id, name.trim(), icon, nickname, selectedTimes, editFrequency, {
+            ...(editAnchorKey ? { anchorDateKey: editAnchorKey } : {}),
+            ...(editWeekday ? { weekday: editWeekday } : {}),
+          });
           if (!scheduled) alertReminderFailed();
         }
       } else {
@@ -403,15 +437,20 @@ function MedicationScreenContent() {
       }
     } else {
       // ── Add new ── (saveMedication 自带云端同步)
+      const newFrequency = FREQUENCIES[freqIdx];
+      // "每隔一天"的周期锚点：服药日恒为 anchor + 2k，之后编辑/续排都不翻转奇偶（M2）
+      const newAnchor = newFrequency === '每隔一天' ? localDateKey(new Date()) : undefined;
       const newMedicationData = {
         name: name.trim(),
         dosage: dosage.trim() || '按医嘱',
-        frequency: FREQUENCIES[freqIdx],
+        frequency: newFrequency,
         times: selectedTimes,
         notes: notes.trim(),
         icon,
         active: true,
         reminderEnabled,
+        ...(newAnchor ? { everyOtherDayAnchor: newAnchor } : {}),
+        ...(newFrequency === '每周一次' ? { weeklyWeekday } : {}),
       };
       const changeEvent = createMedicationChangeEvent({
         changeType: 'added',
@@ -426,7 +465,10 @@ function MedicationScreenContent() {
         if (newMedicationData.frequency === '需要时服用') {
           Alert.alert('提醒说明', '「需要时服用」的药物不会自动排提醒，需要时请打开用药页查看。');
         } else {
-          const scheduled = await scheduleSelectedReminders(newMed.id, newMed.name, newMed.icon, nickname, selectedTimes, newMedicationData.frequency);
+          const scheduled = await scheduleSelectedReminders(newMed.id, newMed.name, newMed.icon, nickname, selectedTimes, newMedicationData.frequency, {
+            ...(newAnchor ? { anchorDateKey: newAnchor } : {}),
+            ...(newMedicationData.frequency === '每周一次' ? { weekday: weeklyWeekday } : {}),
+          });
           if (!scheduled) alertReminderFailed();
         }
       }
@@ -476,7 +518,14 @@ function MedicationScreenContent() {
           nextSnapshot: medicationSnapshot(nextMedication),
           changedByName: currentMemberName,
         });
-        await updateMedication(action.med.id, { active: nextMedication.active }, requestedFamilyId, changeEvent);
+        // 恢复"每隔一天"用药：周期从恢复当天重新开始（暂停期间没吃，旧奇偶已无意义），并持久化新锚点
+        const resumePatch: { active: boolean; everyOtherDayAnchor?: string } = { active: nextMedication.active };
+        let resumeAnchor: string | undefined;
+        if (nextMedication.active && action.med.frequency === '每隔一天') {
+          resumeAnchor = localDateKey(new Date());
+          resumePatch.everyOtherDayAnchor = resumeAnchor;
+        }
+        await updateMedication(action.med.id, resumePatch, requestedFamilyId, changeEvent);
         const [updatedMeds, updatedChanges] = await Promise.all([
           getMedications(requestedFamilyId),
           getMedicationChanges(requestedFamilyId),
@@ -489,9 +538,14 @@ function MedicationScreenContent() {
           await cancelMedicationRemindersForMed(action.med);
         } else if (action.med.reminderEnabled) {
           // 恢复用药：按原来的提醒设置（频率语义由 scheduleMedicationReminder 处理）重新排期。
+          // "每隔一天"用恢复当天做新锚点（resumePatch 已持久化），周期重新开始
           const resumed = await scheduleSelectedReminders(
             action.med.id, action.med.name, action.med.icon || '💊', elderNickname,
             action.med.times || ['08:00'], action.med.frequency,
+            {
+              ...(resumeAnchor ? { anchorDateKey: resumeAnchor } : {}),
+              ...(action.med.frequency === '每周一次' && action.med.weeklyWeekday ? { weekday: action.med.weeklyWeekday } : {}),
+            },
           );
           if (!resumed && action.med.frequency !== '需要时服用') alertReminderFailed();
         }
@@ -613,6 +667,27 @@ function MedicationScreenContent() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+
+            {FREQUENCIES[freqIdx] === '每周一次' && (
+              <>
+                <Text style={styles.label}>每周哪天提醒</Text>
+                <View style={styles.timesGrid}>
+                  {WEEKDAY_LABELS.map((label, i) => {
+                    const wd = i + 1; // 1=周日 … 7=周六（Expo WEEKLY 约定）
+                    const selected = weeklyWeekday === wd;
+                    return (
+                      <TouchableOpacity
+                        key={wd}
+                        style={[styles.timeOption, selected && styles.timeOptionSelected]}
+                        onPress={() => { setWeeklyWeekday(wd); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                      >
+                        <Text style={[styles.timeOptionText, selected && styles.timeOptionTextSelected]}>{label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
 
             <Text style={styles.label}>服药时间（可多选）</Text>
             <View style={styles.timesGrid}>

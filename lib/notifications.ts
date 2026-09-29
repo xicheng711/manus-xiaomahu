@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCurrentUserIsCreator, getFamilyProfile, getCheckInByDate } from "./storage";
-import { localDateKey } from "./shared-date-range";
+import { localDateKey, parseDateKeyAtNoon } from "./shared-date-range";
 import Constants from "expo-constants";
 import { cloudUpdatePushToken } from "./cloud-sync";
 
@@ -487,9 +487,15 @@ const MED_NOTIF_PREFIX = "@xiaomahuMedNotif_";
  * @param minute Minute (0-59)
  * @param frequency One of the FREQUENCIES values from the medication form.
  *   - 需要时服用: never auto-scheduled (returns null after clearing any existing).
- *   - 每周一次: WEEKLY trigger on the current weekday (the day the user set it).
- *   - 每隔一天: next 10 dose-day DATE triggers (20 days), anchored on today.
+ *   - 每周一次: WEEKLY trigger on scheduleOpts.weekday (defaults to today).
+ *   - 每隔一天: next 10 dose-day DATE triggers (20 days), anchored on
+ *     scheduleOpts.anchorDateKey (defaults to today). Dose days are always
+ *     anchor + 2k, so re-scheduling never flips the odd/even parity (M2).
  *   - 每天一次/两次/三次 (default): DAILY trigger.
+ * @param scheduleOpts.anchorDateKey "每隔一天"周期锚点（YYYY-MM-DD），不传则用今天。
+ * @param scheduleOpts.roomId 家庭 roomId：写进通知 data，点击通知时 _layout 会先切到
+ *   正确的家庭再进用药页（L1）。多家庭用户在 B 家庭时点 A 家庭的提醒也不会进错。
+ * @param scheduleOpts.weekday "每周一次"的星期（1-7，1=周日），不传则用当天（M3/M4）。
  */
 export async function scheduleMedicationReminder(
   medId: string,
@@ -499,6 +505,7 @@ export async function scheduleMedicationReminder(
   hour: number,
   minute: number,
   frequency?: string,
+  scheduleOpts?: { anchorDateKey?: string; roomId?: string; weekday?: number },
 ): Promise<string | null> {
   if (Platform.OS === "web") return null;
 
@@ -526,16 +533,19 @@ export async function scheduleMedicationReminder(
     });
   }
 
+  const roomId = scheduleOpts?.roomId;
   const content = {
     title: `${medIcon} 用药提醒`,
     body: `该给${elderNickname}服用 ${medName} 了 💊`,
-    data: { screen: "medication", medId },
+    // roomId 让点击通知时先切到正确的家庭（L1）；没有就按当前家庭处理
+    data: { screen: "medication", medId, ...(roomId ? { roomId } : {}) },
     sound: true,
   };
 
   if (frequency === '每周一次') {
-    // WEEKLY: weekday 1-7 (1=Sunday). Anchor on the day the user set the reminder.
-    const weekday = new Date().getDay() + 1;
+    // WEEKLY: weekday 1-7 (1=Sunday). 用用户在表单选定的星期（M3），
+    // 而不是"排期当天"，否则编辑后提醒日会漂到编辑当天（M4）。
+    const weekday = scheduleOpts?.weekday ?? (new Date().getDay() + 1);
     const id = await Notifications.scheduleNotificationAsync({
       content,
       trigger: {
@@ -552,17 +562,20 @@ export async function scheduleMedicationReminder(
 
   if (frequency === '每隔一天') {
     // No native every-other-day trigger: pre-schedule the next 10 dose days as
-    // one-shot DATE triggers (covers 20 days). Anchored on today: dose days are
-    // today, today+2, ...; a dose time already passed today starts from the next one.
+    // one-shot DATE triggers (covers 20 days). Dose days are anchor + 2k where
+    // anchor is the med's everyOtherDayAnchor (persisted on the Medication record);
+    // without a stable anchor, every edit would silently flip the odd/even parity (M2).
+    // 续排见 renewEveryOtherDayReminders：用药页聚焦时把未来的剂量日补足 10 个 (M1)。
+    const anchorDate = parseDateKeyAtNoon(scheduleOpts?.anchorDateKey ?? '') ?? new Date();
     const now = new Date();
     const dates: Date[] = [];
-    let dayOffset = 0;
-    while (dates.length < 10 && dayOffset < 40) {
-      const d = new Date(now);
-      d.setDate(d.getDate() + dayOffset);
+    let k = 0;
+    while (dates.length < 10 && k < 60) {
+      const d = new Date(anchorDate);
+      d.setDate(d.getDate() + k * 2);
       d.setHours(hour, minute, 0, 0);
       if (d.getTime() > now.getTime()) dates.push(d);
-      dayOffset += 2;
+      k++;
     }
     const ids: string[] = [];
     for (const d of dates) {
@@ -577,17 +590,16 @@ export async function scheduleMedicationReminder(
       if (id) ids.push(id);
     }
     if (ids.length === 0) return null;
-    await AsyncStorage.setItem(MED_NOTIF_PREFIX + medId, JSON.stringify(ids));
+    // 存 ID + 剂量日期：续排时按日期续（保持奇偶），取消时按 ID 逐个取消。
+    await AsyncStorage.setItem(MED_NOTIF_PREFIX + medId, JSON.stringify({
+      ids,
+      dates: dates.map(d => d.toISOString()),
+    }));
     return ids[0];
   }
 
   const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `${medIcon} 用药提醒`,
-      body: `该给${elderNickname}服用 ${medName} 了 💊`,
-      data: { screen: "medication", medId },
-      sound: true,
-    },
+    content,
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour,
@@ -601,19 +613,49 @@ export async function scheduleMedicationReminder(
 }
 
 /**
+ * 解析 AsyncStorage 里存的通知 ID：兼容两种格式——
+ * - 裸通知 ID 字符串（每天/每周/旧版）
+ * - JSON 数组字符串（"每隔一天"预排的多个 DATE 触发器，旧格式）
+ * - JSON 对象 { ids, dates }（"每隔一天"新格式，带剂量日期供续排用）
+ */
+function parseStoredNotifIds(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter(id => typeof id === 'string');
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.ids)) {
+      return parsed.ids.filter((id: unknown) => typeof id === 'string');
+    }
+    if (typeof parsed === 'string' && parsed) return [parsed];
+  } catch {
+    // 不是 JSON：按裸通知 ID 处理
+  }
+  return [raw];
+}
+
+/** 解析"每隔一天"排期的完整记录：通知 ID + 剂量日期（ISO 字符串）。 */
+function parseStoredNotifSchedule(raw: string | null): { ids: string[]; dates: string[] } {
+  const ids = parseStoredNotifIds(raw);
+  let dates: string[] = [];
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray(parsed.dates)) {
+        dates = parsed.dates.filter((d: unknown) => typeof d === 'string');
+      }
+    } catch { /* 旧格式没有 dates */ }
+  }
+  return { ids, dates };
+}
+
+/**
  * Cancel a medication reminder. Handles both the legacy single-ID storage
  * and the JSON array storage used by 每隔一天 pre-scheduled DATE triggers.
  */
 export async function cancelMedicationReminder(medId: string): Promise<void> {
   const raw = await AsyncStorage.getItem(MED_NOTIF_PREFIX + medId);
-  if (raw) {
-    let ids: string[];
-    try {
-      const parsed = JSON.parse(raw);
-      ids = Array.isArray(parsed) ? parsed : [raw];
-    } catch {
-      ids = [raw]; // 旧版存的裸通知 ID
-    }
+  const ids = parseStoredNotifIds(raw);
+  if (ids.length > 0) {
     await Promise.all(ids.map(id => Notifications.cancelScheduledNotificationAsync(id).catch(() => {})));
     await AsyncStorage.removeItem(MED_NOTIF_PREFIX + medId);
   }
@@ -636,14 +678,117 @@ export async function cancelAllMedicationReminders(): Promise<void> {
   const medKeys = allKeys.filter((k) => k.startsWith(MED_NOTIF_PREFIX));
   for (const key of medKeys) {
     try {
-      const id = await AsyncStorage.getItem(key);
-      if (id) {
-        await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
-      }
+      const raw = await AsyncStorage.getItem(key);
+      // 注意："每隔一天"存的是 JSON 数组，必须逐个解析取消，
+      // 直接把整个 JSON 字符串当单个 ID 传进去一个都取消不掉（H1）。
+      const ids = parseStoredNotifIds(raw);
+      await Promise.all(ids.map(id => Notifications.cancelScheduledNotificationAsync(id).catch(() => {})));
       await AsyncStorage.removeItem(key);
     } catch {
       // keep going: one bad key must not block the rest
     }
+  }
+}
+
+/**
+ * "每隔一天"续排（M1）：预排只覆盖约 20 天，到期后提醒会静默消失。
+ * 用药页聚焦时调用：把每个时间槽未来的剂量日补足到 10 个。
+ *
+ * 奇偶保持：从已排的最后一个剂量日往后每 2 天续排，不碰锚点；
+ * 旧格式（只有 ID 数组、没有 dates）的记录无法得知已排日期，整槽重排一次
+ * （scheduleMedicationReminder 开头会先取消本槽位旧提醒，幂等），
+ * 重排后即转为新格式，后续走日期续排。
+ *
+ * 只在主照顾者设备上实际排期（scheduleMedicationReminder 内部有 isCreator 门控）。
+ */
+export async function renewEveryOtherDayReminders(
+  meds: Array<{
+    id: string;
+    times?: string[];
+    frequency?: string;
+    active?: boolean;
+    reminderEnabled?: boolean;
+    name?: string;
+    icon?: string;
+    everyOtherDayAnchor?: string;
+  }>,
+  elderNickname: string,
+  roomId?: string,
+): Promise<void> {
+  if (Platform.OS === "web") return;
+  try {
+    const isCreator = await getCurrentUserIsCreator();
+    if (!isCreator) return;
+    const now = new Date();
+    for (const med of meds) {
+      if (med.frequency !== '每隔一天' || !med.active || med.reminderEnabled === false) continue;
+      for (const t of med.times || []) {
+        const [h, min] = t.split(':').map(Number);
+        if (!Number.isFinite(h) || !Number.isFinite(min)) continue;
+        const slotKey = MED_NOTIF_PREFIX + med.id + '_' + t.replace(':', '');
+        const raw = await AsyncStorage.getItem(slotKey).catch(() => null);
+        const sched = parseStoredNotifSchedule(raw);
+        const futureDates = sched.dates
+          .map(d => new Date(d).getTime())
+          .filter(ts => Number.isFinite(ts) && ts > now.getTime())
+          .sort((a, b) => a - b);
+        if (futureDates.length >= 5) continue;
+        if (sched.dates.length === 0) {
+          // 旧格式：不知道已排日期，整槽重排（自动转新格式）
+          await scheduleMedicationReminder(
+            med.id + '_' + t.replace(':', ''), med.name || '药物', med.icon || '💊',
+            elderNickname, h, min, '每隔一天',
+            { anchorDateKey: med.everyOtherDayAnchor ?? localDateKey(now) },
+          ).catch(() => {});
+          continue;
+        }
+        // 日期续排：从最后一个剂量日往后每 2 天，补到 10 个未来剂量日
+        const last = new Date(futureDates.length > 0 ? futureDates[futureDates.length - 1] : now.getTime());
+        const extra: Date[] = [];
+        let k = 1;
+        while (futureDates.length + extra.length < 10 && k < 40) {
+          const d = new Date(last);
+          d.setDate(d.getDate() + k * 2);
+          d.setHours(h, min, 0, 0);
+          if (d.getTime() > now.getTime()) extra.push(d);
+          k++;
+        }
+        if (extra.length === 0) continue;
+        const content = {
+          title: `${med.icon || '💊'} 用药提醒`,
+          body: `该给${elderNickname}服用 ${med.name || '药物'} 了 💊`,
+          data: { screen: "medication", medId: med.id + '_' + t.replace(':', ''), ...(roomId ? { roomId } : {}) },
+          sound: true,
+        };
+        const newIds: string[] = [];
+        const newDates: string[] = [];
+        for (const d of extra) {
+          const id = await Notifications.scheduleNotificationAsync({
+            content,
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: d,
+              channelId: "medication",
+            },
+          }).catch(() => null);
+          if (id) {
+            newIds.push(id);
+            newDates.push(d.toISOString());
+          }
+        }
+        if (newIds.length > 0) {
+          await AsyncStorage.setItem(slotKey, JSON.stringify({
+            ids: [...sched.ids, ...newIds],
+            dates: [
+              ...sched.dates.filter(d => new Date(d).getTime() > now.getTime()),
+              ...newDates,
+            ],
+          })).catch(() => {});
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Notifications] renewEveryOtherDayReminders failed:', e);
   }
 }
 

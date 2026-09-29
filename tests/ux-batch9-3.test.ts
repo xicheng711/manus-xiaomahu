@@ -197,14 +197,16 @@ describe('M3: 用药提醒按频率语义排期', () => {
     expect(scheduled[0].trigger.weekday).toBe(new Date().getDay() + 1);
   });
 
-  it('每隔一天：预排 10 个一次性 DATE trigger，存 JSON 数组', async () => {
+  it('每隔一天：预排 10 个一次性 DATE trigger，存 {ids, dates}', async () => {
     const id = await scheduleMedicationReminder('med4', '钙片', '💊', '奶奶', 8, 0, '每隔一天');
     expect(id).toBeTruthy();
     expect(scheduled).toHaveLength(10);
     expect(scheduled.every(s => s.trigger.type === 'date')).toBe(true);
+    // 新格式：{ ids, dates }（dates 供续排用）；取消时仍能逐个解析
     const stored = JSON.parse(store.get(MED_KEY('med4'))!);
-    expect(Array.isArray(stored)).toBe(true);
-    expect(stored).toHaveLength(10);
+    expect(Array.isArray(stored.ids)).toBe(true);
+    expect(stored.ids).toHaveLength(10);
+    expect(stored.dates).toHaveLength(10);
   });
 
   it('取消时能解析 JSON 数组，把 10 个全取消', async () => {

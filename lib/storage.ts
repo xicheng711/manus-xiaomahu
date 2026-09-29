@@ -213,6 +213,17 @@ export interface Medication {
   reminderEnabled?: boolean;
   color?: string;
   notificationIds?: string[];
+  /**
+   * "每隔一天"的服药周期锚点（YYYY-MM-DD）：服药日恒为 anchor + 2k。
+   * 没有它，编辑/重排时锚点会跟着"排期当天"走，奇偶悄悄翻转（M2）。
+   */
+  everyOtherDayAnchor?: string;
+  /**
+   * "每周一次"的星期（1-7，1=周日，Expo WEEKLY trigger 约定）。
+   * 没有它，提醒日=创建当天，编辑后还会漂到编辑当天（M3/M4）。
+   * 纯本地字段，不同步云端（同 everyOtherDayAnchor）。
+   */
+  weeklyWeekday?: number;
   /** 仅本地使用：新增或修改尚未成功同步到云端。 */
   syncPending?: boolean;
   /** 随当前药物等待云端确认的调整事件；eventId 使重试保持幂等。 */

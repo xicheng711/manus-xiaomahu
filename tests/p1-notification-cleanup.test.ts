@@ -93,4 +93,19 @@ describe("cancelAllMedicationReminders (P1 fix)", () => {
     await cancelAllMedicationReminders();
     expect(cancelledIds).toEqual([]);
   });
+
+  it("H1: 取消\"每隔一天\"的 JSON 数组格式，逐个取消而不是把整个 JSON 当单个 ID", async () => {
+    store.clear();
+    cancelledIds.length = 0;
+    // 旧格式：裸 JSON 数组
+    store.set("@xiaomahuMedNotif_medX_0800", JSON.stringify(["id-a", "id-b", "id-c"]));
+    // 新格式：{ ids, dates }
+    store.set("@xiaomahuMedNotif_medY_0800", JSON.stringify({ ids: ["id-d", "id-e"], dates: [] }));
+    await cancelAllMedicationReminders();
+    expect(cancelledIds.sort()).toEqual(["id-a", "id-b", "id-c", "id-d", "id-e"]);
+    // 整个 JSON 字符串本身绝不能被当成通知 ID 传进去
+    expect(cancelledIds.some(id => id.startsWith("[") || id.startsWith("{"))).toBe(false);
+    expect(store.has("@xiaomahuMedNotif_medX_0800")).toBe(false);
+    expect(store.has("@xiaomahuMedNotif_medY_0800")).toBe(false);
+  });
 });
