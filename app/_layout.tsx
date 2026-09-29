@@ -133,6 +133,28 @@ function ReminderForegroundSync() {
   return null;
 }
 
+/**
+ * App 回到前台时，把所有家庭的待同步公告重试发出去。
+ * 之前只有家人页加载时才重试——离线发的公告、之后没进家人页就会一直"待同步"。
+ */
+function PendingSyncForegroundRetry() {
+  const syncingRef = useRef(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || syncingRef.current) return;
+      syncingRef.current = true;
+      import('@/lib/storage')
+        .then(({ syncAllPendingAnnouncements }) => syncAllPendingAnnouncements())
+        .catch(() => {})
+        .finally(() => { syncingRef.current = false; });
+    });
+    return () => sub.remove();
+  }, []);
+
+  return null;
+}
+
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
@@ -264,6 +286,7 @@ export default function RootLayout() {
           <FamilyProvider>
             <NotificationNavigator />
             <ReminderForegroundSync />
+            <PendingSyncForegroundRetry />
             <WeatherProvider>
               <Stack screenOptions={{
                   headerShown: false,

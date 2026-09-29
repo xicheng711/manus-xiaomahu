@@ -9,7 +9,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '@/lib/weather-context';
 import { getLunarDate, getFormattedDate } from '@/lib/lunar';
-import { getTodayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, todayStr, syncPendingCheckIns } from '@/lib/storage';
+import { getTodayCheckIn, getProfile, getCheckInsForHome, getDiaryEntriesForHome, DailyCheckIn, DiaryEntry, upsertCheckIn, getUserProfile, getFamilyProfile, mergeCloudDiariesIntoLocal, mergeCloudCheckInsIntoLocal, todayStr, syncPendingCheckIns, syncPendingAnnouncements } from '@/lib/storage';
 import { cloudGetRoomDetail, cloudGetCheckIns, cloudGetDiaries, shouldRefreshCloudCache, markCloudCacheFresh } from '@/lib/cloud-sync';
 import { getMemberDisplayEmoji } from '@/lib/member-avatar';
 import { TrendChart } from '@/components/trend-chart';
@@ -570,6 +570,8 @@ function CreatorHomeScreen() {
     const isCurrentFamily = () => activeFamilyRef.current === requestedFamilyId;
     // 本地打卡曾因断网未上传时，首页后台自动重试；服务端只在首次完成时发送通知，不会重复打扰。
     syncPendingCheckIns(requestedFamilyId).catch(() => {});
+    // 公告同理：离线发的公告在切回首页时也自动重试，不用非进家人页才发出去。
+    syncPendingAnnouncements(requestedFamilyId).catch(() => {});
     // P1 fix: read from scoped profiles (family-scoped for elder, global for caregiver)
     // Fall back to legacy getProfile() only for setupComplete guard and missing fields.
     const [userProfile, familyProfile, legacyProfile] = await Promise.all([

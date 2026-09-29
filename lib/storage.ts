@@ -2378,6 +2378,28 @@ export async function syncPendingAnnouncements(roomId: string): Promise<void> {
   }
 }
 
+/**
+ * 把所有家庭的待同步公告都重试一遍。
+ * 之前重试只发生在家人页 loadData 里——离线时发了公告、之后没再进家人页，
+ * 这条公告就会一直卡在"待同步"。现在 app 回到前台时也会触发（见 _layout.tsx
+ * 的 PendingSyncForegroundRetry），打开 app 就自动发出去。
+ */
+export async function syncAllPendingAnnouncements(): Promise<void> {
+  let memberships: FamilyMembership[] = [];
+  try {
+    memberships = await getAllMemberships();
+  } catch {
+    return;
+  }
+  for (const m of memberships) {
+    try {
+      await syncPendingAnnouncements(m.familyId);
+    } catch {
+      // 单个家庭失败不影响其他家庭
+    }
+  }
+}
+
 export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id' | 'createdAt' | 'date' | 'serverAnnouncementId' | 'syncPending'>, roomId?: string): Promise<FamilyAnnouncement> {
   const rid = roomId ?? _activeRoomIdCache;
   if (!rid) throw new Error('当前家庭信息尚未准备好');
