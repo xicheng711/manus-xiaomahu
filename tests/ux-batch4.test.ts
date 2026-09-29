@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-// UX batch4 结构回归测试：2026-09-29 起 AppIcon 本体改走 iOS 原生 SF Symbols
-//（大体拍板：图标与整体都往 Apple 设计靠；中间曾短暂试过 emoji 方案，已废弃）。
+// UX batch4 结构回归测试：2026-09-29 起 AppIcon 本体改走原生 emoji 渲染
+//（大体拍板：线条图标太 simple，几轮 AI 方向稿不对味，直接上 emoji）。
 // 组件 API（AppIconName / name / color / size）保持不变，调用方源码结构不断言渲染方式，
 // 以下只校验关键结构真实存在，不渲染组件（RN 渲染依赖重）。
 
@@ -22,12 +22,12 @@ describe("ux-batch4: app-icons 新增图标名", () => {
     }
   });
 
-  it("每个新增图标名都有对应的 SF Symbol 映射", () => {
+  it("每个新增图标名都有对应的 case 分支", () => {
     for (const name of [
       "clock", "bell", "pencil", "trash", "chat",
       "link", "megaphone", "sun", "alert", "calendar", "zap", "copy", "plus",
     ]) {
-      expect(src).toContain(`${name}: '`);
+      expect(src).toContain(`case '${name}':`);
     }
   });
 });

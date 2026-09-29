@@ -666,13 +666,10 @@ describe('Warm ivory homepage visual system', () => {
   });
 
   it('visually separates the tab bar and keeps inactive destinations clearly visible', () => {
-    // 2026-09-29 Apple 化：无底圆、SF Symbols + tint 高亮（高亮珊瑚/未选中系统灰）
-    expect(tabLayout).toContain("backgroundColor: 'rgba(255,253,251,0.94)'");
-    expect(tabLayout).toContain('TAB_INACTIVE_TINT');
-    expect(tabLayout).toContain('const tint = focused ? TAB_ACTIVE_LABEL : TAB_INACTIVE_TINT');
+    expect(tabLayout).toContain("backgroundColor: 'rgba(255,253,251,0.96)'");
+    expect(tabLayout).toContain('const showActive = focused');
     expect(tabLayout).toContain('opacity: 0.62');
-    expect(tabLayout).not.toContain('iconCircle');
-    expect(tabLayout).not.toContain('borderTopLeftRadius');
+    expect(tabLayout).toContain('color: AppColors.nav.inactive');
   });
 
   it('uses equal-width columns for sleep, nap, and medication trend alignment', () => {
