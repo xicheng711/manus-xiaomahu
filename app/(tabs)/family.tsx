@@ -1486,7 +1486,7 @@ export default function FamilyScreen() {
           onPress={() => setShowCompose(true)}
           activeOpacity={0.85}
         >
-          <AppIcon name="plus" color="#FFFFFF" size={18} />
+          <AppIcon name="pen" color="#FFFFFF" size={18} />
           <Text style={styles.fabPostButtonText}>发布公告</Text>
         </TouchableOpacity>
       )}

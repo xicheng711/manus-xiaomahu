@@ -16,7 +16,7 @@ describe("ux-batch4: app-icons 新增图标名", () => {
   it("新增的图标名都在类型联合里", () => {
     for (const name of [
       "clock", "bell", "pencil", "trash", "chat",
-      "link", "megaphone", "sun", "alert", "calendar", "zap", "copy", "plus",
+      "link", "megaphone", "sun", "alert", "calendar", "zap", "copy", "plus", "pen",
     ]) {
       expect(src).toContain(`'${name}'`);
     }
@@ -25,7 +25,7 @@ describe("ux-batch4: app-icons 新增图标名", () => {
   it("每个新增图标名都有对应的 case 分支", () => {
     for (const name of [
       "clock", "bell", "pencil", "trash", "chat",
-      "link", "megaphone", "sun", "alert", "calendar", "zap", "copy", "plus",
+      "link", "megaphone", "sun", "alert", "calendar", "zap", "copy", "plus", "pen",
     ]) {
       expect(src).toContain(`case '${name}':`);
     }

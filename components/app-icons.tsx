@@ -11,7 +11,7 @@ export type AppIconName =
   | 'home' | 'checkin' | 'pill' | 'book' | 'family'
   | 'moon' | 'smile' | 'bowl' | 'note' | 'chart'
   | 'sunrise' | 'night' | 'heart' | 'eye'
-  | 'clock' | 'bell' | 'pencil' | 'trash' | 'chat' | 'link' | 'megaphone' | 'sun' | 'alert' | 'calendar' | 'zap' | 'copy' | 'plus';
+  | 'clock' | 'bell' | 'pencil' | 'trash' | 'chat' | 'link' | 'megaphone' | 'sun' | 'alert' | 'calendar' | 'zap' | 'copy' | 'plus' | 'pen';
 
 function iconEmoji(name: AppIconName): string {
   switch (name) {
@@ -42,6 +42,7 @@ function iconEmoji(name: AppIconName): string {
     case 'zap': return '⚡';
     case 'copy': return '📋';
     case 'plus': return '➕';
+    case 'pen': return '🖊️';
   }
 }
 
