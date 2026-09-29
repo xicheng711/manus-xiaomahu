@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { fetchWeather, getWeatherByGPS, buildGreetingWithWeather, WeatherData, GpsWeatherInfo } from './weather';
 import { getProfile, getFamilyProfile } from './storage';
 
@@ -86,8 +86,13 @@ export function WeatherProvider({ children }: { children: React.ReactNode }) {
     return buildGreetingWithWeather(caregiverName, gpsWeather);
   }, [gpsWeather]);
 
+  // value 用 useMemo 包住：否则每次 render 都产生新对象，所有消费方无条件联动重渲染。
+  const contextValue = useMemo(() => ({
+    weatherData, gpsWeather, cityName, loading, refresh, buildGreeting,
+  }), [weatherData, gpsWeather, cityName, loading, refresh, buildGreeting]);
+
   return (
-    <WeatherContext.Provider value={{ weatherData, gpsWeather, cityName, loading, refresh, buildGreeting }}>
+    <WeatherContext.Provider value={contextValue}>
       {children}
     </WeatherContext.Provider>
   );

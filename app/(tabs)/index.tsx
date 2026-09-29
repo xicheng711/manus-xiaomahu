@@ -655,16 +655,16 @@ function CreatorHomeScreen() {
       });
     }
     const fid = requestedFamilyId;
-    const today = await getTodayCheckIn(fid);
+    // 限量读取：只取当年打卡数据（TrendChart 需要）和最近 20 条日记，切换家庭时读取量轻得多。
+    // 三个本地读取互相独立，并行跑；原来串行约 3 倍时间。
+    const [today, all, diaries] = await Promise.all([
+      getTodayCheckIn(fid),
+      getCheckInsForHome(fid),
+      getDiaryEntriesForHome(fid, 20),
+    ]);
     if (!isCurrentFamily()) return;
     setTodayCheckIn(today);
-    if (!isCurrentFamily()) return;
-    // 限量读取：只取当年打卡数据（TrendChart 需要）和最近 20 条日记，切换家庭时读取量轻得多
-    const all = await getCheckInsForHome(fid);
-    if (!isCurrentFamily()) return;
     setAllCheckIns(all);
-    const diaries = await getDiaryEntriesForHome(fid, 20);
-    if (!isCurrentFamily()) return;
     setAllDiaryEntries(diaries);
     // 后台从云端拉取最新数据并写入本地缓存，然后更新 UI
     // 这样即使本地缓存为空（如退出登录后）也能展示最新数据

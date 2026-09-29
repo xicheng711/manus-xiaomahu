@@ -2229,8 +2229,11 @@ function CheckinScreenContent() {
     : { label: currentStep.roleLabel, color: '#059669', bgColor: '#ECFDF5' };
 
   // 右滑返回手势：填过未保存的内容先确认
+  // activeOffsetX([-999, 20])：右移超过 20px 才激活（之前 [-20, 999] 下右滑永远无法激活，手势是死的）；
+  // failOffsetY 让竖向滚动优先，不跟内层 ScrollView 打架。
   const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-20, 999])
+    .activeOffsetX([-999, 20])
+    .failOffsetY([-15, 15])
     .onEnd((e) => {
       if (e.translationX > 60 && Math.abs(e.translationY) < 80) {
         requestCloseForm();

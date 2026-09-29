@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Alert } from 'react-native';
 import {
   FamilyMembership,
@@ -441,8 +441,14 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
   const isCreator = activeMembership?.role === 'creator';
   const hasFamilies = memberships.length > 0;
 
+  // value 用 useMemo 包住：否则每次 render 都产生新对象，18 个消费方无条件联动重渲染。
+  const contextValue = useMemo(() => ({
+    memberships, activeMembership, isCreator, hasFamilies, ready,
+    switchFamily, leaveFamily, deleteFamily, refresh,
+  }), [memberships, activeMembership, isCreator, hasFamilies, ready, switchFamily, leaveFamily, deleteFamily, refresh]);
+
   return (
-    <FamilyContext.Provider value={{ memberships, activeMembership, isCreator, hasFamilies, ready, switchFamily, leaveFamily, deleteFamily, refresh }}>
+    <FamilyContext.Provider value={contextValue}>
       {children}
     </FamilyContext.Provider>
   );
