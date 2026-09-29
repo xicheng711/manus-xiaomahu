@@ -120,8 +120,11 @@ describe("ux-batch2: 图标库", () => {
     expect(src).toContain("export function AppIcon");
   });
 
-  it("C 版线条风格：stroke 圆头、无填充", () => {
-    expect(src).toContain('strokeLinecap="round"');
-    expect(src).toContain('fill="none"');
+  it("emoji 版：原生 emoji 渲染，不再用 SVG 线条", () => {
+    // 2026-09-29 大体拍板改走 emoji；stroke 圆头/无填充是旧 C 版线条风格，已废弃
+    expect(src).toContain("iconEmoji");
+    expect(src).toContain("from 'react-native'");
+    expect(src).not.toContain('strokeLinecap="round"');
+    expect(src).not.toContain("react-native-svg");
   });
 });

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-// UX batch4 结构回归测试：功能型 emoji 统一为 AppIcon 线条图标 + 死代码清理。
-// 不渲染组件（RN 渲染依赖重），只校验关键结构真实存在。
+// UX batch4 结构回归测试：2026-09-29 起 AppIcon 本体改走原生 emoji 渲染
+//（大体拍板：线条图标太 simple，几轮 AI 方向稿不对味，直接上 emoji）。
+// 组件 API（AppIconName / name / color / size）保持不变，调用方源码结构不断言渲染方式，
+// 以下只校验关键结构真实存在，不渲染组件（RN 渲染依赖重）。
 
 const read = (p: string) =>
   fs.readFileSync(path.join(__dirname, "..", p), "utf8");
