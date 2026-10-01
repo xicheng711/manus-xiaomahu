@@ -223,6 +223,8 @@ export const announcements = mysqlTable("announcements", {
   type: mysqlEnum("announcementType", ["news", "visit", "medical", "daily", "reminder"]).default("daily").notNull(),
   date: varchar("date", { length: 10 }).notNull(),
   localTimeStr: varchar("localTimeStr", { length: 5 }),  // HH:MM — 发布者本地时间
+  /** 发布者当时的 IANA 时区；与 createdAt 一起构成完整的时间真相源。 */
+  authorTimeZone: varchar("authorTimeZone", { length: 64 }),
   reactions: json("reactions"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [

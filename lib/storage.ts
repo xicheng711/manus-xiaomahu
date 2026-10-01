@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAnnouncementViewerDateKey, getAnnouncementSortTime, deviceTimeZone } from './shared-date-range';
+import { getAnnouncementViewerDateKey, getAnnouncementSortTime, resolveAnnouncementCreatedAt, repairAnnouncementTimestamps, deviceTimeZone, isValidTimeZone } from './shared-date-range';
 
 import {
   cloudSyncCheckIn,
@@ -347,6 +347,10 @@ export interface FamilyAnnouncement {
   createdAt: string;
   date: string;        // YYYY-MM-DD
   localTimeStr?: string; // HH:MM — 发布者本地时间，避免时区偏差
+  /** 发布者当时的 IANA 时区；与 createdAt 一起构成完整的时间真相源。 */
+  authorTimeZone?: string | null;
+  /** true 表示 createdAt 是按 date+localTimeStr 估算的老记录，非精确时间。 */
+  timeEstimated?: boolean;
   reactions?: AnnouncementReaction[];
   /** 评论数量随当前家庭的公告列表一并加载；正文仅在用户点击后按需获取。 */
   commentCount?: number;
@@ -2280,12 +2284,19 @@ export async function getFamilyAnnouncements(days = 30, roomId?: string): Promis
   const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
   const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
+  // 老记录一次性修复：没有有效 createdAt 的补估算时间戳并打标，写回缓存；
+  // 之后所有下游只会看到有效 createdAt，兜底分支只留给损坏数据。
+  // 修复是一次性的（repaired > 0 才写回），平时读取无额外写入。
+  const { list, repaired } = repairAnnouncementTimestamps(all);
+  if (repaired > 0) {
+    await AsyncStorage.setItem(key, JSON.stringify(list));
+  }
   // Return last N days. 用统一的 sortTime 而不是裸 new Date(createdAt)：
   // 没有有效 createdAt 的老记录按 date+localTimeStr 兜底，不会被 NaN 比较静默丢掉。
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffTime = cutoff.getTime();
-  return all.filter(a => getAnnouncementSortTime(a) >= cutoffTime);
+  return list.filter(a => getAnnouncementSortTime(a) >= cutoffTime);
 }
 
 export async function getTodayAnnouncements(roomId?: string): Promise<FamilyAnnouncement[]> {
@@ -2297,9 +2308,24 @@ export async function getTodayAnnouncements(roomId?: string): Promise<FamilyAnno
 
 function normalizeCloudAnnouncement(raw: any, local?: FamilyAnnouncement): FamilyAnnouncement {
   const serverAnnouncementId = Number(raw.id);
-  const createdAt = raw.createdAt instanceof Date
-    ? raw.createdAt.toISOString()
-    : (typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString());
+  // createdAt 绝不许默写"现在"：按铁律解析（云端值 > 本地原值 > 估算），
+  // 损坏数据才走最后兜底并打标，不静默伪装成新公告。
+  const resolved = resolveAnnouncementCreatedAt(
+    raw.createdAt,
+    local?.createdAt,
+    { date: raw.date ?? local?.date, localTimeStr: raw.localTimeStr ?? local?.localTimeStr },
+  );
+  const createdAt = resolved.createdAt ?? new Date().toISOString();
+  if (!resolved.createdAt) {
+    console.warn('[Announcements] cloud row has no usable time; stamped now as last resort for a corrupt row', { serverAnnouncementId });
+  }
+  // timeEstimated 只在"估算/损坏"时为 true：拿到云端真实时间戳后必须清除，
+  // 否则老记录同步上云、合并回来时会一直背着估算标记。
+  const timeEstimated = resolved.source === 'estimated' || resolved.source === 'none'
+    ? true
+    : resolved.source === 'local'
+      ? (local?.timeEstimated || false)
+      : false;
   return {
     id: local?.id ?? String(serverAnnouncementId),
     serverAnnouncementId,
@@ -2313,6 +2339,8 @@ function normalizeCloudAnnouncement(raw: any, local?: FamilyAnnouncement): Famil
     type: raw.type ?? local?.type ?? 'daily',
     date: raw.date ?? local?.date ?? todayStr(),
     localTimeStr: raw.localTimeStr ?? local?.localTimeStr,
+    authorTimeZone: raw.authorTimeZone ?? local?.authorTimeZone ?? null,
+    timeEstimated,
     createdAt,
     reactions: Array.isArray(raw.reactions) ? raw.reactions : (local?.reactions ?? []),
     commentCount: typeof raw.commentCount === 'number'
@@ -2350,7 +2378,10 @@ export async function mergeCloudAnnouncementsIntoLocal(cloudAnnouncements: any[]
     const created = new Date(entry.createdAt).getTime();
     return oldestRemoteTime != null && Number.isFinite(created) && created < oldestRemoteTime;
   });
-  const merged = [...remote, ...localOnly]
+  // 本地独有老记录先修复时间戳再合并：没有有效 createdAt 的按 date+localTimeStr
+  // 估算并打标，保证排序稳定、不再因 NaN 乱序。
+  const { list: repairedLocalOnly } = repairAnnouncementTimestamps(localOnly);
+  const merged = [...remote, ...repairedLocalOnly]
     // 统一排序键：有绝对时间用绝对时间，老记录用 date+localTimeStr 兜底。
     // 裸 new Date(createdAt) 在无效时间戳下会产生 NaN，让老记录的顺序不稳定。
     .sort((a, b) => getAnnouncementSortTime(b) - getAnnouncementSortTime(a))
@@ -2367,6 +2398,7 @@ async function syncOneFamilyAnnouncement(announcement: FamilyAnnouncement, roomI
     type: announcement.type,
     date: announcement.date,
     localTimeStr: announcement.localTimeStr,
+    authorTimeZone: announcement.authorTimeZone ?? deviceTimeZone(),
     roomId: Number(roomId),
   });
   const serverId = Number(result?.announcement?.id);
@@ -2450,8 +2482,16 @@ export async function saveFamilyAnnouncement(data: Omit<FamilyAnnouncement, 'id'
     date: todayStr(),
     createdAt: now.toISOString(),
     localTimeStr,
+    // 公告入库铁律：必须同时写死 UTC 绝对时间与发布者时区，缺一不可。
+    authorTimeZone: deviceTimeZone(),
     syncPending: true,
   };
+  if (
+    !Number.isFinite(new Date(announcement.createdAt).getTime()) ||
+    !isValidTimeZone(announcement.authorTimeZone)
+  ) {
+    throw new Error('公告发布时间无效，拒绝发布');
+  }
   all.unshift(announcement);
   await AsyncStorage.setItem(key, JSON.stringify(all.slice(0, 200)));
   await syncOneFamilyAnnouncement(announcement, rid).catch(() => false);

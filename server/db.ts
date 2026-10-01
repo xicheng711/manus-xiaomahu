@@ -17,6 +17,7 @@ async function runAutoMigrations(db: ReturnType<typeof drizzle>) {
   const columnsToAdd: Array<{ table: string; column: string; definition: string }> = [
     { table: 'announcements',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'announcements',  column: 'clientId',     definition: 'varchar(100)' },
+    { table: 'announcements',  column: 'authorTimeZone', definition: 'varchar(64)' },
     { table: 'diary_entries',  column: 'localTimeStr', definition: 'varchar(10)' },
     { table: 'diary_entries',  column: 'clientId',     definition: 'varchar(100)' },
     { table: 'family_members', column: 'birthYear',    definition: 'int' },

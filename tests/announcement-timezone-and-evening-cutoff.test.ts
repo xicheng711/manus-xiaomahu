@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   CARE_DAY_ROLLOVER_HOUR,
+  estimateAnnouncementCreatedAt,
   formatAnnouncementViewerDateTime,
   getAnnouncementSortTime,
   getAnnouncementViewerDateKey,
@@ -10,6 +11,8 @@ import {
   isLateNightCareWindow,
   localDateKey,
   partitionAnnouncementsByViewerDay,
+  repairAnnouncementTimestamps,
+  resolveAnnouncementCreatedAt,
   resolveCheckInFormTargetDate,
 } from '../lib/shared-date-range';
 
@@ -44,6 +47,67 @@ describe('announcement viewer-time and care-day boundaries', () => {
       date: '2026-09-09',
       createdAt: 'not-a-date',
     })).toBe('2026-09-09');
+  });
+
+  it('resolves createdAt by the hard rule: candidate > local > estimate, never silently stamping now', () => {
+    const now = new Date('2026-10-01T19:00:00.000Z');
+    // 1. 有效的传入值直接采用，不打标。
+    expect(resolveAnnouncementCreatedAt('2026-10-01T18:49:00.000Z', '2020-01-01T00:00:00.000Z', { date: '2026-10-02', localTimeStr: '00:38' }))
+      .toEqual({ createdAt: '2026-10-01T18:49:00.000Z', timeEstimated: false, source: 'candidate' });
+    // 2. 传入值无效时保留本地原值——绝不默写"现在"。
+    expect(resolveAnnouncementCreatedAt('not-a-date', '2026-09-28T10:00:00.000Z', { date: '2026-10-02', localTimeStr: '00:38' }))
+      .toEqual({ createdAt: '2026-09-28T10:00:00.000Z', timeEstimated: false, source: 'local' });
+    // 3. 都无效时按 date+localTimeStr 估算并打标；估算值是记录本身的时间，不是 now。
+    const estimated = resolveAnnouncementCreatedAt('bad', 'also-bad', { date: '2026-10-02', localTimeStr: '00:38' });
+    expect(estimated.timeEstimated).toBe(true);
+    expect(estimated.source).toBe('estimated');
+    expect(estimated.createdAt).toBe(estimateAnnouncementCreatedAt({ date: '2026-10-02', localTimeStr: '00:38' }));
+    expect(estimated.createdAt).not.toBe(now.toISOString());
+    expect(new Date(estimated.createdAt as string).getTime()).not.toBe(now.getTime());
+    // 4. 全无效（损坏数据）返回 null，由调用方显式处理。
+    expect(resolveAnnouncementCreatedAt('bad', undefined, {})).toEqual({ createdAt: null, timeEstimated: true, source: 'none' });
+  });
+
+  it('repairs legacy announcements once: estimated timestamp plus flag, healthy records untouched', () => {
+    const legacy = { date: '2026-10-02', localTimeStr: '00:38', createdAt: 'not-a-date' as string, timeEstimated: undefined as boolean | undefined };
+    const healthy = { date: '2026-10-01', localTimeStr: '18:49', createdAt: '2026-10-01T18:49:00.000Z' as string, timeEstimated: undefined as boolean | undefined };
+    const { list, repaired } = repairAnnouncementTimestamps([legacy, healthy]);
+    expect(repaired).toBe(1);
+    // 老记录：补上有效时间戳并打标。
+    expect(list[0].timeEstimated).toBe(true);
+    expect(Number.isFinite(new Date(list[0].createdAt as string).getTime())).toBe(true);
+    // 健康记录：原样不动，不打标。
+    expect(list[1]).toBe(healthy);
+    expect(list[1].timeEstimated).toBeUndefined();
+    // 已修复过的记录不再重复修复（幂等）。
+    expect(repairAnnouncementTimestamps(list).repaired).toBe(0);
+  });
+
+  it('groups the same absolute instant into the viewer-local day in Beijing, New York and London', () => {
+    // 同一绝对时刻：2026-10-01T16:38:00Z ＝ 北京 10/2 00:38 ＝ 纽约 10/1 12:38 ＝ 伦敦 10/1 17:38。
+    const instant = '2026-10-01T16:38:00.000Z';
+    const announcement = { date: '2026-10-02', localTimeStr: '00:38', createdAt: instant };
+    const originalTimezone = process.env.TZ;
+    try {
+      process.env.TZ = 'Asia/Shanghai';
+      const beijingNow = new Date(2026, 9, 2, 0, 40);
+      expect(getAnnouncementViewerDateKey(announcement, beijingNow)).toBe('2026-10-02');
+      expect(partitionAnnouncementsByViewerDay([announcement], beijingNow).today).toHaveLength(1);
+
+      process.env.TZ = 'America/New_York';
+      const newYorkNow = new Date(2026, 9, 1, 12, 40);
+      expect(getAnnouncementViewerDateKey(announcement, newYorkNow)).toBe('2026-10-01');
+      const ny = partitionAnnouncementsByViewerDay([announcement], newYorkNow);
+      expect(ny.today).toHaveLength(1);
+      expect(ny.older).toHaveLength(0);
+
+      process.env.TZ = 'Europe/London';
+      const londonNow = new Date(2026, 9, 1, 17, 40);
+      expect(getAnnouncementViewerDateKey(announcement, londonNow)).toBe('2026-10-01');
+      expect(partitionAnnouncementsByViewerDay([announcement], londonNow).today).toHaveLength(1);
+    } finally {
+      process.env.TZ = originalTimezone;
+    }
   });
 
   it('puts a publisher-next-day legacy announcement at the top of today instead of history', () => {
@@ -135,6 +199,10 @@ describe('announcement viewer-time and care-day boundaries', () => {
     const family = read('app/(tabs)/family.tsx');
     const joinerHome = read('components/joiner-home.tsx');
     const storage = read('lib/storage.ts');
+    const cloudSync = read('lib/cloud-sync.ts');
+    const router = read('server/family-router.ts');
+    const db = read('server/db.ts');
+    const schema = read('drizzle/schema.ts');
 
     // 今日/历史用明确的三段比较：viewerKey 未来归今日，只有严格早于今天的算历史。
     // 分组、排序、显示同源（partitionAnnouncementsByViewerDay / sortTime / format）。
@@ -151,6 +219,26 @@ describe('announcement viewer-time and care-day boundaries', () => {
     expect(storage).toContain('getAnnouncementSortTime(b) - getAnnouncementSortTime(a)');
     expect(storage).toContain('getAnnouncementSortTime(a) >= cutoffTime');
     expect(storage).toContain('getAnnouncementViewerDateKey(announcement) >= viewerToday');
+
+    // 根治：发布时间真相源三件套。
+    // 发布时写死 UTC 绝对时间 + 发布者时区，缺一不可，否则拒绝发布。
+    expect(storage).toContain('authorTimeZone: deviceTimeZone()');
+    expect(storage).toContain("throw new Error('公告发布时间无效，拒绝发布')");
+    expect(storage).toContain('authorTimeZone: announcement.authorTimeZone ?? deviceTimeZone()');
+    // createdAt 按铁律解析，绝不默写"现在"伪装成新公告。
+    expect(storage).toContain('resolveAnnouncementCreatedAt(');
+    expect(storage).not.toContain("typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString()");
+    // 老记录读取时一次性修复并写回，之后下游只见有效 createdAt。
+    expect(storage).toContain('repairAnnouncementTimestamps(all)');
+    expect(storage).toContain('repairAnnouncementTimestamps(localOnly)');
+    // 发布者时区透传到云端。
+    expect(cloudSync).toContain('authorTimeZone?: string;');
+    expect(cloudSync).toContain('authorTimeZone: params.authorTimeZone,');
+    // 服务端：表结构 + 自动迁移 + router 接收存储。
+    expect(schema).toContain('authorTimeZone: varchar("authorTimeZone", { length: 64 })');
+    expect(db).toContain("column: 'authorTimeZone', definition: 'varchar(64)'");
+    expect(router).toContain('authorTimeZone: z.string().max(64).optional()');
+    expect(router).toContain('authorTimeZone: input.authorTimeZone ?? null,');
   });
 
   it('keeps the full announcement card reachable and applies reactions optimistically before cloud confirmation', () => {

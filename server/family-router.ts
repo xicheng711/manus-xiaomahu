@@ -935,6 +935,7 @@ export const familyRouter = router({
       type: z.enum(["news", "visit", "medical", "daily", "reminder"]).default("daily"),
       date: z.string(),
       localTimeStr: z.string().optional(),  // HH:MM — 发布者本地时间
+      authorTimeZone: z.string().max(64).optional(),  // 发布者当时的 IANA 时区
     }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
@@ -952,6 +953,7 @@ export const familyRouter = router({
         type: input.type,
         date: input.date,
         localTimeStr: input.localTimeStr ?? null,
+        authorTimeZone: input.authorTimeZone ?? null,
       });
 
       // 只有本次真正新建成功才推送。幂等重试/并发去重命中的请求不重复推送。

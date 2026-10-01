@@ -126,21 +126,81 @@ export function getAnnouncementSortTime(
 ): number {
   const publishedAt = getAnnouncementPublishedAt(announcement);
   if (publishedAt) return publishedAt.getTime();
+  const estimated = estimateAnnouncementCreatedAt(announcement);
+  return estimated ? new Date(estimated).getTime() : 0;
+}
+
+/**
+ * 为没有有效 createdAt 的老记录估算一个绝对发布时间：按查看者本地解读
+ * date + localTimeStr（与卡片兜底显示、getAnnouncementSortTime 完全一致）。
+ * 实在没有可用日期时返回 null——调用方必须显式处理损坏数据，
+ * 绝不允许默写"现在"来伪装。
+ */
+export function estimateAnnouncementCreatedAt(
+  announcement: { date?: string | null; localTimeStr?: string | null },
+): string | null {
   const dateMatch = (announcement.date ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateMatch) {
-    const timeMatch = (announcement.localTimeStr ?? '').match(/^(\d{2}):(\d{2})$/);
-    const fallback = new Date(
-      Number(dateMatch[1]),
-      Number(dateMatch[2]) - 1,
-      Number(dateMatch[3]),
-      timeMatch ? Number(timeMatch[1]) : 12,
-      timeMatch ? Number(timeMatch[2]) : 0,
-      0,
-      0,
+  if (!dateMatch) return null;
+  const timeMatch = (announcement.localTimeStr ?? '').match(/^(\d{2}):(\d{2})$/);
+  const estimated = new Date(
+    Number(dateMatch[1]),
+    Number(dateMatch[2]) - 1,
+    Number(dateMatch[3]),
+    timeMatch ? Number(timeMatch[1]) : 12,
+    timeMatch ? Number(timeMatch[2]) : 0,
+    0,
+    0,
+  );
+  return Number.isFinite(estimated.getTime()) ? estimated.toISOString() : null;
+}
+
+/**
+ * 公告入库铁律：createdAt 必须是有效绝对时间，解析优先级为
+ * 传入值（云端/新建） > 本地原值 > 按 date+localTimeStr 估算（打标 timeEstimated）。
+ * 估算失败返回 createdAt: null，由调用方按损坏数据显式处理——
+ * 绝不默写"现在"，不把老公告伪造成刚刚发布。
+ */
+export function resolveAnnouncementCreatedAt(
+  candidate: string | Date | null | undefined,
+  localCreatedAt?: string | Date | null,
+  fallback?: { date?: string | null; localTimeStr?: string | null },
+): { createdAt: string | null; timeEstimated: boolean; source: 'candidate' | 'local' | 'estimated' | 'none' } {
+  const asIso = (value: string | Date | null | undefined): string | null => {
+    const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
+    return date && Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  };
+  const fromCandidate = asIso(candidate);
+  if (fromCandidate) return { createdAt: fromCandidate, timeEstimated: false, source: 'candidate' };
+  const fromLocal = asIso(localCreatedAt);
+  if (fromLocal) return { createdAt: fromLocal, timeEstimated: false, source: 'local' };
+  const estimated = estimateAnnouncementCreatedAt(fallback ?? {});
+  if (estimated) return { createdAt: estimated, timeEstimated: true, source: 'estimated' };
+  return { createdAt: null, timeEstimated: true, source: 'none' };
+}
+
+/**
+ * 一次性修复老记录：把没有有效 createdAt 的公告补上估算时间戳并打标，
+ * 返回新数组与修复条数。调用方在读取/合并入口执行一次并持久化，
+ * 之后所有下游只会看到有效 createdAt，兜底分支只留给损坏数据。
+ */
+export function repairAnnouncementTimestamps<
+  T extends { createdAt?: string | Date | null; date?: string | null; localTimeStr?: string | null; timeEstimated?: boolean },
+>(
+  announcements: T[],
+): { list: T[]; repaired: number } {
+  let repaired = 0;
+  const list = announcements.map(announcement => {
+    if (getAnnouncementPublishedAt(announcement)) return announcement;
+    const { createdAt } = resolveAnnouncementCreatedAt(
+      announcement.createdAt,
+      undefined,
+      announcement,
     );
-    if (Number.isFinite(fallback.getTime())) return fallback.getTime();
-  }
-  return 0;
+    if (!createdAt) return announcement;
+    repaired += 1;
+    return { ...announcement, createdAt, timeEstimated: true };
+  });
+  return { list, repaired };
 }
 
 /**

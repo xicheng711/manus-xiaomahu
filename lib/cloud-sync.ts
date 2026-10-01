@@ -559,6 +559,7 @@ export async function cloudPostAnnouncement(params: {
   type?: 'news' | 'visit' | 'medical' | 'daily' | 'reminder';
   date: string;
   localTimeStr?: string;
+  authorTimeZone?: string;
   roomId?: number;
 }) {
   const roomId = params.roomId ?? await getActiveRoomId();
@@ -573,6 +574,7 @@ export async function cloudPostAnnouncement(params: {
       type: params.type ?? 'daily',
       date: params.date,
       localTimeStr: params.localTimeStr,
+      authorTimeZone: params.authorTimeZone,
     });
   } catch (e) {
     console.warn('[CloudSync] postAnnouncement failed:', e);
