@@ -25,7 +25,7 @@ import { SHADOWS } from '@/lib/animations';
 import { AppColors, Gradients } from '@/lib/design-tokens';
 import { useFamilyContext } from '@/lib/family-context';
 import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
-import { getAnnouncementViewerDateKey, resolveCareTodayKey } from '@/lib/shared-date-range';
+import { getAnnouncementViewerDateKey, getAnnouncementSortTime, resolveCareTodayKey } from '@/lib/shared-date-range';
 
 type FeedItem = {
   id: string;
@@ -561,7 +561,12 @@ export function JoinerHomeScreen({ refreshToken }: { refreshToken?: string }) {
     const careTodayKey = resolveCareTodayKey(checkIns);
     const todayCheckIns = checkIns.filter(c => c.date === careTodayKey).slice(0, 2);
     const todayDiaries = cleanDiaries.filter(d => d.date === _todayKey).slice(0, 3);
-    const todayAnnouncements = announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === _todayKey).slice(0, 2);
+    // 公告是即时事件：按查看者日历归属，viewerKey >= 今天（含发布者已跨日的老记录兜底）
+    // 都算今日；按统一 sortTime 取最新 2 条。
+    const todayAnnouncements = announcements
+      .filter(announcement => getAnnouncementViewerDateKey(announcement) >= _todayKey)
+      .sort((a, b) => getAnnouncementSortTime(b) - getAnnouncementSortTime(a))
+      .slice(0, 2);
     setFeed(buildFeed(todayCheckIns, todayDiaries, todayAnnouncements, creatorName));
     // 读取今日简报缓存
     try {

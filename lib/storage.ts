@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAnnouncementViewerDateKey, deviceTimeZone } from './shared-date-range';
+import { getAnnouncementViewerDateKey, getAnnouncementSortTime, deviceTimeZone } from './shared-date-range';
 
 import {
   cloudSyncCheckIn,
@@ -2280,16 +2280,19 @@ export async function getFamilyAnnouncements(days = 30, roomId?: string): Promis
   const key = roomKey(KEYS.FAMILY_ANNOUNCEMENTS, rid);
   const raw = await AsyncStorage.getItem(key);
   const all: FamilyAnnouncement[] = raw ? JSON.parse(raw) : [];
-  // Return last N days
+  // Return last N days. 用统一的 sortTime 而不是裸 new Date(createdAt)：
+  // 没有有效 createdAt 的老记录按 date+localTimeStr 兜底，不会被 NaN 比较静默丢掉。
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
-  return all.filter(a => new Date(a.createdAt) >= cutoff);
+  const cutoffTime = cutoff.getTime();
+  return all.filter(a => getAnnouncementSortTime(a) >= cutoffTime);
 }
 
 export async function getTodayAnnouncements(roomId?: string): Promise<FamilyAnnouncement[]> {
   const all = await getFamilyAnnouncements(1, roomId);
   const viewerToday = todayStr();
-  return all.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday);
+  // viewerKey >= viewerToday：发布者已跨日的老记录兜底是最新的公告，同样算"今日"。
+  return all.filter(announcement => getAnnouncementViewerDateKey(announcement) >= viewerToday);
 }
 
 function normalizeCloudAnnouncement(raw: any, local?: FamilyAnnouncement): FamilyAnnouncement {
@@ -2348,7 +2351,9 @@ export async function mergeCloudAnnouncementsIntoLocal(cloudAnnouncements: any[]
     return oldestRemoteTime != null && Number.isFinite(created) && created < oldestRemoteTime;
   });
   const merged = [...remote, ...localOnly]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    // 统一排序键：有绝对时间用绝对时间，老记录用 date+localTimeStr 兜底。
+    // 裸 new Date(createdAt) 在无效时间戳下会产生 NaN，让老记录的顺序不稳定。
+    .sort((a, b) => getAnnouncementSortTime(b) - getAnnouncementSortTime(a))
     .slice(0, 200);
   await AsyncStorage.setItem(key, JSON.stringify(merged));
   return merged;

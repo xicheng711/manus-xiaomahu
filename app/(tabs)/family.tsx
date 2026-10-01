@@ -41,7 +41,7 @@ import { getSessionToken } from '@/lib/_core/auth';
 import { getZodiac } from '@/lib/zodiac';
 import { getMemberDisplayEmoji, getMemberEmojiById } from '@/lib/member-avatar';
 import { useKeyboardAwareScroll } from '@/hooks/use-keyboard-aware-scroll';
-import { findCurrentSharedRecord, getAnnouncementViewerDateKey, resolveCareTimeZone } from '@/lib/shared-date-range';
+import { findCurrentSharedRecord, getAnnouncementViewerDateKey, formatAnnouncementViewerDateTime, partitionAnnouncementsByViewerDay, resolveCareTimeZone } from '@/lib/shared-date-range';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -491,7 +491,12 @@ function buildFamilyBriefingHistory(
       label,
       checkIn: checkInMap.get(dateKey) ?? null,
       diary: diaryMap.get(dateKey) ?? null,
-      announcements: announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === dateKey),
+      announcements: announcements.filter(announcement => {
+        const viewerKey = getAnnouncementViewerDateKey(announcement);
+        // 今日桶同时收纳 viewerKey > dateKey 的记录：发布者本地已跨日（查看者还在前一天）
+        // 的老记录兜底是最新的公告，不能从简报里丢掉。
+        return index === 0 ? viewerKey >= dateKey : viewerKey === dateKey;
+      }),
     });
   }
   return history;
@@ -699,7 +704,7 @@ export default function FamilyScreen() {
       setBriefingData({
         checkIn: cachedToday,
         profile: cachedProfile,
-        todayAnnouncements: localAnns.filter(announcement => getAnnouncementViewerDateKey(announcement) === todayStr()),
+        todayAnnouncements: localAnns.filter(announcement => getAnnouncementViewerDateKey(announcement) >= todayStr()),
       });
       setBriefingHistory(cachedHistory);
       autoSelectBriefingDate(cachedHistory, requestedFamilyId);
@@ -877,7 +882,7 @@ export default function FamilyScreen() {
       setBriefingData({
         checkIn: todayCheckIn,
         profile,
-        todayAnnouncements: a.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday),
+        todayAnnouncements: a.filter(announcement => getAnnouncementViewerDateKey(announcement) >= viewerToday),
       });
       setElderNickname(profile?.nickname || profile?.name || r?.elderName || '家人');
       setElderEmoji(profile?.zodiacEmoji || '🐯');
@@ -1105,9 +1110,13 @@ export default function FamilyScreen() {
     ANNOUNCEMENT_TYPES.find(t => t.type === type) ?? ANNOUNCEMENT_TYPES[0];
   const memberEmojiById = getMemberEmojiById(room.members);
 
-  const viewerToday = todayStr();
-  const todayAnnouncements = announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) === viewerToday);
-  const olderAnnouncements = announcements.filter(announcement => getAnnouncementViewerDateKey(announcement) !== viewerToday);
+  // 公告分组/排序/显示同源（partitionAnnouncementsByViewerDay）：
+  // viewerKey 决定"今日/历史"归属，sortTime 决定组内新旧顺序。
+  // viewerKey > 查看者今天的记录（发布者本地已跨日、查看者还在前一天，通常是
+  // 没有有效 createdAt 的老记录兜底）是最新的公告，归入"今日公告"顶部；
+  // 只有 viewerKey 严格早于今天的才算历史。不能用 !== 区分，否则未来日期
+  // 会被丢进历史（如 10/2 00:38 显示在 10/1 18:49 之下）。
+  const { today: todayAnnouncements, older: olderAnnouncements } = partitionAnnouncementsByViewerDay(announcements);
   const targetAnnouncementId = params.openComments === '1' && params.announcementId
     ? Number(params.announcementId)
     : null;
@@ -1828,18 +1837,9 @@ function AnnouncementCard({
 
   // 公告是即时事件：所有人按自己设备所在时区查看发布时间和“今日”归属。
   // date/localTimeStr 只用于没有有效 createdAt 的历史记录兜底。
-  const publishedAt = new Date(String(ann.createdAt));
-  const hasPublishedAt = Number.isFinite(publishedAt.getTime());
-  const dateMatch = ann.date?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const currentYear = String(new Date().getFullYear());
-  const date = hasPublishedAt
-    ? `${publishedAt.getFullYear() === Number(currentYear) ? '' : `${publishedAt.getFullYear()}/`}${publishedAt.getMonth() + 1}/${publishedAt.getDate()} `
-    : dateMatch
-      ? `${dateMatch[1] === currentYear ? '' : `${dateMatch[1]}/`}${Number(dateMatch[2])}/${Number(dateMatch[3])} `
-      : `${ann.date || ''}${ann.date ? ' ' : ''}`;
-  const time = hasPublishedAt
-    ? `${String(publishedAt.getHours()).padStart(2, '0')}:${String(publishedAt.getMinutes()).padStart(2, '0')}`
-    : (ann.localTimeStr || '--:--');
+  // 显示与分组/排序同源（formatAnnouncementViewerDateTime），避免同一张卡片
+  // 按一个时间分组、按另一个时间显示。
+  const { dateLabel: date, timeLabel: time } = formatAnnouncementViewerDateTime(ann);
 
   const reactions = ann.reactions ?? [];
   const myId = currentMember?.id ?? '';

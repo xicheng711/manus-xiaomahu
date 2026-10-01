@@ -59,20 +59,112 @@ export function getYesterdayCareDayKey(
  * they should appear under the calendar day of the person currently viewing them.
  * Prefer the absolute creation time and retain the author-entered date only as a
  * safe legacy fallback for old records without a valid timestamp.
+ *
+ * The three helpers below are the single source of truth for announcement time:
+ * grouping (viewerDateKey), ordering (sortTime) and display (format function)
+ * must all derive from the same instant so a card can never be grouped by one
+ * clock and labelled by another.
  */
-export function getAnnouncementViewerDateKey(
-  announcement: { createdAt?: string | Date | null; date?: string | null },
-  now = new Date(),
-): string {
+export function getAnnouncementPublishedAt(
+  announcement: { createdAt?: string | Date | null },
+): Date | null {
   const createdAt = announcement.createdAt;
   const timestamp = createdAt instanceof Date
     ? createdAt
     : typeof createdAt === 'string'
       ? new Date(createdAt)
       : null;
-  if (timestamp && Number.isFinite(timestamp.getTime())) return localDateKey(timestamp);
+  return timestamp && Number.isFinite(timestamp.getTime()) ? timestamp : null;
+}
+
+export function getAnnouncementViewerDateKey(
+  announcement: { createdAt?: string | Date | null; date?: string | null },
+  now = new Date(),
+): string {
+  const publishedAt = getAnnouncementPublishedAt(announcement);
+  if (publishedAt) return localDateKey(publishedAt);
   const legacyDate = announcement.date ?? '';
   return /^\d{4}-\d{2}-\d{2}$/.test(legacyDate) ? legacyDate : localDateKey(now);
+}
+
+/**
+ * 把公告分成"今日"和"历史"两组，组内按新到旧排序。
+ * viewerKey > 查看者今天的记录（发布者本地已跨日、查看者还在前一天，通常是
+ * 没有有效 createdAt 的老记录兜底）是最新的公告，归入今日顶部；
+ * 只有 viewerKey 严格早于今天的才算历史。不能用 !== 区分，否则未来日期
+ * 会被丢进历史（如 10/2 00:38 显示在 10/1 18:49 之下）。
+ */
+export function partitionAnnouncementsByViewerDay<
+  T extends { createdAt?: string | Date | null; date?: string | null; localTimeStr?: string | null },
+>(
+  announcements: T[],
+  now = new Date(),
+): { today: T[]; older: T[] } {
+  const viewerToday = localDateKey(now);
+  const withKeys = announcements.map(announcement => ({
+    announcement,
+    viewerKey: getAnnouncementViewerDateKey(announcement, now),
+  }));
+  const newestFirst = (x: { announcement: T }, y: { announcement: T }) =>
+    getAnnouncementSortTime(y.announcement) - getAnnouncementSortTime(x.announcement);
+  return {
+    today: withKeys.filter(item => item.viewerKey >= viewerToday).sort(newestFirst).map(item => item.announcement),
+    older: withKeys.filter(item => item.viewerKey < viewerToday).sort(newestFirst).map(item => item.announcement),
+  };
+}
+
+/**
+ * Monotonic ordering key for announcements. Uses the absolute publication time
+ * when it exists; legacy records without a valid timestamp fall back to
+ * date + localTimeStr interpreted in the viewer's locale (the same values the
+ * card displays), so grouping, sorting and display never disagree.
+ * Records with no usable time at all sort as 0 (oldest / dropped by cutoffs),
+ * matching the previous behaviour for corrupt rows.
+ */
+export function getAnnouncementSortTime(
+  announcement: { createdAt?: string | Date | null; date?: string | null; localTimeStr?: string | null },
+): number {
+  const publishedAt = getAnnouncementPublishedAt(announcement);
+  if (publishedAt) return publishedAt.getTime();
+  const dateMatch = (announcement.date ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateMatch) {
+    const timeMatch = (announcement.localTimeStr ?? '').match(/^(\d{2}):(\d{2})$/);
+    const fallback = new Date(
+      Number(dateMatch[1]),
+      Number(dateMatch[2]) - 1,
+      Number(dateMatch[3]),
+      timeMatch ? Number(timeMatch[1]) : 12,
+      timeMatch ? Number(timeMatch[2]) : 0,
+      0,
+      0,
+    );
+    if (Number.isFinite(fallback.getTime())) return fallback.getTime();
+  }
+  return 0;
+}
+
+/**
+ * Viewer-local "M/D HH:mm" labels for an announcement card, derived from the
+ * same instant as getAnnouncementViewerDateKey / getAnnouncementSortTime.
+ */
+export function formatAnnouncementViewerDateTime(
+  announcement: { createdAt?: string | Date | null; date?: string | null; localTimeStr?: string | null },
+  now = new Date(),
+): { dateLabel: string; timeLabel: string } {
+  const publishedAt = getAnnouncementPublishedAt(announcement);
+  const currentYear = String(now.getFullYear());
+  if (publishedAt) {
+    const yearPrefix = publishedAt.getFullYear() === Number(currentYear) ? '' : `${publishedAt.getFullYear()}/`;
+    return {
+      dateLabel: `${yearPrefix}${publishedAt.getMonth() + 1}/${publishedAt.getDate()} `,
+      timeLabel: `${String(publishedAt.getHours()).padStart(2, '0')}:${String(publishedAt.getMinutes()).padStart(2, '0')}`,
+    };
+  }
+  const dateMatch = (announcement.date ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const dateLabel = dateMatch
+    ? `${dateMatch[1] === currentYear ? '' : `${dateMatch[1]}/`}${Number(dateMatch[2])}/${Number(dateMatch[3])} `
+    : `${announcement.date || ''}${announcement.date ? ' ' : ''}`;
+  return { dateLabel, timeLabel: announcement.localTimeStr || '--:--' };
 }
 
 export function parseDateKeyAtNoon(key: string): Date | null {

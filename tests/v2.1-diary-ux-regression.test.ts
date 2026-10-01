@@ -31,7 +31,7 @@ describe('Today activity feed', () => {
     expect(joinerHome).toContain('resolveCareTodayKey(checkIns)');
     expect(joinerHome).toContain('checkIns.filter(c => c.date === careTodayKey)');
     expect(joinerHome).toContain('cleanDiaries.filter(d => d.date === _todayKey)');
-    expect(joinerHome).toContain('getAnnouncementViewerDateKey(announcement) === _todayKey');
+    expect(joinerHome).toContain('getAnnouncementViewerDateKey(announcement) >= _todayKey');
   });
 
   it('shows the date even when empty and orders newest activity first', () => {

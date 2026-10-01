@@ -3,10 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   CARE_DAY_ROLLOVER_HOUR,
+  formatAnnouncementViewerDateTime,
+  getAnnouncementSortTime,
   getAnnouncementViewerDateKey,
   getCareDayKey,
   isLateNightCareWindow,
   localDateKey,
+  partitionAnnouncementsByViewerDay,
   resolveCheckInFormTargetDate,
 } from '../lib/shared-date-range';
 
@@ -41,6 +44,52 @@ describe('announcement viewer-time and care-day boundaries', () => {
       date: '2026-09-09',
       createdAt: 'not-a-date',
     })).toBe('2026-09-09');
+  });
+
+  it('puts a publisher-next-day legacy announcement at the top of today instead of history', () => {
+    const originalTimezone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/New_York';
+      // 纽约查看者 10/1 18:49；北京 10/2 00:38 发布的老记录没有有效 createdAt，
+      // 只能按发布者留下的 date=10/2 兜底——它是最新的公告，必须出现在今日顶部，
+      // 不能被丢进"历史公告"。
+      const now = new Date(2026, 9, 1, 18, 49);
+      const legacyBeijing = { date: '2026-10-02', localTimeStr: '00:38', createdAt: 'not-a-date' };
+      const newYorkToday = { date: '2026-10-01', localTimeStr: '18:49', createdAt: '2026-10-01T18:49:00' };
+      const old = { date: '2026-09-28', localTimeStr: '10:00', createdAt: '2026-09-28T10:00:00' };
+
+      expect(getAnnouncementViewerDateKey(legacyBeijing, now)).toBe('2026-10-02');
+      const { today, older } = partitionAnnouncementsByViewerDay([newYorkToday, old, legacyBeijing], now);
+      expect(today.map(a => a.date)).toEqual(['2026-10-02', '2026-10-01']);
+      expect(older.map(a => a.date)).toEqual(['2026-09-28']);
+      // 排序键：兜底记录按 date+localTimeStr 参与排序，不会因 NaN 乱序。
+      expect(getAnnouncementSortTime(legacyBeijing)).toBeGreaterThan(getAnnouncementSortTime(newYorkToday));
+      expect(getAnnouncementSortTime(newYorkToday)).toBeGreaterThan(getAnnouncementSortTime(old));
+      // 彻底损坏的记录（无 date 无有效 createdAt）排最末，不顶掉正常公告。
+      expect(getAnnouncementSortTime({ createdAt: 'bad' })).toBe(0);
+    } finally {
+      process.env.TZ = originalTimezone;
+    }
+  });
+
+  it('formats the card labels from the same instant used for grouping', () => {
+    const originalTimezone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/New_York';
+      const now = new Date(2026, 9, 1, 18, 49);
+      // 有效 createdAt：按查看者本地显示。
+      expect(formatAnnouncementViewerDateTime(
+        { createdAt: '2026-10-01T18:49:00', date: '2026-10-01', localTimeStr: '18:49' },
+        now,
+      )).toEqual({ dateLabel: '10/1 ', timeLabel: '18:49' });
+      // 无效 createdAt：退回 date + localTimeStr（与分组兜底一致，不自创时间）。
+      expect(formatAnnouncementViewerDateTime(
+        { createdAt: 'bad', date: '2026-10-02', localTimeStr: '00:38' },
+        now,
+      )).toEqual({ dateLabel: '10/2 ', timeLabel: '00:38' });
+    } finally {
+      process.env.TZ = originalTimezone;
+    }
   });
 
   it('keeps 00:00–04:59 evening saves in the previous care day and starts a new care day at 05:00', () => {
@@ -85,11 +134,23 @@ describe('announcement viewer-time and care-day boundaries', () => {
   it('uses viewer-local announcement buckets in the family list, briefing and joiner activity feed', () => {
     const family = read('app/(tabs)/family.tsx');
     const joinerHome = read('components/joiner-home.tsx');
+    const storage = read('lib/storage.ts');
 
-    expect(family).toContain('getAnnouncementViewerDateKey(announcement) === viewerToday');
-    expect(family).toContain('getAnnouncementViewerDateKey(announcement) === dateKey');
+    // 今日/历史用明确的三段比较：viewerKey 未来归今日，只有严格早于今天的算历史。
+    // 分组、排序、显示同源（partitionAnnouncementsByViewerDay / sortTime / format）。
+    expect(family).toContain('partitionAnnouncementsByViewerDay(announcements)');
+    expect(family).toContain('viewerKey >= dateKey : viewerKey === dateKey');
+    expect(family).toContain('getAnnouncementViewerDateKey(announcement) >= todayStr()');
+    expect(family).toContain('getAnnouncementViewerDateKey(announcement) >= viewerToday');
+    expect(family).toContain('formatAnnouncementViewerDateTime(ann)');
+    expect(family).not.toContain('getAnnouncementViewerDateKey(announcement) !== viewerToday');
     expect(family).not.toContain('const todayAnnouncements = announcements.filter(a => a.date === todayStr());');
-    expect(joinerHome).toContain('getAnnouncementViewerDateKey(announcement) === _todayKey');
+    expect(joinerHome).toContain('getAnnouncementViewerDateKey(announcement) >= _todayKey');
+    expect(joinerHome).toContain('getAnnouncementSortTime(b) - getAnnouncementSortTime(a)');
+    // 云端合并排序与 30 天过滤用统一排序键，老记录不再因 NaN 被静默丢掉或乱序。
+    expect(storage).toContain('getAnnouncementSortTime(b) - getAnnouncementSortTime(a)');
+    expect(storage).toContain('getAnnouncementSortTime(a) >= cutoffTime');
+    expect(storage).toContain('getAnnouncementViewerDateKey(announcement) >= viewerToday');
   });
 
   it('keeps the full announcement card reachable and applies reactions optimistically before cloud confirmation', () => {
